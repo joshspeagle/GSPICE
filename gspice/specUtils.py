@@ -6,7 +6,7 @@ from .matrixUtils import cholesky_inv, submatrix_inv_mult
 
 from time import time 
 
-def standard_scale(spec, ivar, mask = None):
+def standard_scale(spec, ivar, mask = None, refmean = None):
     """
     Scale input data to have uniform variance per spectrum 
 
@@ -15,6 +15,11 @@ def standard_scale(spec, ivar, mask = None):
             ivar (np.ndarray): ivar (nspec, npix)
             mask (np.ndarray): mask (nspec, npix); 
                                0 == good, default is ivar == 0
+            refmean (np.ndarray): optional (npix,) mean of the scaled spectra to
+                               subtract. If None (default) the mean over the
+                               input spectra is used. Pass the value returned
+                               for the training set to scale new spectra
+                               consistently.
 
         Returns:
             spec (np.ndarray): scaled, mean-subtracted flux array (nspec, npix)
@@ -25,6 +30,9 @@ def standard_scale(spec, ivar, mask = None):
                                a warning is issued).
             refmean (np.ndarray): (npix,) mean of the scaled spectra that was
                                subtracted
+
+        Use ``unscale`` to transform predictions and variances back to the
+        units of the input flux.
     """
 
     #if no mask is passed, use ivar == 0 as mask (setting infinity error as bad pixel)
@@ -48,7 +56,8 @@ def standard_scale(spec, ivar, mask = None):
     refscale = np.sqrt(meanivar)
     Dvec = np.where(empty[:, np.newaxis], 0., Dvec) #drop (possibly NaN) data of empty spectra
     Dvec = Dvec * refscale[:, np.newaxis] #rescale data as roughly data/sigma
-    refmean = Dvec[~empty].mean(axis = 0) if (~empty).any() else np.zeros(Dvec.shape[1])
+    if refmean is None:
+        refmean = Dvec[~empty].mean(axis = 0) if (~empty).any() else np.zeros(Dvec.shape[1])
     Dvec = Dvec - refmean.reshape(1, -1) 
     Dvec[empty] = 0. #empty spectra become the mean spectrum
     
@@ -197,6 +206,78 @@ def gaussian_estimate(icond, ipred, cov, Dvec, covinv, bruteforce = False,
     predkstar = Dvec @ predoverD if compute_pred else None #takes time; optional
     return predoverD, predcovar, predkstar, kstar
 
+def gp_weights(cov, nguard = 20, irange = None, covinv = None, bruteforce = False, verbose = False):
+    """
+    Linear weights of the pixelwise conditional estimate (GSPICE routine)
+
+    For every pixel i the Gaussian conditional mean given all pixels outside the
+    guard window around i is a fixed linear combination of the (scaled,
+    mean-subtracted) spectrum, so predictions for any number of spectra are one
+    matrix product, ``pred = spec @ predoverD``. This function computes the
+    weights once so that they can be reused (``gp_interp`` calls it).
+
+        Parameters:
+            cov (np.ndarray) npix X npix : pixel covariance matrix
+            nguard (int) : half-width of the guard window around the predicted pixel;
+                           pixels j with |i - j| <= nguard are not used to predict pixel i
+            irange (np.array) 2 X 1 : 2 element array [i0, i1] specifying the (inclusive)
+                           range of prediction pixels; default is all pixels
+            covinv (np.ndarray) npix X npix : inverse of cov (computed if not given)
+            bruteforce (bool) : direct inversion of each conditioning submatrix (slow; for testing)
+            verbose (bool) : print progress every 100 pixels
+
+        Returns:
+            predoverD (np.ndarray) npix X szpred : weights, zero inside each guard window
+            predvar (np.ndarray) szpred : conditional variance of each predicted pixel
+                           (identical for every spectrum)
+    """
+    npix = cov.shape[0]
+    assert cov.shape[0] == cov.shape[1], "covariance must be square matrix."
+
+    #range of spectral bins to operate on
+    if irange is not None: 
+        assert np.size(irange) == 2, "Range must have 2 elements."
+        i0 = int(irange[0])
+        i1 = int(irange[1])
+        assert 0 <= i0 <= i1 < npix, "Range must satisfy 0 <= irange[0] <= irange[1] < npix."
+    else:
+        i0 = 0
+        i1 = npix - 1
+    
+    szpred = i1 - i0 + 1
+    predvar = np.zeros(szpred)
+    predoverD = np.zeros((npix, szpred))
+
+    #pre-compute inverse covariance
+    if covinv is None:
+        covinv = cholesky_inv(cov)
+    dummy = np.zeros((1, npix))
+
+    #loop over pixels
+    t0 = time() #start timing
+    for i in range(i0, i1 + 1):
+        #ipred == 1 for pixels to be predicted
+        ipred = np.zeros(npix)
+        ipred[i] = 1
+
+        #condition on reference pixels specified by icond
+        icond = np.ones(npix)
+        j0 = np.max([0, i - nguard])
+        j1 = np.min([i + nguard + 1, npix])
+        icond[j0:j1] = 0
+
+        predoverD0, predcovar, _, kstar = gaussian_estimate(icond=icond, ipred=ipred, cov=cov,
+                                                 Dvec=dummy, covinv=covinv, bruteforce = bruteforce,
+                                                 compute_pred = False)
+
+        predoverD[:, kstar - i0] = predoverD0
+        predvar[kstar - i0] = np.diag(predcovar)
+
+        if verbose and ((i % 100) == 0):
+            print(f"Iteration # {i} finished at {time() - t0} seconds.")
+
+    return predoverD, predvar
+
 def gp_interp(spec, cov, nguard = 20, irange = None, bruteforce = False, verbose = False):
     """
     Computes pixelwise conditional prediction for each pixel (GSPICE routine)
@@ -224,57 +305,16 @@ def gp_interp(spec, cov, nguard = 20, irange = None, bruteforce = False, verbose
     #check proper dimensionality
     assert cov.shape[0] == cov.shape[1], "covariance must be square matrix."
     assert npix == cov.shape[0], "spectra and covariance have incompatible dimensions."
-    
-    #range of spectral bins to operate on
-    if irange is not None: 
-        assert np.size(irange) == 2, "Range must have 2 elements."
-        i0 = int(irange[0])
-        i1 = int(irange[1])
-        assert 0 <= i0 <= i1 < npix, "Range must satisfy 0 <= irange[0] <= irange[1] < npix."
-    else:
-        i0 = 0
-        i1 = npix - 1
-    
-    #allocate output arrays
-    szpred = i1 - i0 + 1
-    predvar = np.zeros((nspec, szpred))
-    predoverD = np.zeros((npix, szpred))
 
-    #pre-compute inverse covariance
-    covinv = cholesky_inv(cov)
-
-    #loop over pixels
-    t0 = time() #start timing
-    for i in range(i0, i1 + 1):
-        #ipred == 1 for pixels to be predicted
-        ipred = np.zeros(npix)
-        ipred[i] = 1
-
-        #condition on reference pixels specified by icond
-        icond = np.ones(npix)
-        j0 = np.max([0, i - nguard])
-        j1 = np.min([i + nguard + 1, npix])
-        icond[j0:j1] = 0
-
-        predoverD0, predcovar, _, kstar = gaussian_estimate(icond=icond, ipred=ipred, cov=cov,
-                                                 Dvec=spec, covinv=covinv, bruteforce = bruteforce,
-                                                 compute_pred = False)
-
-        predoverD[:, kstar - i0] = predoverD0
-        predvar[:, kstar - i0] = np.diag(predcovar)
-
-        if verbose and ((i % 100) == 0):
-            print(f"Iteration # {i} finished at {time() - t0} seconds.")
+    predoverD, predvar = gp_weights(cov, nguard = nguard, irange = irange,
+                                    bruteforce = bruteforce, verbose = verbose)
 
     #all predictions with one matrix product
     pred = spec.dot(predoverD)
-    if verbose:
-        print(f"Matrix multiplication time: {time() - t0}")
-
-    return pred, predvar 
+    return pred, np.tile(predvar, (nspec, 1))
 
 def covar_iter_mask(flux, ivar, mask = None, nsigma = np.array([20, 8, 6]), maxbadpix = 64,
-                    nguard = 20, verbose = False):
+                    cumulative = False, nguard = 20, verbose = False, return_scale = False):
     """
     Compute spectral covariance with iterative masking using GSPICE
 
@@ -286,19 +326,38 @@ def covar_iter_mask(flux, ivar, mask = None, nsigma = np.array([20, 8, 6]), maxb
             nsigma (np.array)              : array of nsigma clipping values to be passed to chimask
             maxbadpix (int)                : reject spectra with more than maxbadpix
                                              pixels masked in input mask      
+            cumulative (bool)              : how masks are carried between passes.
+                                             False (default, the behaviour of all
+                                             earlier versions and of the IDL and
+                                             Julia code): pass n uses
+                                             input_mask | chimask_{n-1} only, so
+                                             pixels flagged in pass n-2 or earlier
+                                             but not again in pass n-1 are
+                                             unmasked again, and the final mask is
+                                             input | chimask_{N-1} | chimask_N.
+                                             True (Algorithm 4 of the paper,
+                                             M <- M or M_Z): masks accumulate,
+                                             M_n = input | chimask_1 | ... | chimask_n,
+                                             and the final mask is M_N.
             nguard (int)                   : half-width of the guard window
             verbose (bool)                 : print progress
+            return_scale (bool)            : if True also return refmean, the mean of
+                                             the scaled spectra (npix,) used to build
+                                             cov (needed by ``unscale``/``gp_repair``)
 
         Returns:
             cov (np.ndarray) npix X npix : covariance of pixels
             finalmask (np.ndarray) nspec X npix : final mask after iteration 
                                              (all ones for rejected spectra)
+            refmean (np.ndarray) npix : only if return_scale is True
 
         Comments:
-            Pass n uses input_mask | chimask_{n-1} only, so pixels flagged in
-            pass n-2 or earlier but not again in pass n-1 are unmasked again,
-            and the final mask is input | chimask_{N-1} | chimask_N. This
-            differs from Algorithm 4 of the paper (M <- M or M_Z).
+            The default is kept at False so that results of earlier versions are
+            reproduced. The two choices give nearly the same final mask, but the
+            intermediate covariances differ because with cumulative = False
+            strong outliers removed in an early pass re-enter the covariance of
+            a later pass. cumulative = True is the procedure described in the
+            paper and is the one used in its simulations.
     """
 
     t0 = time()
@@ -315,24 +374,35 @@ def covar_iter_mask(flux, ivar, mask = None, nsigma = np.array([20, 8, 6]), maxb
 
     assert nmask >= npix, "Not enough good spectra"
 
-    chimask = np.zeros(mask[wmask].shape)
+    inmask = (mask[wmask] != 0)
+    chimask = np.zeros(inmask.shape)
+    accmask = inmask.copy()
     
     for sigma in nsigma: #loop over iteratively masking
         if verbose:
             print(f"Pass nsigma = {sigma}")
-        thismask = np.logical_or(chimask, (mask[wmask] != 0))
+        if cumulative:
+            thismask = accmask
+        else:
+            thismask = np.logical_or(chimask, inmask)
         
         chimask = get_chimask(flux = flux[wmask], ivar = ivar[wmask], mask = thismask, 
                             nsigma = sigma, nguard = nguard)
+        accmask = np.logical_or(accmask, chimask)
         if verbose:
             print(f"Mean chimask = {np.mean(chimask)}")
             print(f"Time: {time()- t0} seconds.")
         t0 = time()
 
     finalmask = np.ones((nspec, npix))
-    finalmask[wmask] = np.logical_or(thismask, chimask)
+    if cumulative:
+        finalmask[wmask] = accmask
+    else:
+        finalmask[wmask] = np.logical_or(thismask, chimask)
 
-    spec, _, _ = standard_scale(spec=flux[wmask], ivar= ivar[wmask], mask=finalmask[wmask])
+    spec, _, refmean = standard_scale(flux[wmask], ivar[wmask], finalmask[wmask])
     cov, _ = covar(spec)
 
+    if return_scale:
+        return cov, finalmask, refmean
     return cov, finalmask
