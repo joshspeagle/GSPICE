@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gspice"
+dynamic = ["version"]
+description = "GausSian PIxelwise Conditional Estimation (GSPICE): data-driven detection and repair of artifacts in spectra"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "GPL-3.0-only"}
+authors = [
+    {name = "Douglas P. Finkbeiner", email = "dfinkbeiner@cfa.harvard.edu"},
+    {name = "Joshua S. Speagle", email = "j.speagle@utoronto.ca"},
+    {name = "Tanveer Karim", email = "tanveer.karim@utoronto.ca"},
+]
+keywords = ["gspice", "gaussian process", "spectra", "spectral cleanup", "astronomy"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Repository = "https://github.com/dfink/gspice"
+Paper = "https://arxiv.org/abs/2511.16754"
+
+[tool.setuptools]
+packages = ["gspice"]
+
+[tool.setuptools.dynamic]
+version = {attr = "gspice.__version__"}

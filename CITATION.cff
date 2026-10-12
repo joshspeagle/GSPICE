@@ -1,0 +1,51 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the software release and the paper below."
+title: "GSPICE: GausSian PIxelwise Conditional Estimation"
+type: software
+version: 1.0.0
+license: GPL-3.0-only
+repository-code: "https://github.com/dfink/gspice"
+abstract: >-
+  GSPICE models an ensemble of spectra as a multivariate Gaussian and estimates
+  the expected value and variance of each pixel of each spectrum conditional on
+  other pixels. Comparing observed fluxes with these estimates identifies
+  outliers such as cosmic rays and wavelength-calibration errors, which can be
+  masked or replaced by their estimates. This release contains the Python,
+  IDL and Julia implementations, and Python routines for repair of masked
+  pixels, blockwise prediction and transformation back to flux units.
+keywords:
+  - spectra
+  - Gaussian process
+  - conditional estimation
+  - outlier detection
+  - astronomy
+authors:
+  - family-names: Finkbeiner
+    given-names: Douglas P.
+    orcid: "https://orcid.org/0000-0003-2808-275X"
+    affiliation: "Center for Astrophysics | Harvard & Smithsonian"
+  - family-names: Speagle
+    given-names: Joshua S.
+    orcid: "https://orcid.org/0000-0003-2573-9832"
+    affiliation: "David A. Dunlap Department of Astronomy & Astrophysics, University of Toronto"
+  - family-names: Karim
+    given-names: Tanveer
+    orcid: "https://orcid.org/0000-0002-5652-8870"
+    affiliation: "David A. Dunlap Department of Astronomy & Astrophysics, University of Toronto"
+preferred-citation:
+  type: article
+  title: "Data-Driven Stellar Spectral Modelling with GSPICE"
+  authors:
+    - family-names: Finkbeiner
+      given-names: Douglas P.
+      orcid: "https://orcid.org/0000-0003-2808-275X"
+    - family-names: Speagle
+      given-names: Joshua S.
+      orcid: "https://orcid.org/0000-0003-2573-9832"
+    - family-names: Karim
+      given-names: Tanveer
+      orcid: "https://orcid.org/0000-0002-5652-8870"
+  journal: "The Astronomical Journal"
+  status: submitted
+  url: "https://arxiv.org/abs/2511.16754"
+  notes: "arXiv:2511.16754. Replace with the published AJ reference when available."

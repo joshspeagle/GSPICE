@@ -1,0 +1,37 @@
+{
+  "title": "GSPICE: GausSian PIxelwise Conditional Estimation",
+  "upload_type": "software",
+  "description": "<p>GSPICE models an ensemble of spectra as a multivariate Gaussian and estimates the expected value and variance of each pixel of each spectrum conditional on other pixels. Comparing observed fluxes with these estimates identifies outliers such as cosmic rays and wavelength-calibration errors, which can be masked or replaced by their estimates. This release contains the Python, IDL and Julia implementations, and Python routines for repair of masked pixels, blockwise prediction and transformation back to flux units. It accompanies Finkbeiner, Speagle &amp; Karim, <em>Data-Driven Stellar Spectral Modelling with GSPICE</em> (arXiv:2511.16754).</p>",
+  "creators": [
+    {
+      "name": "Finkbeiner, Douglas P.",
+      "affiliation": "Center for Astrophysics | Harvard & Smithsonian",
+      "orcid": "0000-0003-2808-275X"
+    },
+    {
+      "name": "Speagle, Joshua S.",
+      "affiliation": "David A. Dunlap Department of Astronomy & Astrophysics, University of Toronto; Department of Statistical Sciences, University of Toronto",
+      "orcid": "0000-0003-2573-9832"
+    },
+    {
+      "name": "Karim, Tanveer",
+      "affiliation": "David A. Dunlap Department of Astronomy & Astrophysics, University of Toronto",
+      "orcid": "0000-0002-5652-8870"
+    }
+  ],
+  "keywords": ["spectra", "Gaussian process", "conditional estimation", "outlier detection", "astronomy"],
+  "license": "gpl-3.0-only",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "identifier": "arXiv:2511.16754",
+      "relation": "isSupplementTo",
+      "scheme": "arxiv"
+    },
+    {
+      "identifier": "https://github.com/dfink/gspice",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}
