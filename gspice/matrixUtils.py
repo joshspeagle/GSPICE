@@ -25,8 +25,8 @@ def submatrix_inv(M, Minv, imask, bruteforce = False):
         Parameters:
             M (np.ndarray) N x N: symmetric and positive semi-definite matrix
             Minv (np.ndarray) N x N: inverse of M
-            imask (np.ndarray) N x N: mask of rows/columns to use 
-                                      (1 == keep, 0 == remove); contains Nk ones and Nr zeros ?? Assume imask is symmetric
+            imask (np.ndarray) N: mask of rows/columns to use 
+                                      (1 == keep, 0 == remove); contains Nk ones and Nr zeros
             bruteforce (bool) : flag for using bruteforce approach
 
         Returns:
@@ -62,8 +62,7 @@ def submatrix_inv(M, Minv, imask, bruteforce = False):
         Ainv = cholesky_inv(A)
         return Ainv
     
-    if(nr == 0):
-        print("imask does not remove any rows or columns.")
+    if(nr == 0): #imask does not remove any rows or columns
         return Minv
 
     #Evaluate  A^{-1} = P - Q U^{-1} Q.T
@@ -82,9 +81,10 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad = True, bruteforce = False)
         Parameters:
             M (np.ndarray) N x N: symmetric and positive semi-definite matrix
             Minv (np.ndarray) N x N: inverse of M
-            imask (np.ndarray) N x N: mask of rows/columns to use 
+            imask (np.ndarray) N: mask of rows/columns to use 
                                       (1 == keep, 0 == remove); contains Nk ones and Nr zeros 
-            Y (np.ndarray) N x Nspec:  matrix multiply Ainv by; assumed to be zero-padded
+            Y (np.ndarray) N x Nspec:  full-length matrix to multiply Ainv by (rows
+                                      of removed pixels need not be zero)
             MinvY (np.ndarray) N x Nspec:  matrix Minv * Y 
             pad (bool)        : flag for zero-padding
             bruteforce (bool) : flag for using bruteforce approach
@@ -108,7 +108,9 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad = True, bruteforce = False)
             This returns,
             A^{-1} Y = P Y - (Q U^{-1} Q.T) Y
 
-            Y is assumed to be zero-padded at bad rows    
+            Y has the full N rows. The rows of Y at removed pixels enter through
+            Q.T Y = Minv Y - U Y_r, and the Y_r terms cancel in the final
+            expression, so Y need not be zero-padded at the removed rows.
     """
     #verify proper dimensionalities
     assert M.shape[0] == M.shape[1], "M must be a square matrix."
@@ -132,8 +134,7 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad = True, bruteforce = False)
         Ainvy = Ainv.T @ Y[k,:]
         return Ainvy
     
-    if(nr == 0):
-        print("imask does not remove any rows or columns.")
+    if(nr == 0): #imask does not remove any rows or columns
         return MinvY
 
     #Use Q.T y = Minv y - U y ?? why? known result?
@@ -147,6 +148,11 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad = True, bruteforce = False)
     if(U.shape[0] == 1):
         UinvQtY = Qty/U[0]
     else:
+        #Explicit inverse of the (small) block U. Appendix A of the paper describes
+        #Cholesky back-substitution (the commented lines below, as used in the IDL and
+        #Julia code); the two agree to rounding error (~1e-11 relative on the
+        #predicted variances in a conditioning-1e4 test) and the explicit inverse
+        #is kept so that results of earlier versions are reproduced.
         #L = linalg.cho_factor(U, lower = False, check_finite = False)
         #UinvQtY = linalg.cho_solve(L, Qty, overwrite_b = False)
         UinvQtY = cholesky_inv(U) @ Qty
