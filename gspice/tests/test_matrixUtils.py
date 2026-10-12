@@ -1,144 +1,57 @@
-import unittest
 import numpy as np
-from astropy.io import fits
+import pytest
 
 from gspice import cholesky_inv, submatrix_inv, submatrix_inv_mult
 
-#import sample data for testing purposes
-dat = fits.open("/n/home08/dfink/gspice/test/star-sample.fits.gz")
-spec = dat[1].data['spec']
-ivar = dat[1].data['ivar']
-mask = dat[1].data['mask']
-cov = fits.open("../../test/gspice-unit-test-desi.fits.gz")[0].data
-covinv = np.linalg.inv(cov)
 
-atol = 1e-11 #absolute tolerance for comparison
+def test_cholesky_inv_small():
+    m = np.array([[2., 1., 0.], [1., 2., 1.], [0., 1., 2.]])
+    expected = 0.25 * np.array([[3., -2., 1.], [-2., 4., -2.], [1., -2., 3.]])
+    np.testing.assert_allclose(cholesky_inv(m), expected, atol = 1e-14)
 
-class TestCholesky(unittest.TestCase):
-    def test_simple_matrix(self):
-        """
-        Test inversion of a 3 x 3 matrix
-        """
-        test_input = np.array([[2, 1, 0],
-                         [1, 2, 1],
-                         [0, 1, 2]
-                        ])
-        test_output = cholesky_inv(test_input)
-        expected_output = (1/4) * np.array([[3, -2, 1],
-                                             [-2, 4, -2],
-                                             [1, -2, 3]
-                                             ])
-        
-        np.testing.assert_allclose(actual = test_output, 
-                                    desired = expected_output,
-                                    )
 
-    def test_sample_data(self):
-        """
-        Test inversion of mini dataset gspice/test/gspice-unit-test-desi.fits
-        """
-        test_cov_inv = cholesky_inv(cov)
-        test_output = cov @ test_cov_inv #should be identity matrix up to precision
-        expected_output = np.identity(cov.shape[0])
-        
-        np.testing.assert_allclose(actual = test_output, 
-                                    desired = expected_output, 
-                                    atol = 1e-11
-                                    )
+def test_cholesky_inv_random(spd):
+    np.testing.assert_allclose(spd @ cholesky_inv(spd), np.eye(spd.shape[0]), atol = 1e-10)
 
-class TestSubmatrixInv(unittest.TestCase):
-    def test_simple_matrix(self):
-        """
-        Test submatrix inversion of a 3 x 3 matrix where submatrix is 2 x 2
-        """
-        test_input = np.array([[2, 1, 0],
-                              [1, 2, 1],
-                              [0, 1, 2]])
-        test_output = submatrix_inv(M = test_input, Minv = np.linalg.inv(test_input),
-                                    imask = np.array([1, 1, 0]), bruteforce = False)
-        expected_output = (1/3) * np.array([[2, -1], 
-                                           [-1, 2]])
 
-        np.testing.assert_allclose(actual = test_output, desired = expected_output)
+def test_submatrix_inv_small():
+    m = np.array([[2., 1., 0.], [1., 2., 1.], [0., 1., 2.]])
+    out = submatrix_inv(m, np.linalg.inv(m), np.array([1, 1, 0]))
+    np.testing.assert_allclose(out, np.array([[2., -1.], [-1., 2.]]) / 3., atol = 1e-14)
 
-    def test_no_mask_removal(self):
-        """
-        Test submatrix inversion of a 3 x 3 matrix where submatrix is full matrix
-        """
-        test_input = np.array([[2, 1, 0],
-                              [1, 2, 1],
-                              [0, 1, 2]])
-        test_output = submatrix_inv(M = test_input, Minv = np.linalg.inv(test_input),
-                                    imask = np.array([1, 1, 1]), bruteforce = False)
-        expected_output = (1/4) * np.array([[3, -2, 1], 
-                                           [-2, 4, -2],
-                                           [1, -2, 3]])
 
-        np.testing.assert_allclose(actual = test_output, desired = expected_output)
+def test_submatrix_inv_no_removal(spd):
+    inv = np.linalg.inv(spd)
+    np.testing.assert_allclose(submatrix_inv(spd, inv, np.ones(spd.shape[0])), inv)
 
-    def test_brute_force(self):
-        """Compare submatrix inversion with and without brute force"""
 
-        #arbitrary masking
-        imask = np.ones(cov.shape[0])
-        imask[11:51] = 0
+@pytest.mark.parametrize("removed", [slice(11, 51), slice(0, 1), slice(40, 60), slice(5, 6)])
+def test_submatrix_inv_matches_direct(spd, removed):
+    imask = np.ones(spd.shape[0])
+    imask[removed] = 0
+    k = np.flatnonzero(imask)
+    expected = np.linalg.inv(spd[np.ix_(k, k)])
+    out = submatrix_inv(spd, np.linalg.inv(spd), imask)
+    np.testing.assert_allclose(out, expected, rtol = 1e-7, atol = 1e-8 * np.abs(expected).max())
+    brute = submatrix_inv(spd, np.linalg.inv(spd), imask, bruteforce = True)
+    np.testing.assert_allclose(brute, expected, rtol = 1e-8, atol = 1e-10 * np.abs(expected).max())
 
-        test_brute = submatrix_inv(cov, covinv, imask, bruteforce = True)
-        test_no_brute = submatrix_inv(cov, covinv, imask, bruteforce = False)
 
-        np.testing.assert_allclose(actual = test_no_brute, desired = test_brute,
-                                  atol = atol)
-
-class TestSubmatrixInvMult(unittest.TestCase):
-    # def test_simple_matrix(self):
-    #     N = 6
-    #     np.random.seed(seed = 42)
-    #     b = np.random.randint(-10, 10, size = (N, N))
-        
-    #     M = (b + b.T)/2
-    #     Minv = np.linalg.inv(Minv)
-    #     Y = np.random.randint(-10, 10, size = )
-
-    
-    def test_sample_data(self):
-        #arbitrary masking
-        imask = np.ones(cov.shape[0])
-        imask[11:51] = 0
-        Y = (spec[0:2, :].T).astype(np.float64) #Choose two spectra
-        MinvY = covinv @ Y 
-        
-        test_brute = submatrix_inv_mult(M = cov, Minv = covinv, 
-                                        imask =imask, Y = Y, 
-                                        MinvY = MinvY, 
-                                        bruteforce=True)
-        test_no_brute = submatrix_inv_mult(cov, covinv, imask, Y, 
-                                           MinvY, 
-                                           pad = False, 
-                                           bruteforce=False)
-
-        np.testing.assert_allclose(actual = test_no_brute, 
-                                   desired = test_brute,
-                                   atol = atol)
-
-    def test_pad(self):
-        #arbitrary masking
-        imask = np.ones(cov.shape[0])
-        imask[11:51] = 0
-        Y = (spec[0:2, :].T).astype(np.float64) #Choose two spectra
-        MinvY = covinv @ Y 
-        k = np.where(imask)[0]
-        test_pad = submatrix_inv_mult(M = cov, Minv = covinv, 
-                                        imask =imask, Y = Y, 
-                                        MinvY = MinvY,
-                                        pad = True,  
-                                        bruteforce=False)
-        test_no_pad = submatrix_inv_mult(cov, covinv, imask, Y, 
-                                           MinvY, 
-                                           pad = False, 
-                                           bruteforce=False)
-        np.testing.assert_allclose(actual = test_pad[k, :], 
-                                   desired = 0.,
-                                   atol = atol)
-
-if __name__ == '__main__':
-    unittest.main()
+@pytest.mark.parametrize("removed", [slice(11, 51), slice(20, 21), slice(0, 5)])
+def test_submatrix_inv_mult_matches_direct(spd, removed):
+    rng = np.random.default_rng(2)
+    n = spd.shape[0]
+    imask = np.ones(n)
+    imask[removed] = 0
+    k = np.flatnonzero(imask)
+    Y = rng.normal(size = (n, 3))
+    inv = np.linalg.inv(spd)
+    expected = np.linalg.solve(spd[np.ix_(k, k)], Y[k])
+    scale = np.abs(expected).max()
+    unpadded = submatrix_inv_mult(spd, inv, imask, Y, inv @ Y, pad = False)
+    np.testing.assert_allclose(unpadded, expected, rtol = 1e-6, atol = 1e-8 * scale)
+    padded = submatrix_inv_mult(spd, inv, imask, Y, inv @ Y, pad = True)
+    np.testing.assert_allclose(padded[k], expected, rtol = 1e-6, atol = 1e-8 * scale)
+    assert np.all(padded[imask == 0] == 0.)
+    brute = submatrix_inv_mult(spd, inv, imask, Y, inv @ Y, bruteforce = True)
+    np.testing.assert_allclose(brute, expected, rtol = 1e-7, atol = 1e-8 * scale)

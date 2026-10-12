@@ -1,6 +1,5 @@
 import unittest
 import numpy as np
-from astropy.io import fits
 
 from gspice import maskinterp
 
