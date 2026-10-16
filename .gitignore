@@ -6,5 +6,6 @@ test
 # Local environments and caches
 .venv/
 .pytest_cache/
+.coverage
 __pycache__/
 .ruff_cache/
