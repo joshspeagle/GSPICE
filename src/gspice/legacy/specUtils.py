@@ -1,4 +1,5 @@
 import numpy as np
+from ._errors import _LegacyError
 from .djs_maskinterp import maskinterp
 #from .gspiceMain import gp_interp
 from .matrixUtils import cholesky_inv, submatrix_inv_mult
@@ -55,7 +56,8 @@ def covar(spec, checkmean = False): ##DONE
     nspec, npix = spec.shape
 
     #check data type
-    assert spec.dtype == 'float64', "spec.dtype must be float64"
+    if spec.dtype != 'float64':
+        raise _LegacyError("spec.dtype must be float64")
 
     #make columns of Dmask mean 0 for covariance computation
     refmean = spec.mean(axis = 0)
@@ -235,8 +237,10 @@ def gp_interp(spec, cov, nguard = 20, irange = None, bruteforce = False):
     #print('tst ', nspec)
     #print('tst ', npix)
     #check proper dimensionality
-    assert cov.shape[0] == cov.shape[1], "covariance must be square matrix."
-    assert npix == cov.shape[0], "spectra and covariance have incompatible dimensions."
+    if cov.shape[0] != cov.shape[1]:
+        raise _LegacyError("cov: covariance must be square matrix.")
+    if npix != cov.shape[0]:
+        raise _LegacyError("spec, cov: spectra and covariance have incompatible dimensions.")
     
     #range of spectral bins to operate on
     if irange is not None: 
@@ -354,7 +358,8 @@ def covar_iter_mask(flux, ivar, mask, nsigma = np.array([20, 8, 6]), maxbadpix =
     wmask = np.where(objmask)[0] #index of good spectra
     nmask = len(wmask) #number of good spectra
 
-    assert nmask >= npix, "Not enough good spectra"
+    if nmask < npix:
+        raise _LegacyError(f"Not enough good spectra: {nmask} spectra have at most maxbadpix = {maxbadpix} bad pixels in mask, and at least npix = {npix} are needed")
 
     chimask = np.zeros(mask[wmask].shape)
     #thismask = np.logical_or(chimask, (mask[wmask] != 0))
