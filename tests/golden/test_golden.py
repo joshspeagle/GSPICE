@@ -107,6 +107,9 @@ CHANGED = {
     "behaviour.submatrix_inv.nr0_returns_input": "D-25",
     "behaviour.submatrix_inv_mult.nr0_returns_input": "D-25",
     "behaviour.gp_interp.bruteforce_unpack": "D-02",
+    "standard_scale.E.with_fully_masked": "Q1",
+    "behaviour.standard_scale.fully_masked_nan": "Q1",
+    "behaviour.covar_iter_mask.mask_none": "D-14",
 }
 
 
@@ -217,10 +220,7 @@ def check_golden_case(case_id, implementation, **options):
     case = GOLDEN.cases[case_id]
     kwargs = GOLDEN.arguments(case)
     pristine = {k: v.copy() for k, v in kwargs.items() if isinstance(v, np.ndarray)}
-    with warnings.catch_warnings():
-        # The fully masked spectrum of standard_scale.E divides 0 by 0.
-        warnings.simplefilter("ignore", RuntimeWarning)
-        result = implementation(case["module"], case["function"])(**kwargs, **options)
+    result = implementation(case["module"], case["function"])(**kwargs, **options)
     for name, value in pristine.items():
         assert kwargs[name].tobytes() == value.tobytes(), f"input {name} was modified"
     outputs = case["outputs"]

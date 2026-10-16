@@ -3,6 +3,7 @@ import importlib
 import pickle
 import subprocess
 import sys
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -10,14 +11,17 @@ import pytest
 import scipy.sparse
 
 import gspice
-from _golden import Golden
+from _golden import Golden, same
 from gspice.legacy import (
     cholesky_inv,
     covar,
     covar_iter_mask,
+    get_chimask,
     gp_interp,
     maskinterp,
+    maskinterp1,
     matrixUtils,
+    standard_scale,
     submatrix_inv,
     submatrix_inv_mult,
 )
@@ -257,3 +261,160 @@ def test_numpy_bool_or_array_nguard_raises_type_error(nguard):
     # 1fbab9f read np.True_ as 1 and raised ValueError for np.array([5]).
     with pytest.raises(TypeError, match="nguard"):
         gp_interp(SPEC, COV, nguard=nguard)
+
+
+# The 2022 expression yval * 0 + value computes inf * 0.
+@pytest.mark.filterwarnings("ignore:invalid value encountered in multiply")
+@pytest.mark.parametrize("value", [np.nan, np.inf])
+def test_non_finite_bad_entries_get_the_value_of_the_only_good_entry(value):
+    # 1fbab9f returned NaN at the 23 bad entries of E row 2, and without the non-finite
+    # values it returned the value of entry 7 everywhere (record maskinterp1.E.row2).
+    case = GOLDEN.cases["maskinterp1.E.row2"]
+    kwargs = GOLDEN.arguments(case)
+    kwargs["yval"][kwargs["mask"] != 0] = value
+    expected = GOLDEN.expected(case)["ynew"]
+    assert same(maskinterp1(**kwargs), expected)
+
+
+@pytest.mark.filterwarnings("ignore:invalid value encountered in multiply")
+@pytest.mark.parametrize("value", [np.inf, -np.inf])
+def test_infinite_only_good_entry_keeps_the_2022_values(value):
+    # 1fbab9f returned [value, nan, value, nan]: inf * 0 is NaN at the good entry.
+    result = maskinterp1(np.array([1.0, value, -2.0, np.nan]), np.array([1, 0, 1, 1]))
+    np.testing.assert_array_equal(result, [value, np.nan, value, value])
+
+
+def test_object_array_with_one_good_entry_keeps_the_2022_values():
+    # 1fbab9f returned yval * 0 + Fraction(2), the value of the good entry.
+    yval = np.array([Fraction(1, 3), Fraction(2)], dtype=object)
+    result = maskinterp1(yval, np.array([1, 0]))
+    assert result.dtype == object
+    assert result.tolist() == [Fraction(2), Fraction(2)]
+
+
+def test_negative_zero_only_good_entry_keeps_the_2022_signs():
+    # 1fbab9f returned [0.0, -0.0, -0.0, nan], which is yval * 0 + -0.0.
+    result = maskinterp1(np.array([3.0, -0.0, -2.0, np.nan]), np.array([1, 0, 1, 1]))
+    assert same(result, np.array([0.0, -0.0, -0.0, -0.0]))
+
+
+def test_get_chimask_ignores_nan_flux_at_bad_pixels_of_a_one_good_pixel_spectrum():
+    # Row 1930 of D1 has one good pixel. 1fbab9f raised ValueError, "array must not
+    # contain infs or NaNs", in the Cholesky factorization of the covariance.
+    case = GOLDEN.cases["get_chimask.D1.nsigma6"]
+    kwargs = GOLDEN.arguments(case)
+    kwargs["flux"][1930, kwargs["mask"][1930] != 0] = np.nan
+    expected = GOLDEN.expected(case)["chimask"]
+    np.testing.assert_array_equal(get_chimask(**kwargs), expected)
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32])
+@pytest.mark.parametrize("value", [np.nan, np.inf])
+def test_non_finite_ivar_at_bad_pixels_leaves_standard_scale_unchanged(value, dtype):
+    # 1fbab9f returned NaN in every value of Dvec and refmean, and in the refscale of the
+    # 281 spectra of D1 with a bad pixel.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["standard_scale.D1.mask"])
+    spec, ivar = kwargs["spec"].astype(dtype), kwargs["ivar"].astype(dtype)
+    mask = kwargs["mask"]
+    expected = standard_scale(spec, ivar, mask)
+    ivar[mask != 0] = value
+    for actual, wanted in zip(standard_scale(spec, ivar, mask), expected, strict=True):
+        assert same(actual, wanted)
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32])
+def test_refscale_of_finite_input_equals_the_2022_expression(dtype):
+    # The refscale of 1fbab9f, specUtils.py lines 27 and 34 to 36, on D1 with mask_alt,
+    # which also flags pixels whose ivar is not 0.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["standard_scale.D1.mask_alt"])
+    spec, ivar = kwargs["spec"].astype(dtype), kwargs["ivar"].astype(dtype)
+    mask = kwargs["mask"]
+    wt = 1 - np.where(mask == 0, 0, 1)
+    expected = np.sqrt(np.sum(ivar * wt, axis=1) / np.sum(wt, axis=1))
+    assert same(standard_scale(spec, ivar, mask)[1], expected)
+
+
+@pytest.mark.parametrize("fill", [1.0, 0.5, np.nan])
+def test_fully_masked_spectrum_is_rejected(fill):
+    # Row 1 of E is bad at every pixel by the 2022 mask rule, which also counts 0.5 and
+    # NaN as bad. For each fill, 1fbab9f returned NaN in its refscale and in every value
+    # of Dvec and refmean, as the record behaviour.standard_scale.fully_masked_nan holds
+    # for a fill of 1.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["standard_scale.E.with_fully_masked"])
+    kwargs["mask"] = kwargs["mask"].astype(float)
+    kwargs["mask"][1] = fill
+    with pytest.raises(ValueError, match="^mask: no good pixel in rows 1$"):
+        standard_scale(**kwargs)
+
+
+def test_rejection_names_the_first_10_rows_and_the_count():
+    # 1fbab9f returned NaN in every value of Dvec, refscale and refmean.
+    rows = r"0, 1, 2, 3, 4, 5, 6, 7, 8, 9, \.\.\. \(12 rows\)$"
+    with pytest.raises(ValueError, match=f"^ivar: no good pixel in rows {rows}"):
+        standard_scale(np.zeros((12, 3)), np.zeros((12, 3)))
+
+
+def test_one_dimensional_input_keeps_the_maskinterp_error():
+    # 1fbab9f failed the 2-D assert of maskinterp, which runs before the check for
+    # spectra without a good pixel.
+    with pytest.raises(AssertionError, match="^yval: expected a 2-D array"):
+        standard_scale(np.zeros(3), np.zeros(3))
+
+
+@pytest.mark.parametrize(("maxbadpix", "row3_bad"), [(64, 0), (47, 48)])
+@pytest.mark.parametrize("nsigma", [[6], [6, 6]])
+def test_spectrum_that_clipping_masks_completely_is_rejected(
+    nsigma, maxbadpix, row3_bad
+):
+    # Row 11 of D1 is good only at pixels 24 to 26, and a 20 sigma spike at pixel 25
+    # makes the first pass flag all three. With maxbadpix 47, row 3, given 48 bad
+    # pixels, and row 1930 are dropped, so row 11 is row 10 of the kept spectra.
+    # 1fbab9f returned a covariance of NaN for nsigma [6], and for [6, 6] raised
+    # ValueError, "array must not contain infs or NaNs", in the second pass.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
+    flux, ivar, mask = kwargs["flux"], kwargs["ivar"], kwargs["mask"]
+    mask[11] = 1
+    mask[11, 24:27] = 0
+    mask[3, :row3_bad] = 1
+    ivar[mask != 0] = 0
+    flux[11, 25] += 20 / np.sqrt(ivar[11, 25])
+    with pytest.raises(ValueError, match="^nsigma: no good pixel in rows 11$"):
+        covar_iter_mask(**kwargs, nsigma=nsigma, maxbadpix=maxbadpix)
+
+
+@pytest.mark.parametrize(
+    ("nsigma", "name"), [([6], "mask"), ([], "mask"), ([6], "ivar")]
+)
+def test_kept_spectrum_without_a_good_pixel_in_mask_is_rejected(nsigma, name):
+    # maxbadpix 64 keeps the fully masked row 5, whose ivar is 0 everywhere. 1fbab9f
+    # raised ValueError, "array must not contain infs or NaNs", in the first pass,
+    # UnboundLocalError for an empty nsigma (D-32), and AxisError for mask=None (D-14).
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
+    kwargs["mask"][5] = 1
+    kwargs["ivar"][5] = 0
+    if name == "ivar":
+        kwargs["mask"] = None
+    with pytest.raises(ValueError, match=f"^{name}: no good pixel in rows 5$"):
+        covar_iter_mask(**kwargs, nsigma=nsigma)
+
+
+def test_empty_nsigma_without_a_fully_masked_spectrum_still_raises_unbound_local_error():
+    # D-32 stays: 1fbab9f raised UnboundLocalError, as no pass binds thismask.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
+    with pytest.raises(UnboundLocalError):
+        covar_iter_mask(**kwargs, nsigma=[])
+
+
+def test_mask_none_names_ivar_when_too_few_spectra_are_kept():
+    with pytest.raises(ValueError, match="bad pixels in ivar"):
+        covar_iter_mask(EYE[:2], EYE[:2], None)
+
+
+def test_mask_none_marks_the_pixels_where_ivar_is_0():
+    # ivar is 0 exactly where the mask of D1 is not 0, and maxbadpix 8 drops 8 spectra.
+    # 1fbab9f raised numpy's AxisError (record behaviour.covar_iter_mask.mask_none).
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.nsig10_5p5.maxbad8"])
+    expected = covar_iter_mask(**kwargs)
+    actual = covar_iter_mask(**kwargs | {"mask": None})
+    for value, wanted in zip(actual, expected, strict=True):
+        assert same(value, wanted)

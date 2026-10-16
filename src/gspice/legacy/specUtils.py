@@ -10,6 +10,15 @@ from .djs_maskinterp import maskinterp
 from .matrixUtils import cholesky_inv, submatrix_inv_mult
 
 
+def _require_good_pixel(bad, rows, name):
+    # Without a good pixel, refscale is 0 / 0, and its NaN spreads to every value.
+    empty = rows[np.all(bad, axis=1)]
+    if empty.size:
+        listed = ", ".join(map(str, empty[:10]))
+        more = f", ... ({empty.size} rows)" if empty.size > 10 else ""
+        raise _LegacyError(f"{name}: no good pixel in rows {listed}{more}")
+
+
 def standard_scale(spec, ivar, mask=None):
     """Interpolate over bad pixels, scale spectra to about unit noise, and center.
 
@@ -32,22 +41,30 @@ def standard_scale(spec, ivar, mask=None):
     Dvec : ndarray, shape (nspec, npix)
         The scaled and centered spectra, dimensionless.
     refscale : ndarray, shape (nspec,)
-        The scale of each spectrum, in units of 1/flux. A spectrum without good
-        pixels, or with a non-finite ivar at a bad pixel, gets NaN, which makes
-        every value of Dvec and refmean NaN.
+        The scale of each spectrum, in units of 1/flux. A non-finite ivar at a good
+        pixel makes the scale of its spectrum non-finite, and with it every value
+        of Dvec and refmean.
     refmean : ndarray, shape (npix,)
         The mean of the scaled spectra.
+
+    Raises
+    ------
+    ValueError
+        If a spectrum has no good pixel.
     """
 
     if mask is None:
-        pixmask = ivar == 0
+        pixmask, name = ivar == 0, "ivar"
     else:
-        pixmask = np.where(mask == 0, 0, 1)
+        pixmask, name = np.where(mask == 0, 0, 1), "mask"
 
     Dvec = maskinterp(yval=spec, mask=pixmask, axis=0)
+    _require_good_pixel(pixmask, np.arange(len(pixmask)), name)
 
     wt = 1 - pixmask
-    meanivar = np.sum(ivar * wt, axis=1) / np.sum(wt, axis=1)
+    # ivar * wt would be NaN at a bad pixel with a non-finite ivar. The product with
+    # wt, an int64 array, keeps the float64 sum of a float32 ivar, as in 2022.
+    meanivar = np.sum(np.where(pixmask, 0, ivar) * wt, axis=1) / np.sum(wt, axis=1)
     refscale = np.sqrt(meanivar)
     Dvec = Dvec * refscale[:, np.newaxis]
     refmean = Dvec.mean(axis=0)
@@ -121,6 +138,11 @@ def get_chimask(flux, ivar, mask, nsigma):
     -------
     chimask : ndarray of bool, shape (nspec, npix)
         True for a flagged pixel.
+
+    Raises
+    ------
+    ValueError
+        If a spectrum has no good pixel.
 
     Notes
     -----
@@ -372,8 +394,9 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
         Flux.
     ivar : ndarray, shape (nspec, npix)
         Inverse variance of the flux.
-    mask : ndarray, shape (nspec, npix)
-        Nonzero, NaN included, marks a bad pixel. None is not supported.
+    mask : ndarray, shape (nspec, npix), or None
+        Nonzero, NaN included, marks a bad pixel. None marks the pixels where
+        ivar == 0.
     nsigma : sequence of float, optional
         The thresholds of the passes, in order; at least one.
     maxbadpix : int, optional
@@ -390,7 +413,8 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
     Raises
     ------
     ValueError
-        If fewer than npix spectra are kept.
+        If fewer than npix spectra are kept, or if mask, the mask of a pass or
+        finalmask leaves a kept spectrum without a good pixel.
     numpy.linalg.LinAlgError
         If the covariance of a pass is not positive definite. With exactly npix
         kept spectra it is singular, so a pass usually raises this error, and
@@ -402,6 +426,9 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
     """
 
     nspec, npix = flux.shape
+    name = "mask"
+    if mask is None:
+        mask, name = ivar == 0, "ivar"
 
     nbadpix = np.sum(mask != 0, axis=1)
     objmask = nbadpix <= maxbadpix
@@ -410,13 +437,16 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
 
     if nmask < npix:
         raise _LegacyError(
-            f"Not enough good spectra: {nmask} spectra have at most maxbadpix = {maxbadpix} bad pixels in mask, and at least npix = {npix} are needed"
+            f"Not enough good spectra: {nmask} spectra have at most maxbadpix = {maxbadpix} bad pixels in {name}, and at least npix = {npix} are needed"
         )
+    # The checks name rows of flux, which standard_scale cannot know.
+    _require_good_pixel(mask[wmask] != 0, wmask, name)
 
     chimask = np.zeros(mask[wmask].shape)
 
     for sigma in nsigma:
         thismask = np.logical_or(chimask, (mask[wmask] != 0))
+        _require_good_pixel(thismask, wmask, "nsigma")
 
         chimask = get_chimask(
             flux=flux[wmask], ivar=ivar[wmask], mask=thismask, nsigma=sigma
@@ -424,6 +454,7 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
 
     finalmask = np.ones((nspec, npix))
     finalmask[wmask] = np.logical_or(thismask, chimask)
+    _require_good_pixel(finalmask[wmask], wmask, "nsigma")
 
     spec, _, _ = standard_scale(
         spec=flux[wmask], ivar=ivar[wmask], mask=finalmask[wmask]

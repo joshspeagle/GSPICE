@@ -14,8 +14,8 @@ def maskinterp1(yval, mask):
 
     The grid is regular. Entries before the first or after the last good entry get
     the value of that entry, as with the /const option of the IDL routine. With one
-    good entry, every entry gets yval * 0 plus its value, which is NaN at a
-    non-finite entry.
+    good entry, of value v, a bad entry with a non-finite value gets v, and every
+    other entry gets yval * 0 + v.
 
     Parameters
     ----------
@@ -45,7 +45,12 @@ def maskinterp1(yval, mask):
         return yval
 
     if ngood == 1:
-        return yval * 0 + yval[good][0]
+        # yval * 0 is NaN exactly at the non-finite entries. Elsewhere, yval * 0 + value
+        # keeps the 2022 result, with its signs of zero and its NaN at an infinite good
+        # entry; and object arrays still work.
+        value = yval[good][0]
+        zero = yval * 0
+        return np.where(bad & (zero != 0), value, zero + value)
 
     ynew = yval
     ny = len(yval)
