@@ -23,11 +23,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
         include:
-          - { os: macos-latest, python-version: "3.10" }
+          - { os: macos-latest, python-version: "3.11" }
           - { os: macos-latest, python-version: "3.15" }
-          - { os: windows-latest, python-version: "3.10" }
+          - { os: windows-latest, python-version: "3.11" }
           - { os: windows-latest, python-version: "3.15" }
     steps:
       - uses: actions/checkout@v7
@@ -35,8 +35,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements-dev.txt
-      - run: python -m pip install -r requirements-dev.txt
+          cache-dependency-path: pyproject.toml
+      # --group needs pip 25.1.
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install --no-compile . --group test
       - run: python -m pytest -q -ra
 
   test-oldest:
@@ -48,8 +50,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
-      - run: python -m pip install -r requirements-dev.txt "numpy==1.26.*" "scipy==1.11.*"
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install --no-compile . --group test "numpy==1.26.*" "scipy==1.11.*"
       - run: python -m pytest -q -ra
 
   lint:
@@ -59,13 +62,14 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      - run: python -m pip install "$(grep '^ruff' requirements-dev.txt)"
-      - run: ruff check tests
-      - run: ruff format --check tests
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install --group dev
+      - run: ruff check src tests
+      - run: ruff format --check src tests
 
   slow:
     # Runs only when started by hand, with every test: -m "" lifts the -m "not slow" of
-    # pytest.ini.
+    # pyproject.toml.
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -74,6 +78,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
-      - run: python -m pip install -r requirements-dev.txt
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install --no-compile . --group test
       - run: python -m pytest -q -ra -m ""

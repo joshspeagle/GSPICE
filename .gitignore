@@ -2,15 +2,9 @@ dist
 test/gspice-unit-test-desi.fits
 .ipynb_checkpoints
 .vscode
-gspice/.ipynb_checkpoints
 test
-gspice/tests/.ipynb_checkpoints
-gspice/notebooks/.ipynb_checkpoints
-gspice/notebooks/dist
-gspice/pro/.ipynb_checkpoints
 # Local environments and caches
 .venv/
 .pytest_cache/
 __pycache__/
-*.egg-info/
 .ruff_cache/

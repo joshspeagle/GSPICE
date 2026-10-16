@@ -4,19 +4,20 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 
 ## Layout
 
-- `gspice/`: the 2022 package (commit `1fbab9f`).
+- `src/gspice/`: the package. `src/gspice/legacy/` holds the 2022 modules (commit `1fbab9f`).
 - `docs/design.md`: the design of the new package, which Phases 2 to 5 implement.
 - `pro/`, `julia/`: IDL and Julia implementations, unchanged until the Python package is finished, then updated and modernized.
 - `notebooks/`, `notes/`, `paper/`: 2021-2022 working material.
 - `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
-- `pytest.ini`: test paths and the `slow` marker.
+- `tests/legacy/`: tests of the behaviour changes of `gspice.legacy`.
+- `pyproject.toml`: the build, the dependencies, and the pytest and ruff settings.
 
 ## Commands
 
-- Set up: `uv venv .venv && uv pip install -r requirements-dev.txt`.
+- Set up: `uv venv --clear .venv && uv pip install -e . --group dev`.
 - Test: `.venv/bin/python -m pytest`. It skips `slow` tests.
 - All tests, `slow` ones included: `.venv/bin/python -m pytest -m ""`.
-- Lint and format check: `.venv/bin/ruff check tests && .venv/bin/ruff format --check tests`.
+- Lint and format check: `.venv/bin/ruff check src tests && .venv/bin/ruff format --check src tests`.
 
 ## Plan
 

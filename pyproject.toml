@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gspice"
+dynamic = ["version"]
+requires-python = ">=3.11"
+# The oldest stack that CI tests.
+dependencies = ["numpy>=1.26", "scipy>=1.11"]
+# Provisional (design decision S11.8).
+license = "GPL-3.0-only"
+authors = [
+    { name = "Douglas P. Finkbeiner" },
+    { name = "Joshua S. Speagle" },
+    { name = "Tanveer Karim" },
+]
+
+[dependency-groups]
+test = ["pytest>=8"]
+dev = [{ include-group = "test" }, "ruff==0.17.1"]
+
+[tool.hatch.version]
+path = "src/gspice/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/README.md", "/CHANGELOG.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = '--strict-markers -m "not slow"'
+markers = [
+    "slow: takes more than 5 s on a CI runner or has a Monte Carlo tolerance; run with -m slow",
+]
+
+[tool.ruff]
+# The 2022 code; PR 2.4 of the design lints it (decision A29). force-exclude also
+# applies the exclusion to files named on the command line, as pre-commit names them.
+extend-exclude = ["src/gspice/legacy"]
+force-exclude = true
+
+[tool.ruff.lint.isort]
+known-first-party = ["_golden"]

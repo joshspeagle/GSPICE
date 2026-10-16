@@ -5,8 +5,6 @@ From https://github.com/desihub/gfa_reduce/blob/master/py/gfa_reduce/analysis/dj
 
 import numpy as np
 from scipy.interpolate import interp1d
-import astropy.io.fits as fits
-import time
 
 def maskinterp1(yval, mask):
 # omitting xval arg (assume regular grid), omitting const kw arg

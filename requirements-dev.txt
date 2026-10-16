@@ -1,6 +1,0 @@
-numpy>=1.26
-scipy>=1.11
-# The 2022 gspice/djs_maskinterp.py imports astropy.io.fits at module load.
-astropy>=5.3
-pytest>=7.4
-ruff==0.17.1
