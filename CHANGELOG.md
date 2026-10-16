@@ -9,6 +9,7 @@
 
 ### Removed
 
+- The egg in `dist/` and the 2022 tests in `gspice/tests/`, which could not run and which the golden tests replace.
 - The import of astropy, which the 2022 code did not use.
 
 ### Behaviour changes
