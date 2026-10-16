@@ -17,4 +17,4 @@ about: Tracks one phase of the overhaul
 
 ## Decision log
 
-<!-- One line for each decision, with a link to the pull request that made it. -->
+<!-- One line for each decision, with a link to the pull request or commit that made it. -->

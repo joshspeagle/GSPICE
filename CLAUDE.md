@@ -32,22 +32,31 @@ No tests or linters run yet: the 2022 tests need data files that are not in the 
 
 ## Git
 
-- Never commit or push to `main`; every change reaches it through a pull request.
+- Every change reaches `main` through a pull request, except a minor change and the revert of a commit that broke CI.
 - One issue per goal. One logical change per branch, from `main`, named `<issue>-<slug>` with a lowercase hyphenated slug. If one change needs another, wait for it to merge.
 - Claude commits as `Claude <noreply@anthropic.com>`.
 - A commit makes one small change and passes every test that passed before it. Subject in the imperative, at most 72 characters; a body only for why.
-- Never force-push, rebase or reset a branch a human has committed to.
+- Push a commit only after the commands under Commands pass locally.
+- Never force-push `main`. Never rebase, reset or amend a pushed commit on `main` or on a branch a human has committed to.
+- If CI fails on `main`, Claude reverts the breaking commit at once (`git revert -m 1` for a merge commit), runs the commands, links the failed run in the commit body and pushes the revert directly. Claude then reopens the issue that the commit closed.
+- Claude never resolves a revert conflict by hand. If the revert conflicts, does not make CI pass or cannot be pushed after one retry, or if no single commit broke CI, Claude opens an issue instead.
+
+### Minor changes
+
+- A minor change has at most 10 changed lines and is not part of a larger edit. It fixes a typo, a link or formatting, rewords text outside `CLAUDE.md` without changing its meaning, or records in `CLAUDE.md` a decision the lead gave, adding nothing the lead did not say.
+- It edits only prose (instructions, documentation, comments and docstrings), but not the design document. It changes no behaviour, public API, documented contract (including units), number, tolerance, dependency, test, test data, CI workflow, or tool directive in a comment (`# noqa`, `# type: ignore`, `# pragma`), even when the fix looks forced. When unsure, it is not minor.
+- Claude commits a minor change on top of `origin/main` and pushes it with `git push origin HEAD:main`, without an issue. If the push is rejected, Claude runs `git fetch origin`, rebases the unpushed commit onto `origin/main`, checks that the change is still minor, runs the commands and pushes once more. If the rebase conflicts or that push also fails, Claude opens an issue and a pull request for the commit.
+- The commit body of a recorded decision quotes the lead. After the push succeeds, the decision gets a line in the phase's decision log that links the commit.
 
 ## Pull requests
 
 1. Make the first commit, push it, and open a draft that closes its issue.
 2. Record each decision under "Decisions". A decision is a choice that another competent developer could make differently and that affects behaviour, the public API, a number, a tolerance, a dependency or the process.
-3. Push a commit only after the commands under Commands pass locally.
-4. Adversarial review: an independent subagent tries to refute each decision. It gets the diff, the decision and the requirements the change must meet (the design document, once it exists), not the session's reasoning. A refuted decision is changed, or the objection is answered in the record. A behaviour change gets three reviewers and stands if at least two uphold it; otherwise revise it and review it again, or drop it.
-5. Run `/simplify`, then `/code-review high`. Fix each valid finding and answer the rest in the pull request. A decision they add or change gets its own adversarial review.
-6. Run `git fetch origin`. If every commit in `origin/main..origin/<branch>` is by Claude, fold each fix into the commit it corrects: `git commit --fixup=<commit>`, then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash --keep-base --exec '<commands>' origin/main`, then `git push --force-with-lease --force-if-includes`. Otherwise fixes are new commits.
-7. Mark it ready when every item under "Checklist" in its description is done. After that, fixes are new commits.
-8. Merge it with a merge commit when CI passes, no review thread is unresolved, each request to Claude has an answer, and every approval this file requires is given. Until CI exists, the local commands take its place and the pull request says so. Then add its decisions to the phase's decision log.
+3. Adversarial review: an independent subagent tries to refute each decision. It gets the diff, the decision and the requirements the change must meet (the design document, once it exists), not the session's reasoning. A refuted decision is changed, or the objection is answered in the record. A behaviour change gets three reviewers and stands if at least two uphold it; otherwise revise it and review it again, or drop it.
+4. Run `/simplify`, then `/code-review high`. Fix each valid finding and answer the rest in the pull request. A decision they add or change gets its own adversarial review.
+5. Run `git fetch origin`. If every commit in `origin/main..origin/<branch>` is by Claude, fold each fix into the commit it corrects: `git commit --fixup=<commit>`, then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash --keep-base --exec '<commands>' origin/main`, then `git push --force-with-lease --force-if-includes`. Otherwise fixes are new commits.
+6. Mark it ready when every item under "Checklist" in its description is done. After that, fixes are new commits.
+7. Merge it with a merge commit when CI passes, no review thread is unresolved, each request to Claude has an answer, and every approval this file requires is given. Until CI exists, the local commands take its place and the pull request says so. Then add its decisions to the phase's decision log.
 
 - A behaviour change alters a 2022 result (a number, a mask, an error or a default), loosens the tolerance of an existing test, or compares against the 2022 outputs at a tolerance looser than a relative error of 1e-10. Masks compare exactly. A changed result needs a test that shows the old and the new result.
 - Every pull request updates what it makes stale in `README.md`, `CLAUDE.md` and, once it exists, `docs/`. Each user-visible change gets a line under "Unreleased" in `CHANGELOG.md`, and each behaviour change also a line under "Behaviour changes". The first pull request that needs the file creates it.
