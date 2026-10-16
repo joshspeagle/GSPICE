@@ -3,19 +3,22 @@ import importlib
 import pickle
 import subprocess
 import sys
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 import gspice
-from _golden import Golden
+from _golden import Golden, same
 from gspice.legacy import (
     cholesky_inv,
     covar,
     covar_iter_mask,
+    get_chimask,
     gp_interp,
     maskinterp,
+    maskinterp1,
     matrixUtils,
     submatrix_inv,
     submatrix_inv_mult,
@@ -233,3 +236,48 @@ def test_numpy_bool_or_array_nguard_raises_type_error(nguard):
     # 1fbab9f read np.True_ as 1 and raised ValueError for np.array([5]).
     with pytest.raises(TypeError, match="nguard"):
         gp_interp(SPEC, COV, nguard=nguard)
+
+
+# The 2022 expression yval * 0 + value computes inf * 0.
+@pytest.mark.filterwarnings("ignore:invalid value encountered in multiply")
+@pytest.mark.parametrize("value", [np.nan, np.inf])
+def test_non_finite_bad_entries_get_the_value_of_the_only_good_entry(value):
+    # 1fbab9f returned NaN at the 23 bad entries of E row 2, and without the non-finite
+    # values it returned the value of entry 7 everywhere (record maskinterp1.E.row2).
+    case = GOLDEN.cases["maskinterp1.E.row2"]
+    kwargs = GOLDEN.arguments(case)
+    kwargs["yval"][kwargs["mask"] != 0] = value
+    expected = GOLDEN.expected(case)["ynew"]
+    assert same(maskinterp1(**kwargs), expected)
+
+
+@pytest.mark.filterwarnings("ignore:invalid value encountered in multiply")
+@pytest.mark.parametrize("value", [np.inf, -np.inf])
+def test_infinite_only_good_entry_keeps_the_2022_values(value):
+    # 1fbab9f returned [value, nan, value, nan]: inf * 0 is NaN at the good entry.
+    result = maskinterp1(np.array([1.0, value, -2.0, np.nan]), np.array([1, 0, 1, 1]))
+    np.testing.assert_array_equal(result, [value, np.nan, value, value])
+
+
+def test_object_array_with_one_good_entry_keeps_the_2022_values():
+    # 1fbab9f returned yval * 0 + Fraction(2), the value of the good entry.
+    yval = np.array([Fraction(1, 3), Fraction(2)], dtype=object)
+    result = maskinterp1(yval, np.array([1, 0]))
+    assert result.dtype == object
+    assert result.tolist() == [Fraction(2), Fraction(2)]
+
+
+def test_negative_zero_only_good_entry_keeps_the_2022_signs():
+    # 1fbab9f returned [0.0, -0.0, -0.0, nan], which is yval * 0 + -0.0.
+    result = maskinterp1(np.array([3.0, -0.0, -2.0, np.nan]), np.array([1, 0, 1, 1]))
+    assert same(result, np.array([0.0, -0.0, -0.0, -0.0]))
+
+
+def test_get_chimask_ignores_nan_flux_at_bad_pixels_of_a_one_good_pixel_spectrum():
+    # Row 1930 of D1 has one good pixel. 1fbab9f raised ValueError, "array must not
+    # contain infs or NaNs", in the Cholesky factorization of the covariance.
+    case = GOLDEN.cases["get_chimask.D1.nsigma6"]
+    kwargs = GOLDEN.arguments(case)
+    kwargs["flux"][1930, kwargs["mask"][1930] != 0] = np.nan
+    expected = GOLDEN.expected(case)["chimask"]
+    np.testing.assert_array_equal(get_chimask(**kwargs), expected)
