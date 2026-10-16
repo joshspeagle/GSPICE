@@ -17,6 +17,8 @@
 - `setup.py`, which `pyproject.toml` replaces.
 - The egg in `dist/` and the 2022 tests in `gspice/tests/`, which could not run and which the golden tests replace.
 - The import of astropy, which the 2022 code did not use.
+- The 10 prints of `gspice.legacy`, which reported progress, timings, shapes and notices such as "imask does not remove any rows or columns." `covar(checkmean=True)` still prints its check of the column means.
+- The LAPACK message that `cholesky_inv` printed for a 0 × 0 matrix.
 
 ### Behaviour changes
 
