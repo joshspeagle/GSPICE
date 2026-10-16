@@ -60,11 +60,10 @@ fail_under = 90
 # Without decimals, a total of 89.5% would round up and pass.
 precision = 2
 
-[tool.ruff]
-# The 2022 code; PR 2.4 of the design lints it (decision A29). force-exclude also
-# applies the exclusion to files named on the command line, as editors name them.
-extend-exclude = ["src/gspice/legacy"]
-force-exclude = true
+[tool.ruff.lint.per-file-ignores]
+# The 2022 module names are API (design decision A29).
+"src/gspice/legacy/matrixUtils.py" = ["N999"]
+"src/gspice/legacy/specUtils.py" = ["N999"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["_golden"]
