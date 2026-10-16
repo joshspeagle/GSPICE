@@ -252,6 +252,9 @@ def gp_interp(spec, cov, nguard = 20, irange = None, bruteforce = False):
         raise _LegacyError("cov: covariance must be square matrix.")
     if npix != cov.shape[0]:
         raise _LegacyError("spec, cov: spectra and covariance have incompatible dimensions.")
+    nguard = _index(nguard, "nguard")
+    if nguard < 0:
+        raise _LegacyError(f"nguard: expected an integer >= 0, got {nguard}")
     if npix == 0:
         raise _LegacyError("spec: expected at least one pixel, got 0")
     

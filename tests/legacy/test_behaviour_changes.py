@@ -43,6 +43,7 @@ PICKLE_2022 = (
 GOLDEN = Golden()
 GP_INTERP_D1 = GOLDEN.arguments(GOLDEN.cases["gp_interp.D1.ng5"])
 SPEC, COV = GP_INTERP_D1["spec"], GP_INTERP_D1["cov"]
+GP_INTERP_D2 = GOLDEN.arguments(GOLDEN.cases["gp_interp.D2.ng5"])
 EYE = np.eye(3)
 INV = {"M": EYE, "Minv": EYE, "imask": EYE[0]}
 MULT = INV | {"Y": EYE, "MinvY": EYE}
@@ -168,3 +169,39 @@ def test_spectra_without_pixels_are_rejected(irange):
     # the list.
     with pytest.raises(ValueError, match="spec"):
         gp_interp(np.zeros((3, 0)), np.zeros((0, 0)), irange=irange)
+
+
+def test_negative_nguard_is_rejected():
+    # 1fbab9f predicted each pixel from itself: on D1, pred = X to 3.8e-13.
+    with pytest.raises(ValueError, match="nguard"):
+        gp_interp(SPEC, COV, nguard=-1)
+
+
+@pytest.mark.parametrize(
+    "nguard", [np.uint8(5), np.uint64(5), np.int8(100), np.array(5), True]
+)
+def test_integer_nguard_equals_the_python_integer(nguard):
+    # Under numpy 2, 1fbab9f computed the windows in the type of nguard: np.uint8(5)
+    # predicted pixels 0 to 4 from themselves, np.int8(100) pixels 27 to 49, and
+    # np.uint64(5) raised TypeError. A 0-d array and True worked, and still do.
+    expected = gp_interp(SPEC, COV, int(nguard))
+    np.testing.assert_equal(gp_interp(SPEC, COV, nguard), expected)
+
+
+@pytest.mark.parametrize(
+    ("nguard", "irange"),
+    [(np.int8(5), np.array([126, 130, 0])), (np.uint8(5), np.array([254, 258, 0]))],
+)
+def test_fixed_width_nguard_works_past_the_range_of_its_type(nguard, irange):
+    # Under numpy 2, 1fbab9f raised OverflowError on D2 at pixel 128 for np.int8 and at
+    # pixel 256 for np.uint8.
+    spec, cov = GP_INTERP_D2["spec"], GP_INTERP_D2["cov"]
+    expected = gp_interp(spec, cov, 5, irange=irange)
+    np.testing.assert_equal(gp_interp(spec, cov, nguard, irange=irange), expected)
+
+
+@pytest.mark.parametrize("nguard", [np.True_, np.array([5])])
+def test_numpy_bool_or_array_nguard_raises_type_error(nguard):
+    # 1fbab9f read np.True_ as 1 and raised ValueError for np.array([5]).
+    with pytest.raises(TypeError, match="nguard"):
+        gp_interp(SPEC, COV, nguard=nguard)
