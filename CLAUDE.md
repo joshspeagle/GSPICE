@@ -19,7 +19,7 @@ No tests or linters run yet: the 2022 tests need data files that are not in the 
 - Priorities: correctness, then API quality, then performance. Never trade the first for the others.
 - When a requested behaviour conflicts with the 2022 results, or a numerical problem appears, record it as a decision in the pull request. Never choose silently.
 - A phase ends when its "Done when" list is complete, with a checkpoint report on its tracking issue: what changed, the test and benchmark status, the behaviour changes and numerical problems found, a link to the decision log, and the pull requests to inspect. Claude then closes the tracking issue and starts the next phase.
-- The lead must approve, on the pull request or the tracking issue, before the merge of the Phase 1 (design) pull request and before any tag, release or package upload.
+- The lead must approve, on the pull request or the tracking issue, before any tag, release or package upload.
 
 ## GitHub
 
