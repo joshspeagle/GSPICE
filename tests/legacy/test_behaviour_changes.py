@@ -105,11 +105,29 @@ def test_2022_assert_raises_an_error_that_is_also_a_value_error(
     assert isinstance(raised.value, AssertionError)
 
 
+def legacy_trees():
+    return {
+        path.name: ast.parse(path.read_text(encoding="utf-8"))
+        for path in Path(gspice.legacy.__file__).parent.glob("*.py")
+    }
+
+
 def test_legacy_has_no_assert_statement():
     # python -O removes asserts, so a check written as one would not run there.
-    for path in Path(gspice.legacy.__file__).parent.glob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        assert not any(isinstance(node, ast.Assert) for node in ast.walk(tree)), path
+    for name, tree in legacy_trees().items():
+        assert not any(isinstance(node, ast.Assert) for node in ast.walk(tree)), name
+
+
+def test_legacy_prints_only_the_mean_check_of_covar():
+    # 1fbab9f also printed progress, timings, shapes and notices from 10 other calls.
+    callers = [
+        getattr(statement, "name", "<module>")
+        for tree in legacy_trees().values()
+        for statement in tree.body
+        for node in ast.walk(statement)
+        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "print"
+    ]
+    assert callers == ["covar"]
 
 
 def test_legacy_checks_run_under_python_o():

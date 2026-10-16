@@ -473,7 +473,7 @@ The rule: legacy keeps every behaviour of the 2022 code run with its asserts ena
 
 **Numerics.** Legacy keeps the 2022 arithmetic, so its results equal those of 1fbab9f bit for bit on the same platform, except where a listed change applies; D-80 and D-81 use new expressions that give the 2022 bits on finite inputs. The 2022 results vary with the BLAS kernel, the thread count and the library versions, by up to 9.7e-10 in the D3 predvar; the tolerances of #9 cover that spread.
 
-**Hygiene without BC** (bit-identical): no prints (D-05, D-06), and no LAPACK message from a 0 × 0 `cholesky_inv`, which returns its (0, 0) float64 array without LAPACK (D-05); no astropy import (D-07, in PR 2.1); dead code removed (D-38); docstrings fixed (D-11, D-12); ruff fixes and formatting (A29, in PR 2.4).
+**Hygiene without BC** (bit-identical): no prints except the one that `covar(checkmean=True)` asks for (D-05, D-06), and no LAPACK message from a 0 × 0 `cholesky_inv`, which returns its (0, 0) float64 array without LAPACK (D-05); no astropy import (D-07, in PR 2.1); dead code removed (D-38); docstrings fixed (D-11, D-12); ruff fixes and formatting (A29, in PR 2.4).
 
 **Errors** (A20). The 2022 asserts and the new argument checks raise `_LegacyError(AssertionError, ValueError)`, whose message names the argument and contains the 2022 message where it replaces an assert (D-22). **BC**: an `except ValueError` clause now also catches the 2022 assert failures. Integer conversion raises TypeError, as above, and an argument that an assert dereferences, such as M=None, still raises AttributeError, as with the 2022 asserts enabled. **BC** under `python -O`: 2022 skipped its asserts there and returned results, or other errors, for inputs they reject, such as a float32 covariance from `covar`, a copy from `maskinterp` for 1-D input without bad pixels at axis 0 or for an axis other than 0 and 1 (taken as axis 1), `MinvY` from `submatrix_inv_mult` for a 1-D Y when nothing is removed, and a result from `submatrix_inv` for a non-square M on the fast path. Legacy always checks.
 
@@ -737,7 +737,7 @@ Each line is one issue, one branch and one pull request with a single goal; line
 1. Src layout and `pyproject.toml`; `git mv` the 2022 modules into `src/gspice/legacy/` unchanged, then remove their unused astropy import (D-07); top-level re-exports; retarget the golden fixture; delete `setup.py`, `dist/`, `gspiceMain.py` and the 2022 tests (D-08, D-09, D-10, D-38); drop Python 3.10; CHANGELOG with the module-path change (A24; BC). [golden PR #9]
 2. mypy, coverage and pre-commit in the commands and CI. [2.1]
 3. Legacy checks raise `_LegacyError`: the 2022 asserts (D-22) and new checks of irange and nguard (D-01, D-17, D-18, A20; BC). [2.1]
-4. Legacy hygiene without BC: logging, the LAPACK message of a 0 × 0 `cholesky_inv`, dead code, docstrings, ruff on legacy (D-05, D-06, D-11, D-12, D-38, A29). [2.3]
+4. Legacy hygiene without BC: prints, the LAPACK message of a 0 × 0 `cholesky_inv`, dead code, docstrings, ruff on legacy (D-05, D-06, D-11, D-12, D-38, A29). [2.3]
 5. Legacy input handling: fully masked spectra, non-finite values at masked pixels, mask=None (D-13, D-80, D-81, D-14; BC). [2.4]
 6. Legacy copies when nothing is removed (D-25; BC). [2.4]
 7. Legacy brute-force `gp_interp` works (D-02; BC). [2.4]

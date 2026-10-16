@@ -1,5 +1,4 @@
 import operator
-from time import time
 
 import numpy as np
 from scipy.ndimage import binary_dilation as dilate
@@ -26,12 +25,10 @@ def standard_scale(spec, ivar, mask=None):
     """
 
     # if no mask is passed, use ivar == 0 as mask (setting infinity error as bad pixel)
-    tt = time()
     if mask is None:
         pixmask = ivar == 0
     else:
         pixmask = np.where(mask == 0, 0, 1)  # scale mask to 0 or 1
-    print(f"time: {time() - tt}")
 
     # interpolate over masked pixels in the spectral direction
     Dvec = maskinterp(yval=spec, mask=pixmask, axis=0)
@@ -106,7 +103,6 @@ def get_chimask(flux, ivar, mask, nsigma):  ##DONE
 
     # clip at nsigma, dilate mask by 1 pixel
     flag = np.abs(chi) >= nsigma
-    print(f"flag : {flag.shape}")
     chimask = dilate(flag, np.array([[1, 1, 1]])).astype(flag.dtype)
 
     return chimask
@@ -176,7 +172,6 @@ def gaussian_estimate(icond, ipred, cov, Dvec, covinv, bruteforce=False):
             predkstar = Dvec @ tmp2
         else:
             predkstar = Dvec[:, k] @ tmp.T  # this is memory intensive
-            print("Using memory intensive code...")
 
         return predcovar, predkstar, kstar
     else:
@@ -297,15 +292,12 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
         # print('tst ', predoverD)
         # print('tst ', predoverD.shape)
 
-    # t0 = time() #start timing
-
     # pre-compute inverse covariance
     covinv = cholesky_inv(cov)
     # print('tst ', covinv.std(ddof = 1))
 
     # loop over pixels
     for i in range(i0, i1 + 1):
-        t0 = time()  # start timing
         # ipred == 1 for pixels to be predicted
         ipred = np.zeros(npix)
         # print(ipred)
@@ -356,13 +348,9 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
         # print(predvar.shape)
         # print(predvar.std(ddof =1))  ##GOOD UPTO HERE##
 
-        if (i % 100) == 0:
-            print(f"Iteration # {i} finished at {time() - t0} seconds.")
-
     pred = spec.dot(predoverD)
     # print(pred.std(ddof = 1))
     # print(predvar.std(ddof = 1))
-    print(f"Matrix multiplication time: {time() - t0}")
 
     return pred, predvar
 
@@ -385,8 +373,6 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
             finalmask (np.ndarray) nspec X npix : final mask after iteration
     """
 
-    t0 = time()
-
     nspec, npix = flux.shape
 
     # reject spectra with too many bad pixels
@@ -404,16 +390,12 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
     # thismask = np.logical_or(chimask, (mask[wmask] != 0))
 
     for sigma in nsigma:  # loop over iteratively masking
-        print(f"Pass nsigma = {sigma}")
         thismask = np.logical_or(chimask, (mask[wmask] != 0))
 
         chimask = get_chimask(
             flux=flux[wmask], ivar=ivar[wmask], mask=thismask, nsigma=sigma
         )
-        print(f"Mean chimask = {np.mean(chimask)}")
         # thismask = np.logical_or(chimask, thismask)
-        print(f"Time: {time() - t0} seconds.")
-        t0 = time()
 
     finalmask = np.ones((nspec, npix))
     finalmask[wmask] = np.logical_or(thismask, chimask)

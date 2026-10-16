@@ -70,7 +70,6 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
         return Ainv
 
     if nr == 0:
-        print("imask does not remove any rows or columns.")
         return Minv
 
     # Evaluate  A^{-1} = P - Q U^{-1} Q.T
@@ -145,7 +144,6 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
         return Ainvy
 
     if nr == 0:
-        print("imask does not remove any rows or columns.")
         return MinvY
 
     # Use Q.T y = Minv y - U y ?? why? known result?
