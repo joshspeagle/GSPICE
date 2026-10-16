@@ -1,7 +1,7 @@
-"""
-Written by Aaron Meisner.
-From https://github.com/desihub/gfa_reduce/blob/master/py/gfa_reduce/analysis/djs_maskinterp.py
-"""
+"""Linear interpolation over masked entries, after the IDL routine djs_maskinterp."""
+
+# Written by Aaron Meisner.
+# From https://github.com/desihub/gfa_reduce/blob/master/py/gfa_reduce/analysis/djs_maskinterp.py
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -10,8 +10,26 @@ from ._errors import _LegacyError
 
 
 def maskinterp1(yval, mask):
-    # omitting xval arg (assume regular grid), omitting const kw arg
-    # (assume const=True behavior is desired)
+    """Interpolate linearly over the bad entries of a 1-D array.
+
+    The grid is regular. Entries before the first or after the last good entry get
+    the value of that entry, as with the /const option of the IDL routine. With one
+    good entry, every entry gets yval * 0 plus its value, which is NaN at a
+    non-finite entry.
+
+    Parameters
+    ----------
+    yval : array_like, shape (n,)
+        Values. An integer dtype truncates the interpolated values.
+    mask : ndarray, shape (n,)
+        Nonzero after conversion to int marks a bad entry, so 0.5 is good.
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        A copy of yval, interpolated. Without bad or without good entries, the copy
+        is unchanged.
+    """
 
     yval = np.array(yval)
 
@@ -38,7 +56,6 @@ def maskinterp1(yval, mask):
 
     yval[bad] = f(ibad)
 
-    # do the /const part
     if igood[0] != 0:
         ynew[0 : igood[0]] = ynew[igood[0]]
     if igood[ngood - 1] != (ny - 1):
@@ -48,6 +65,28 @@ def maskinterp1(yval, mask):
 
 
 def maskinterp(yval, mask, axis):
+    """Apply maskinterp1 to each row or to each column of a 2-D array.
+
+    Parameters
+    ----------
+    yval : ndarray, shape (nrow, ncol)
+        Values.
+    mask : ndarray, shape (nrow, ncol)
+        Bad entries, as in maskinterp1.
+    axis : {0, 1}
+        0 interpolates along each row, and 1 along each column, as in the IDL
+        routine.
+
+    Returns
+    -------
+    ndarray, shape (nrow, ncol)
+        A copy of yval, interpolated.
+
+    Raises
+    ------
+    ValueError
+        If yval or mask is not 2-D, their shapes differ, or axis is not 0 or 1.
+    """
 
     mask = mask.astype(int)
 
@@ -71,10 +110,8 @@ def maskinterp(yval, mask, axis):
     ynew = np.copy(yval)
 
     if axis == 0:
-        # the y coord values of rows that need some interpolation
         bad_stripe_indices = np.unique(wbad[0])
     else:
-        # the x coord values of columns that need some interpolation
         bad_stripe_indices = np.unique(wbad[1])
 
     for ind in bad_stripe_indices:
@@ -87,6 +124,20 @@ def maskinterp(yval, mask, axis):
 
 
 def average_bilinear(yval, mask):
+    """Mean of the interpolations of maskinterp along the rows and the columns.
+
+    Parameters
+    ----------
+    yval : ndarray, shape (nrow, ncol)
+        Values.
+    mask : ndarray, shape (nrow, ncol)
+        Bad entries, as in maskinterp1.
+
+    Returns
+    -------
+    ndarray, shape (nrow, ncol)
+        (maskinterp(yval, mask, 0) + maskinterp(yval, mask, 1)) / 2.
+    """
     int0 = maskinterp(yval, mask, 0)
     int1 = maskinterp(yval, mask, 1)
     interp = (int0 + int1) / 2.0

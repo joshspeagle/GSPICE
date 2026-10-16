@@ -1,3 +1,5 @@
+"""The 2022 GSPICE functions, with the arithmetic of commit 1fbab9f."""
+
 from .djs_maskinterp import maskinterp, maskinterp1
 from .matrixUtils import cholesky_inv, submatrix_inv, submatrix_inv_mult
 from .specUtils import (

@@ -1,3 +1,5 @@
+"""The 2022 matrix functions: the inverse of a matrix and of its submatrices."""
+
 import numpy as np
 from scipy import linalg
 from scipy.linalg import lapack
@@ -6,11 +8,33 @@ from ._errors import _LegacyError
 
 
 def cholesky_inv(M):
-    """
-    Returns inverse of positive-definite matrix M using Cholesky decomposition
+    """Inverse of a positive definite matrix, from its Cholesky factor.
+
+    M = L L^T with L lower triangular, and LAPACK dpotri forms M^-1 from L.
+
+    Parameters
+    ----------
+    M : array_like, shape (N, N)
+        Positive definite matrix with finite entries. Only its lower triangle
+        enters the result.
+
+    Returns
+    -------
+    ndarray of float64, shape (N, N)
+        The inverse of M, symmetric. A float32 M is factorized in float32.
+
+    Raises
+    ------
+    ValueError
+        If M is not square or has a non-finite entry.
+    numpy.linalg.LinAlgError
+        If M is not positive definite.
+
+    Notes
+    -----
+    Cost: about N^3 flops.
     """
 
-    # Lower-triangular Cholesky factorization of M
     L = linalg.cholesky(M, lower=True)
 
     # dpotri rejects a 0 x 0 matrix and prints a message.
@@ -20,37 +44,45 @@ def cholesky_inv(M):
     # Call LAPACK dpotri to get inverse (only lower triangle populated)
     Minv0 = lapack.dpotri(L, lower=True)[0]
 
-    # Copy lower triangle to upper triangle
     Minv = Minv0 + Minv0.T - np.diag(Minv0.diagonal())
     return Minv
 
 
 def submatrix_inv(M, Minv, imask, bruteforce=False):
+    """Inverse of the submatrix of M that imask keeps, from the inverse of M.
+
+    With the kept indices k and the removed indices r, A = M[k, k] and
+    A^-1 = P - Q U^-1 Q^T, where P = Minv[k, k], Q = Minv[k, r] and U = Minv[r, r].
+
+    Parameters
+    ----------
+    M : ndarray, shape (N, N)
+        Symmetric positive definite matrix.
+    Minv : ndarray, shape (N, N)
+        Inverse of M. bruteforce does not read it.
+    imask : ndarray, shape (N,)
+        Nonzero for the rows and columns to keep.
+    bruteforce : bool, optional
+        If True, invert A with cholesky_inv.
+
+    Returns
+    -------
+    Ainv : ndarray, shape (nk, nk)
+        The inverse of A. Without bruteforce, if imask keeps every row, Minv
+        itself, not a copy.
+
+    Raises
+    ------
+    ValueError
+        If M is not square or imask.shape[0] is not N.
+    numpy.linalg.LinAlgError
+        If U is singular, or with bruteforce, if A is not positive definite.
+
+    Notes
+    -----
+    Cost: about 2 nr^3 + 2 nk nr (nk + nr) flops, for nr removed and nk kept
+    indices; with bruteforce, about nk^3 flops.
     """
-    Returns inverse of submatrix of M
-
-        Parameters:
-            M (np.ndarray) N x N: symmetric and positive semi-definite matrix
-            Minv (np.ndarray) N x N: inverse of M
-            imask (np.ndarray) N x N: mask of rows/columns to use
-                                      (1 == keep, 0 == remove); contains Nk ones and Nr zeros ?? Assume imask is symmetric
-            bruteforce (bool) : flag for using bruteforce approach
-
-        Returns:
-            Ainv (np.ndarray): Inverse of A (submatrix of M)
-
-        Comments:
-            Let M be block matrix given by
-                |A   B|              |P   Q|
-            M = |     | and M^{-1} = |     |
-                |B.T D|              |Q.T U|
-
-            Then inverse of A is Schur complement of U
-            A^{-1} = P - Q U^{-1} Q.T
-
-            U and M must be invertible and positive semi-definite.
-    """
-    # verify proper dimensionalities
     if M.shape[0] != M.shape[1]:
         raise _LegacyError("M must be a square matrix.")
     if imask.shape[0] != M.shape[0]:
@@ -59,7 +91,6 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
     # ensure imask is boolean type because will use logical operators
     imask = imask.astype(bool)
 
-    # rows/columns to keep (k) and remove (r)
     k = np.where(imask)[0]
 
     r = np.where(~imask)[0]
@@ -73,7 +104,6 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
     if nr == 0:
         return Minv
 
-    # Evaluate  A^{-1} = P - Q U^{-1} Q.T
     Uinv = linalg.inv(Minv[np.ix_(r, r)])
     Qt = Minv[np.ix_(r, k)]  # faster than Q assuming nr < nk
     Ainv = Minv[np.ix_(k, k)] - Qt.T @ Uinv @ Qt
@@ -82,41 +112,50 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
 
 
 def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
+    """Product of the inverse of a submatrix of M with Y, from the inverse of M.
+
+    With the kept indices k, the removed indices r, A = M[k, k], P = Minv[k, k],
+    Q = Minv[k, r] and U = Minv[r, r], A^-1 Y[k] = P Y[k] - Q U^-1 Q^T Y[k]. As
+    MinvY[k] = P Y[k] + Q Y[r] and MinvY[r] = Q^T Y[k] + U Y[r], this is
+    MinvY[k] - Q (U^-1 (MinvY[r] - U Y[r]) + Y[r]), which the function evaluates,
+    so Y[r] can hold any values.
+
+    Parameters
+    ----------
+    M : ndarray, shape (N, N)
+        Symmetric positive definite matrix.
+    Minv : ndarray, shape (N, N)
+        Inverse of M. bruteforce does not read it.
+    imask : ndarray, shape (N,)
+        Nonzero for the rows and columns to keep.
+    Y : ndarray, shape (N, m)
+        The matrix to multiply.
+    MinvY : ndarray, shape (N, m)
+        Minv @ Y. bruteforce checks only that it is 2-D.
+    pad : bool, optional
+        If True, return N rows, with 0 in the rows r.
+    bruteforce : bool, optional
+        If True, invert A with cholesky_inv, and return nk rows whatever pad is.
+
+    Returns
+    -------
+    ndarray, shape (N, m) if pad, else (nk, m)
+        A^-1 Y[k]. Without bruteforce, if imask keeps every row, MinvY itself,
+        not a copy.
+
+    Raises
+    ------
+    ValueError
+        If M is not square, imask.shape[0] is not N, or Y or MinvY is not 2-D.
+    numpy.linalg.LinAlgError
+        If U has more than one row and is not positive definite, or with
+        bruteforce, if A is not positive definite.
+
+    Notes
+    -----
+    Cost: about nr^3 + 2 nr (2 nr + nk) m flops, for nr removed and nk kept
+    indices; with bruteforce, about nk^3 + 2 nk^2 m flops.
     """
-    Returns (inverse of submatrix of M) * Y
-
-        Parameters:
-            M (np.ndarray) N x N: symmetric and positive semi-definite matrix
-            Minv (np.ndarray) N x N: inverse of M
-            imask (np.ndarray) N x N: mask of rows/columns to use
-                                      (1 == keep, 0 == remove); contains Nk ones and Nr zeros
-            Y (np.ndarray) N x Nspec:  matrix multiply Ainv by; assumed to be zero-padded
-            MinvY (np.ndarray) N x Nspec:  matrix Minv * Y
-            pad (bool)        : flag for zero-padding
-            bruteforce (bool) : flag for using bruteforce approach
-
-        Returns:
-            Ainvy (np.ndarray): Inverse of A (submatrix of M) times Y (nspec X N - Nr)
-                                where Nr = number of removed rows.
-                                - If pad is True, then zero-padded to nspec X N with
-                                0 at each removed row
-
-        Comments:
-            Let M be block matrix given by
-                |A   B|              |P   Q|
-            M = |     | and M^{-1} = |     |
-                |B.T D|              |Q.T U|
-
-            Then inverse of A is Schur complement of U
-            A^{-1} = P - Q U^{-1} Q.T
-
-            U and M must be invertible and positive semi-definite.
-            This returns,
-            A^{-1} Y = P Y - (Q U^{-1} Q.T) Y
-
-            Y is assumed to be zero-padded at bad rows
-    """
-    # verify proper dimensionalities
     if M.shape[0] != M.shape[1]:
         raise _LegacyError("M must be a square matrix.")
     if imask.shape[0] != M.shape[0]:
@@ -129,7 +168,6 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
     # ensure imask is boolean type because will use logical operators
     imask = imask.astype(bool)
 
-    # rows/columns to keep (k) and remove (r)
     k = np.where(imask)[0]
 
     r = np.where(~imask)[0]
@@ -144,20 +182,15 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
     if nr == 0:
         return MinvY
 
-    # Qt @ Y[k] = MinvY[r] - U @ Y[r], because MinvY[r] = Qt @ Y[k] + U @ Y[r].
     U = Minv[np.ix_(r, r)]
     Yr = Y[r, :]
     Qty = MinvY[r, :] - U @ Yr
     Qt = Minv[np.ix_(r, k)]
 
-    # evaluate A^{-1} Y = P Y - Q U^{-1} Q.T Y
     if U.shape[0] == 1:
         UinvQtY = Qty / U[0]
     else:
         UinvQtY = cholesky_inv(U) @ Qty
-
-    # Evaluate A^{-1} Y = P Y - Q U^{-1} Q^T Y
-    # using P Y = Minv Y - Q Y
 
     if pad:
         AinvY0 = MinvY.copy(order="K")
