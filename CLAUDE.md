@@ -10,14 +10,14 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - `notebooks/`, `notes/`, `paper/`: 2021-2022 working material.
 - `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
 - `tests/legacy/`: tests of the behaviour changes of `gspice.legacy`.
-- `pyproject.toml`: the build, the dependencies, and the pytest and ruff settings.
+- `pyproject.toml`: the build, the dependencies and the tool settings.
 
 ## Commands
 
-- Set up: `uv venv --clear .venv && uv pip install -e . --group dev`.
+- Set up: `uv venv --clear --python 3.13 .venv && uv pip install -e . --group dev`. mypy needs scipy-stubs, which requires Python 3.12 or later.
 - Test: `.venv/bin/python -m pytest`. It skips `slow` tests.
 - All tests, `slow` ones included: `.venv/bin/python -m pytest -m ""`.
-- Lint and format check: `.venv/bin/ruff check src tests && .venv/bin/ruff format --check src tests`.
+- Lint, format and type check: `.venv/bin/ruff check src tests && .venv/bin/ruff format --check src tests && .venv/bin/mypy`.
 
 ## Plan
 

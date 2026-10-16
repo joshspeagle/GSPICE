@@ -8,6 +8,7 @@
 - Continuous integration on Linux with Python 3.11 to 3.15, on macOS and Windows with Python 3.11 and 3.15, and on the oldest supported numpy and scipy.
 - `pyproject.toml`: `pip install .` installs the package. It requires Python 3.11 or later, numpy 1.26 or later and scipy 1.11 or later.
 - `gspice.__version__`, which is `2.0.0.dev0`.
+- Type checks with mypy in strict mode for the code outside `gspice.legacy`.
 
 ### Removed
 
