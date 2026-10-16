@@ -1,0 +1,4982 @@
+{
+ "baseline": {
+  "commit": "1fbab9f2ef28c148d58c9b0e6ea90f248f646dfe",
+  "sha256": {
+   "gspice/__init__.py": "d81b42b642889b004f40f0150b3dcb2a149592ed4bacb06bdf1ef4ca6d29a2fd",
+   "gspice/djs_maskinterp.py": "16273709e0f0db2d9947272c682a6eb412b7a325ef3fe6a847e19533a7365424",
+   "gspice/gspiceMain.py": "af0623bea4aea5c370ddb504fa19984c3a3a8ebe01a2f8a520085d479629379d",
+   "gspice/matrixUtils.py": "dd6e6ed9274b6c38198569deae8b0b1abe8d8a09ff6499656aed0b2119bb15b4",
+   "gspice/specUtils.py": "16cf8b7af4b1c53fe3bbaf90ed936c5df7133d1934cff7d316be92cdd29ad647"
+  }
+ },
+ "environment": {
+  "python": "3.13.16",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "blas": "OpenBLAS 0.3.34.106.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY SkylakeX MAX_THREADS=64",
+  "cpu_features": ["X86_V3", "X86_V4", "AVX512_ICL", "AVX512_SPR"]
+ },
+ "seeds": {
+  "E": 202203,
+  "MAT": 202204,
+  "PARAMS": 202205,
+  "D1": 202201,
+  "D2": 202202,
+  "D3": 202206,
+  "D4": 202207
+ },
+ "datasets": {
+  "E": {
+   "flux": "b87aa5548c21091cf10410b0af305a020d73a79c79b639f2147f82dd3dac8b33",
+   "ivar": "5a2095497790073b4a16937918db32325f2337050dc8d996fe9eab25df9f6adb",
+   "ivar_z": "08fdbbc17bd3bf06d9846c6c47f80ec423fb3ba74bebe4763484321ed53d8860",
+   "mask": "1e5d67e8166332f5bd07c503f63e23edae031c57ee88568d9e288110e0b2f490"
+  },
+  "MAT": {
+   "M300a": "5c7cfc88876628de3fa2644441c01da9b8ab7e34811032c3ebd71aa2a9cb4d25",
+   "M300b": "86df8fd192ad6b86480c58f8beab66833617884945e182c7c5f2357dfb6cf97c",
+   "M50a": "bc6ead90d443e60ccf8b2811fb8bc51428cdb13dcc0ca226a9b6088a8f89679a",
+   "M50b": "e96b2c55fc3033efe4b57a896d15ade63baf7578c2bcba478bd1ef8c5c2a0dba",
+   "Y__M300a": "ac2e21438a7c65bac37f22564427c2dfc5af5f19250ad336c56c4daa12bcde34",
+   "Y__M300b": "6eabe1063b081b36e43539b9867c4911f8165c6c1e7065ed2b8bab06dff78dae",
+   "Y__M50a": "67c6ce7b1b6d77da9d3efc07326b759580f93e28b2ceaa12fb36448a0614a64c",
+   "Y__M50b": "527078b273448af145aa45a146cdf0e6ab1e6c432cdaee63b32a5f6e6c43c3da"
+  },
+  "D1": {
+   "flux": "2155cb9de437beb05c95a5034ab3c740fa1a9fcc9a35ac3a151e60fd426558ab",
+   "ivar": "2b16667eb80dc5ec01777d927ce57a5c2bc06a0e8b9751c4501efa593d0291d8",
+   "ivar_z": "dbd371409f9e3097cbd6748925ebcc28a6465fedc49fd24edddd039a1fafbbdd",
+   "mask": "486752b6408bb26f746958598d57de8835ea2ea1db6729009115cfde1dce766f",
+   "mask_alt": "2a6abe3eafbdb91bebc223bd3f8f50713ab3ea2663f6f486efecf483f18ea8be",
+   "rows_subset": "b49c73b07bdb6fd8cf7c5ba7573918c4d4b410157098d77b430367627b4ca98b"
+  },
+  "D2": {
+   "flux": "314a86bbb846dfa8d08b311932020a2a134de5e261ad34c515055bcbcc892d14",
+   "ivar": "784cadf394acf515d21069d052659588d48712b9e045efa3ac3210cbe976da14",
+   "mask": "c08172fa893687d315dee34294374440e8b22f306ea9e4e9aad38fbb12f42041",
+   "rows_subset": "4cbfbd2faee78fdd8d27974e9fb67ac11d19648c1360b87cb28267d90ab8cf20"
+  },
+  "D3": {
+   "flux": "852a3543169217886222f1df5272c850ccc0c5403c50f802decaa6581b69783b",
+   "ivar": "41c4faaf695e59773249c06e377cd7a378f2177f91e21c62d3fbd331a1e9956d",
+   "mask": "ab846e86eb291a277dd2e16b90e6019a28bad89b7443b5d7180addfcb85ca12a",
+   "rows_subset": "59bd3747a847d16bc264783b38af29e4ff0126ddaa375d4b6825c9b50e2efd33"
+  },
+  "D4": {
+   "flux": "0aab5bfca059a430644aad4ff343e86fcacde98546558246341fcd4405a51fc0",
+   "ivar": "a327d1d5d76fa47d92a7c2d3b9fbf8f9f6e94ec51c0fb36c8198c9aa61b9cc75",
+   "mask": "ac7802f0ede9673e21325135732407c542ac73007c5955e17c8744ec22a63925",
+   "rows_subset": "a7e624b8d6100e8f83f0fefd9c21dd46e93c3c362b0a3734723a890304f0f11a"
+  }
+ },
+ "cases": [
+  {
+   "id": "maskinterp.E.axis0",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux"
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask"
+    },
+    "axis": {
+     "value": 0
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "masked",
+     "dtype": "float64",
+     "shape": [10, 24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp.E.axis1",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux"
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask"
+    },
+    "axis": {
+     "value": 1
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "masked",
+     "dtype": "float64",
+     "shape": [10, 24]
+    }
+   ]
+  },
+  {
+   "id": "average_bilinear.E",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "average_bilinear",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux"
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "interp",
+     "storage": "masked",
+     "dtype": "float64",
+     "shape": [10, 24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row0",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 0
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 0
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row1",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 1
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 1
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row2",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 2
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 2
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row3",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 3
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 3
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row4",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 4
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 4
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row5",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 5
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 5
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row6",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 6
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 6
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row7",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 7
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 7
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row8",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 8
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 8
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp1.E.row9",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "file": "golden_E.npz",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 9
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 9
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.E.with_fully_masked",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_E.npz",
+   "args": {
+    "spec": {
+     "input": "E",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "E",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [10]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [10, 24]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.E.no_full.mask",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_E.npz",
+   "args": {
+    "spec": {
+     "input": "E",
+     "key": "flux",
+     "drop_rows": [1]
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "drop_rows": [1]
+    },
+    "ivar": {
+     "input": "E",
+     "key": "ivar",
+     "drop_rows": [1]
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [9]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [9, 24]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.E.no_full.maskNone",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_E.npz",
+   "args": {
+    "spec": {
+     "input": "E",
+     "key": "flux",
+     "drop_rows": [1]
+    },
+    "mask": {
+     "value": null
+    },
+    "ivar": {
+     "input": "E",
+     "key": "ivar",
+     "drop_rows": [1]
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [9]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [9, 24]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.E.ivar0.mask",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_E.npz",
+   "args": {
+    "spec": {
+     "input": "E",
+     "key": "flux",
+     "drop_rows": [1]
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "drop_rows": [1]
+    },
+    "ivar": {
+     "input": "E",
+     "key": "ivar_z",
+     "drop_rows": [1]
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [9]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [9, 24]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.E.ivar0.maskNone",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_E.npz",
+   "args": {
+    "spec": {
+     "input": "E",
+     "key": "flux",
+     "drop_rows": [1]
+    },
+    "mask": {
+     "value": null
+    },
+    "ivar": {
+     "input": "E",
+     "key": "ivar_z",
+     "drop_rows": [1]
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [9]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [24]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [9, 24]
+    }
+   ]
+  },
+  {
+   "id": "behaviour.standard_scale.fully_masked_nan",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "args": {
+    "spec": {
+     "input": "E",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "E",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask"
+    }
+   },
+   "expect": {
+    "checks": [
+     {
+      "output": 1,
+      "prop": "nan_index",
+      "value": [1]
+     },
+     {
+      "output": 2,
+      "prop": "nan_index",
+      "value": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+     },
+     {
+      "output": 0,
+      "prop": "nan_index",
+      "value": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239]
+     }
+    ],
+    "warns": ["RuntimeWarning"]
+   }
+  },
+  {
+   "id": "behaviour.maskinterp1.single_good_constant",
+   "kind": "behaviour",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux",
+     "row": 2
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask",
+     "row": 2
+    }
+   },
+   "expect": {
+    "checks": [
+     {
+      "output": null,
+      "prop": "tolist",
+      "value": [1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147, 1.0463629807956147]
+     }
+    ]
+   }
+  },
+  {
+   "id": "behaviour.maskinterp.fully_masked_row_unchanged",
+   "kind": "behaviour",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp",
+   "args": {
+    "yval": {
+     "input": "E",
+     "key": "flux"
+    },
+    "mask": {
+     "input": "E",
+     "key": "mask"
+    },
+    "axis": {
+     "value": 0
+    }
+   },
+   "expect": {
+    "checks": [
+     {
+      "output": null,
+      "prop": "row_unchanged",
+      "argument": "yval",
+      "row": 1,
+      "value": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "behaviour.maskinterp1.integer_input_truncates",
+   "kind": "behaviour",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp1",
+   "args": {
+    "yval": {
+     "array": [0, 10, 3, 7, 1, 4],
+     "dtype": "int64"
+    },
+    "mask": {
+     "array": [1, 0, 1, 0, 1, 0],
+     "dtype": "int64"
+    }
+   },
+   "expect": {
+    "checks": [
+     {
+      "output": null,
+      "prop": "dtype",
+      "value": "int64"
+     },
+     {
+      "output": null,
+      "prop": "tolist",
+      "value": [10, 10, 8, 7, 5, 4]
+     }
+    ]
+   }
+  },
+  {
+   "id": "cholesky_inv.M50a",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "cholesky_inv",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    }
+   },
+   "outputs": [
+    {
+     "name": "Minv",
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "Minv": 1.853375804575259e-14
+   }
+  },
+  {
+   "id": "cholesky_inv.M50b",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "cholesky_inv",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50b"
+    }
+   },
+   "outputs": [
+    {
+     "name": "Minv",
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "Minv": 1.855521776818112e-11
+   }
+  },
+  {
+   "id": "cholesky_inv.M300a",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "cholesky_inv",
+   "file": "golden_linalg_300.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M300a"
+    }
+   },
+   "outputs": [
+    {
+     "name": "Minv",
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [300, 300]
+    }
+   ],
+   "baseline_accuracy": {
+    "Minv": 1.5873239021572695e-14
+   }
+  },
+  {
+   "id": "cholesky_inv.M300b",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "cholesky_inv",
+   "file": "golden_linalg_300.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M300b"
+    }
+   },
+   "outputs": [
+    {
+     "name": "Minv",
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [300, 300]
+    }
+   ],
+   "baseline_accuracy": {
+    "Minv": 1.7324008418019692e-11
+   }
+  },
+  {
+   "id": "submatrix_inv.M50a.contig",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "Ainv",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [39, 39]
+    }
+   ],
+   "baseline_accuracy": {
+    "Ainv": 1.55198992757922e-14
+   }
+  },
+  {
+   "id": "submatrix_inv.M50b.scattered",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50b"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50b",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "Ainv",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [40, 40]
+    }
+   ],
+   "baseline_accuracy": {
+    "Ainv": 1.1441433773190035e-11
+   }
+  },
+  {
+   "id": "submatrix_inv.M50a.single",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "Ainv",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [49, 49]
+    }
+   ],
+   "baseline_accuracy": {
+    "Ainv": 1.8053766257877604e-14
+   }
+  },
+  {
+   "id": "submatrix_inv.M50a.bruteforce",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "Ainv",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [39, 39]
+    }
+   ],
+   "baseline_accuracy": {
+    "Ainv": 1.3484502649458796e-14
+   }
+  },
+  {
+   "id": "submatrix_inv.M300a.keep100",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv",
+   "file": "golden_linalg_300.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M300a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M300a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "Ainv",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [100, 100]
+    }
+   ],
+   "baseline_accuracy": {
+    "Ainv": 8.7549515019675e-15
+   }
+  },
+  {
+   "id": "submatrix_inv.M50a.nr0",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "array": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     "dtype": "int64"
+    }
+   },
+   "outputs": [
+    {
+     "name": "Ainv",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "Ainv": 1.853375804575259e-14
+   }
+  },
+  {
+   "id": "behaviour.submatrix_inv.nr0_returns_input",
+   "kind": "behaviour",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "array": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+     "dtype": "int64"
+    }
+   },
+   "expect": {
+    "checks": [
+     {
+      "output": null,
+      "prop": "is_argument",
+      "argument": "Minv",
+      "value": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50a.contig.col.padT",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "M50a",
+     "cols": [23]
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 1]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.3314316318411103e-14
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50a.contig.col.padF",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "M50a",
+     "cols": [23]
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": false
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [39, 1]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.3314316318411103e-14
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50a.contig.cols11.padT",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "M50a",
+     "cols": [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 11]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 3.6618579536770416e-14
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50a.contig.dense.padT",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "Y__M50a"
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 5]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.3414622714036127e-14
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50a.contig.dense.padF",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "Y__M50a"
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": false
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [39, 5]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.3414622714036127e-14
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50b.scattered.dense.padT",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50b"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50b",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "Y__M50b"
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 5]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 6.59633381237833e-12
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50b.scattered.cols.padF",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50b"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50b",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "M50b",
+     "cols": [12, 13, 15]
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": false
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [40, 3]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.0092800930996078e-11
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50a.single.col.padT",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "M50a",
+     "cols": [17]
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 1]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.701720538983441e-14
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50a.single.dense.padF",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "Y__M50a"
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": false
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [49, 5]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.9146717652860083e-14
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50a.nr0.dense",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "Y__M50a"
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 5]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.935810198206831e-14
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50a.bruteforce.dense",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "Y__M50a"
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [39, 5]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.2645631603040425e-14
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M50b.bruteforce.col",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50b"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50b",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "M50b",
+     "cols": [12]
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": false
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [40, 1]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 1.1265233436954423e-11
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M300a.contig41.col.padT",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_300.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M300a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M300a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "M300a",
+     "cols": [150]
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [300, 1]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 4.645975257726361e-13
+   }
+  },
+  {
+   "id": "submatrix_inv_mult.M300b.scattered.dense.padT",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_300.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M300b"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M300b",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "Y__M300b"
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "AinvY",
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [300, 5]
+    }
+   ],
+   "baseline_accuracy": {
+    "AinvY": 2.536780730381924e-11
+   }
+  },
+  {
+   "id": "behaviour.submatrix_inv_mult.nr0_returns_input",
+   "kind": "behaviour",
+   "module": "gspice.matrixUtils",
+   "function": "submatrix_inv_mult",
+   "file": "golden_linalg_50.npz",
+   "args": {
+    "M": {
+     "input": "MAT",
+     "key": "M50a"
+    },
+    "Minv": {
+     "golden": "cholesky_inv.M50a",
+     "output": "Minv"
+    },
+    "imask": {
+     "stored": "imask"
+    },
+    "Y": {
+     "input": "MAT",
+     "key": "Y__M50a"
+    },
+    "MinvY": {
+     "stored": "MinvY"
+    },
+    "pad": {
+     "value": true
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "expect": {
+    "checks": [
+     {
+      "output": null,
+      "prop": "is_argument",
+      "argument": "MinvY",
+      "value": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "maskinterp.D1.axis0",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "yval": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "axis": {
+     "value": 0
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "masked",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp.D1.axis1",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "yval": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "axis": {
+     "value": 1
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "masked",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "average_bilinear.D1",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "average_bilinear",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "yval": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "interp",
+     "storage": "masked",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.D1.mask",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "spec": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [2000]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.D1.maskNone",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "spec": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [2000]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.D1.mask_alt",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "spec": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask_alt"
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [2000]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.D1.ivar0.mask",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "spec": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar_z"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [2000]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.D1.ivar0.maskNone",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "spec": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar_z"
+    },
+    "mask": {
+     "value": null
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [2000]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "covar.D1.scaled",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "refmean",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    }
+   ]
+  },
+  {
+   "id": "covar.D1.raw",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "spec": {
+     "input": "D1",
+     "key": "flux"
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "refmean",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    }
+   ]
+  },
+  {
+   "id": "covar.D1.checkmean",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar",
+   "file": "golden_D1_scale.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "checkmean": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "refmean",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    }
+   ]
+  },
+  {
+   "id": "behaviour.covar.float32_assert",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "covar",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec",
+     "astype": "float32"
+    }
+   },
+   "expect": {
+    "raises": "AssertionError",
+    "message": "spec.dtype must be float64"
+   }
+  },
+  {
+   "id": "cholesky_inv.D1.cov",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "cholesky_inv",
+   "file": "golden_D1_gaussian_estimate.npz",
+   "args": {
+    "M": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    }
+   },
+   "outputs": [
+    {
+     "name": "Minv",
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "Minv": 2.0495098136112318e-15
+   }
+  },
+  {
+   "id": "gaussian_estimate.D1.one.guard5",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D1_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "covinv": {
+     "golden": "cholesky_inv.D1.cov",
+     "output": "Minv"
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "predoverD",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 1]
+    },
+    {
+     "name": "predcovar",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [1, 1]
+    },
+    {
+     "name": "predkstar",
+     "index": 2,
+     "storage": "full",
+     "derived": {
+      "left": "Dvec",
+      "golden": "gaussian_estimate.D1.one.guard5",
+      "output": "predoverD"
+     },
+     "dtype": "float64",
+     "shape": [2000, 1]
+    },
+    {
+     "name": "kstar",
+     "index": 3,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [1]
+    }
+   ],
+   "baseline_accuracy": {
+    "predoverD": 8.343812255567516e-15,
+    "predcovar": 8.402233311501494e-15,
+    "predkstar": 7.942272932136679e-15
+   }
+  },
+  {
+   "id": "gaussian_estimate.D1.one.guard5.bruteforce",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D1_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "covinv": {
+     "golden": "cholesky_inv.D1.cov",
+     "output": "Minv"
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "predcovar",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [1, 1]
+    },
+    {
+     "name": "predkstar",
+     "index": 1,
+     "storage": "full",
+     "derived": {
+      "left": "Dvec",
+      "golden": "gaussian_estimate.D1.one.guard5",
+      "output": "predoverD"
+     },
+     "dtype": "float64",
+     "shape": [2000]
+    },
+    {
+     "name": "kstar",
+     "index": 2,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [1]
+    }
+   ],
+   "baseline_accuracy": {
+    "predcovar": 1.7383930989313436e-15,
+    "predkstar": 7.942272932136679e-15
+   }
+  },
+  {
+   "id": "gaussian_estimate.D1.many21.guard5",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D1_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "covinv": {
+     "golden": "cholesky_inv.D1.cov",
+     "output": "Minv"
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "predoverD",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 21]
+    },
+    {
+     "name": "predcovar",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [21, 21]
+    },
+    {
+     "name": "predkstar",
+     "index": 2,
+     "storage": "rows",
+     "derived": {
+      "left": "Dvec",
+      "golden": "gaussian_estimate.D1.many21.guard5",
+      "output": "predoverD"
+     },
+     "dtype": "float64",
+     "shape": [2000, 21]
+    },
+    {
+     "name": "kstar",
+     "index": 3,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [21]
+    }
+   ],
+   "baseline_accuracy": {
+    "predoverD": 1.2804121839893777e-14,
+    "predcovar": 1.8109732021623815e-15,
+    "predkstar": 1.5034774184772128e-14
+   }
+  },
+  {
+   "id": "gaussian_estimate.D1.many21.guard5.bruteforce",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D1_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "covinv": {
+     "golden": "cholesky_inv.D1.cov",
+     "output": "Minv"
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "predcovar",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [21, 21]
+    },
+    {
+     "name": "predkstar",
+     "index": 1,
+     "storage": "rows",
+     "derived": {
+      "left": "Dvec",
+      "golden": "gaussian_estimate.D1.many21.guard5",
+      "output": "predoverD"
+     },
+     "dtype": "float64",
+     "shape": [2000, 21]
+    },
+    {
+     "name": "kstar",
+     "index": 2,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [21]
+    }
+   ],
+   "baseline_accuracy": {
+    "predcovar": 2.0121924468470904e-16,
+    "predkstar": 1.451570216954218e-14
+   }
+  },
+  {
+   "id": "gaussian_estimate.D1.scattered",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D1_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "covinv": {
+     "golden": "cholesky_inv.D1.cov",
+     "output": "Minv"
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "predoverD",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 6]
+    },
+    {
+     "name": "predcovar",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [6, 6]
+    },
+    {
+     "name": "predkstar",
+     "index": 2,
+     "storage": "rows",
+     "derived": {
+      "left": "Dvec",
+      "golden": "gaussian_estimate.D1.scattered",
+      "output": "predoverD"
+     },
+     "dtype": "float64",
+     "shape": [2000, 6]
+    },
+    {
+     "name": "kstar",
+     "index": 3,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [6]
+    }
+   ],
+   "baseline_accuracy": {
+    "predoverD": 5.1631788465782636e-15,
+    "predcovar": 1.3484264862415227e-14,
+    "predkstar": 2.910635240611446e-14
+   }
+  },
+  {
+   "id": "gaussian_estimate.D1.scattered.bruteforce",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D1_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "covinv": {
+     "golden": "cholesky_inv.D1.cov",
+     "output": "Minv"
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "predcovar",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [6, 6]
+    },
+    {
+     "name": "predkstar",
+     "index": 1,
+     "storage": "rows",
+     "derived": {
+      "left": "Dvec",
+      "golden": "gaussian_estimate.D1.scattered",
+      "output": "predoverD"
+     },
+     "dtype": "float64",
+     "shape": [2000, 6]
+    },
+    {
+     "name": "kstar",
+     "index": 2,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [6]
+    }
+   ],
+   "baseline_accuracy": {
+    "predcovar": 1.7336911965962434e-15,
+    "predkstar": 3.14492284232711e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng0.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 50
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 0
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 7.027013837926629e-15,
+    "predvar": 9.093315270839491e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng0",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 0
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "rows",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D1.ng0.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [2000, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.2315633380662636e-14,
+    "predvar": 9.093315270839491e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng1.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 50
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 1
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 8.161063041757186e-15,
+    "predvar": 9.757271980906939e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng1",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 1
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "rows",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D1.ng1.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [2000, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.3778870425115416e-14,
+    "predvar": 9.757271980906939e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng5.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 50
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 9.452414966462119e-15,
+    "predvar": 8.320847594340203e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng5",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "rows",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D1.ng5.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [2000, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.312976395090368e-14,
+    "predvar": 8.320847594340203e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng20.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 50
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.0049104793863396e-14,
+    "predvar": 7.2715332646786e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng20",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "rows",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D1.ng20.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [2000, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.5777764290136353e-14,
+    "predvar": 7.2715332646786e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng50.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 50
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 50
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 0.0,
+    "predvar": 0.0
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng50",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 50
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "rows",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D1.ng50.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [2000, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 0.0,
+    "predvar": 0.0
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng5.irange10_30.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 50
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    },
+    "irange": {
+     "array": [10, 30, 0],
+     "dtype": "int64"
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 21]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [50, 21]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.0773171284275818e-14,
+    "predvar": 8.320847594340203e-14
+   }
+  },
+  {
+   "id": "gp_interp.D1.ng5.irange10_30",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D1_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    },
+    "irange": {
+     "array": [10, 30, 0],
+     "dtype": "int64"
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "rows",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D1.ng5.irange10_30.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [2000, 21]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [2000, 21]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 2.58641047115148e-14,
+    "predvar": 8.320847594340203e-14
+   }
+  },
+  {
+   "id": "behaviour.gp_interp.irange_two_elements_assert",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    },
+    "irange": {
+     "array": [10, 30],
+     "dtype": "int64"
+    }
+   },
+   "expect": {
+    "raises": "AssertionError",
+    "message": "Range must have 2 elements."
+   }
+  },
+  {
+   "id": "behaviour.gp_interp.irange_empty",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    },
+    "irange": {
+     "array": [5, 4, 0],
+     "dtype": "int64"
+    }
+   },
+   "expect": {
+    "raises": "UnboundLocalError"
+   }
+  },
+  {
+   "id": "behaviour.gp_interp.bruteforce_unpack",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "expect": {
+    "raises": "ValueError",
+    "message": "not enough values to unpack"
+   }
+  },
+  {
+   "id": "behaviour.gp_interp.predvar_shape_identical_rows",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D1.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D1.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    }
+   },
+   "expect": {
+    "checks": [
+     {
+      "output": 0,
+      "prop": "dtype",
+      "value": "float64"
+     },
+     {
+      "output": 0,
+      "prop": "shape",
+      "value": [2000, 50]
+     },
+     {
+      "output": 1,
+      "prop": "dtype",
+      "value": "float64"
+     },
+     {
+      "output": 1,
+      "prop": "shape",
+      "value": [2000, 50]
+     },
+     {
+      "output": 1,
+      "prop": "rows_equal",
+      "value": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "get_chimask.D1.nsigma20",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D1_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "get_chimask.D1.nsigma8",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D1_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 8
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "get_chimask.D1.nsigma6",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D1_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 6
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "get_chimask.D1.nsigma4",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D1_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 4
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "behaviour.get_chimask.dtype_bool",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 6
+    }
+   },
+   "expect": {
+    "checks": [
+     {
+      "output": null,
+      "prop": "dtype",
+      "value": "bool"
+     },
+     {
+      "output": null,
+      "prop": "shape",
+      "value": [2000, 50]
+     }
+    ]
+   }
+  },
+  {
+   "id": "behaviour.get_chimask.ge_tie",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 3.8951089371802063
+    }
+   },
+   "expect": {
+    "tie": {
+     "index": [1679, 21],
+     "nextafter": false
+    },
+    "checks": [
+     {
+      "output": null,
+      "prop": "at",
+      "index": [1679, 21],
+      "value": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "behaviour.get_chimask.ge_tie_nextafter",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 3.895108937180207
+    }
+   },
+   "expect": {
+    "tie": {
+     "index": [1679, 21],
+     "nextafter": true
+    },
+    "checks": [
+     {
+      "output": null,
+      "prop": "at",
+      "index": [1679, 21],
+      "value": false
+     }
+    ]
+   }
+  },
+  {
+   "id": "get_chimask.D1.ivar0.mask.nsigma6",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D1_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar_z"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 6
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "get_chimask.D1.ivar0.maskNone.nsigma6",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D1_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar_z"
+    },
+    "mask": {
+     "value": null
+    },
+    "nsigma": {
+     "value": 6
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "covar_iter_mask.D1.default",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar_iter_mask",
+   "file": "golden_D1_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "finalmask",
+     "index": 1,
+     "storage": "packbits",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "extras": [
+    {
+     "name": "pass0_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50],
+     "nsigma": 20.0
+    },
+    {
+     "name": "pass1_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50],
+     "nsigma": 8.0
+    },
+    {
+     "name": "pass2_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50],
+     "nsigma": 6.0
+    },
+    {
+     "name": "kept_rows",
+     "storage": "full",
+     "dtype": "int32",
+     "shape": [2000]
+    }
+   ]
+  },
+  {
+   "id": "covar_iter_mask.D1.nsig10_5p5.maxbad8",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar_iter_mask",
+   "file": "golden_D1_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "nsigma": {
+     "array": [10.0, 5.5],
+     "dtype": "float64"
+    },
+    "maxbadpix": {
+     "value": 8
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "finalmask",
+     "index": 1,
+     "storage": "packbits",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "extras": [
+    {
+     "name": "pass0_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [1992, 50],
+     "nsigma": 10.0
+    },
+    {
+     "name": "pass1_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [1992, 50],
+     "nsigma": 5.5
+    },
+    {
+     "name": "kept_rows",
+     "storage": "full",
+     "dtype": "int32",
+     "shape": [1992]
+    }
+   ]
+  },
+  {
+   "id": "behaviour.covar_iter_mask.output_types",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "covar_iter_mask",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    }
+   },
+   "expect": {
+    "checks": [
+     {
+      "output": 1,
+      "prop": "dtype",
+      "value": "float64"
+     },
+     {
+      "output": 1,
+      "prop": "values",
+      "value": [0.0, 1.0]
+     },
+     {
+      "output": 1,
+      "prop": "shape",
+      "value": [2000, 50]
+     },
+     {
+      "output": 0,
+      "prop": "dtype",
+      "value": "float64"
+     },
+     {
+      "output": 0,
+      "prop": "shape",
+      "value": [50, 50]
+     }
+    ]
+   }
+  },
+  {
+   "id": "behaviour.covar_iter_mask.mask_none",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "covar_iter_mask",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "value": null
+    }
+   },
+   "expect": {
+    "raises": "AxisError"
+   }
+  },
+  {
+   "id": "behaviour.covar_iter_mask.not_enough_spectra",
+   "kind": "behaviour",
+   "module": "gspice.specUtils",
+   "function": "covar_iter_mask",
+   "args": {
+    "flux": {
+     "input": "D1",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D1",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D1",
+     "key": "mask"
+    },
+    "maxbadpix": {
+     "value": -1
+    }
+   },
+   "expect": {
+    "raises": "AssertionError",
+    "message": "Not enough good spectra"
+   }
+  },
+  {
+   "id": "maskinterp.D2.axis0",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp",
+   "file": "golden_D2_scale.npz",
+   "args": {
+    "yval": {
+     "input": "D2",
+     "key": "flux"
+    },
+    "mask": {
+     "input": "D2",
+     "key": "mask"
+    },
+    "axis": {
+     "value": 0
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "masked",
+     "dtype": "float64",
+     "shape": [5000, 300]
+    }
+   ]
+  },
+  {
+   "id": "maskinterp.D2.axis1",
+   "kind": "golden",
+   "module": "gspice.djs_maskinterp",
+   "function": "maskinterp",
+   "file": "golden_D2_scale.npz",
+   "args": {
+    "yval": {
+     "input": "D2",
+     "key": "flux"
+    },
+    "mask": {
+     "input": "D2",
+     "key": "mask"
+    },
+    "axis": {
+     "value": 1
+    }
+   },
+   "outputs": [
+    {
+     "name": "ynew",
+     "storage": "masked",
+     "dtype": "float64",
+     "shape": [5000, 300]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.D2.mask",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_D2_scale.npz",
+   "args": {
+    "spec": {
+     "input": "D2",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D2",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D2",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [5000]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [300]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [5000, 300]
+    }
+   ]
+  },
+  {
+   "id": "covar.D2.scaled",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar",
+   "file": "golden_D2_scale.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D2.mask",
+     "output": "Dvec"
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [300, 300]
+    },
+    {
+     "name": "refmean",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [300]
+    }
+   ]
+  },
+  {
+   "id": "gaussian_estimate.D2.one.guard5.bruteforce",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D2_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D2.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "golden": "standard_scale.D2.mask",
+     "output": "Dvec"
+    },
+    "covinv": {
+     "value": null
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "predcovar",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [1, 1]
+    },
+    {
+     "name": "predkstar",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [5000]
+    },
+    {
+     "name": "kstar",
+     "index": 2,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [1]
+    }
+   ],
+   "baseline_accuracy": {
+    "predcovar": 3.1411975661387013e-15,
+    "predkstar": 2.1573840505539548e-14
+   }
+  },
+  {
+   "id": "gaussian_estimate.D2.many21.guard5.bruteforce.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D2_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D2.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "eye": 300
+    },
+    "covinv": {
+     "value": null
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "predcovar",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [21, 21]
+    },
+    {
+     "name": "predkstar",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [300, 21]
+    },
+    {
+     "name": "kstar",
+     "index": 2,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [21]
+    }
+   ],
+   "baseline_accuracy": {
+    "predcovar": 4.0337650067020386e-15,
+    "predkstar": 4.757763451679139e-14
+   }
+  },
+  {
+   "id": "gaussian_estimate.D2.many21.guard5.bruteforce",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D2_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D2.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "golden": "standard_scale.D2.mask",
+     "output": "Dvec"
+    },
+    "covinv": {
+     "value": null
+    },
+    "bruteforce": {
+     "value": true
+    }
+   },
+   "outputs": [
+    {
+     "name": "predcovar",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [21, 21]
+    },
+    {
+     "name": "predkstar",
+     "index": 1,
+     "storage": "rows",
+     "derived": {
+      "left": "Dvec",
+      "golden": "gaussian_estimate.D2.many21.guard5.bruteforce.weights",
+      "output": "predkstar"
+     },
+     "dtype": "float64",
+     "shape": [5000, 21]
+    },
+    {
+     "name": "kstar",
+     "index": 2,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [21]
+    }
+   ],
+   "baseline_accuracy": {
+    "predcovar": 4.0337650067020386e-15,
+    "predkstar": 3.2305145227986286e-14
+   }
+  },
+  {
+   "id": "gp_interp.D2.ng5.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D2_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 300
+    },
+    "cov": {
+     "golden": "covar.D2.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [300, 300]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [300, 300]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 9.335690103457359e-15,
+    "predvar": 2.771042954880957e-14
+   }
+  },
+  {
+   "id": "gp_interp.D2.ng5",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D2_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D2.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D2.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "norms",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D2.ng5.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [5000, 300]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [5000, 300]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.7747942704349768e-14,
+    "predvar": 2.771042954880957e-14
+   }
+  },
+  {
+   "id": "gp_interp.D2.ng20.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D2_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 300
+    },
+    "cov": {
+     "golden": "covar.D2.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [300, 300]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [300, 300]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 7.152521061737216e-15,
+    "predvar": 3.421159850630156e-14
+   }
+  },
+  {
+   "id": "gp_interp.D2.ng20",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D2_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D2.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D2.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "rows",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D2.ng20.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [5000, 300]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [5000, 300]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.3495755812061459e-14,
+    "predvar": 3.421159850630156e-14
+   }
+  },
+  {
+   "id": "get_chimask.D2.nsigma20",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D2_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D2",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D2",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D2",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [5000, 300]
+    }
+   ]
+  },
+  {
+   "id": "get_chimask.D2.nsigma6",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D2_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D2",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D2",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D2",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 6
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [5000, 300]
+    }
+   ]
+  },
+  {
+   "id": "covar_iter_mask.D2.default",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar_iter_mask",
+   "file": "golden_D2_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D2",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D2",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D2",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [300, 300]
+    },
+    {
+     "name": "finalmask",
+     "index": 1,
+     "storage": "packbits",
+     "dtype": "float64",
+     "shape": [5000, 300]
+    }
+   ],
+   "extras": [
+    {
+     "name": "pass0_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [4994, 300],
+     "nsigma": 20.0
+    },
+    {
+     "name": "pass1_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [4994, 300],
+     "nsigma": 8.0
+    },
+    {
+     "name": "pass2_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [4994, 300],
+     "nsigma": 6.0
+    },
+    {
+     "name": "kept_rows",
+     "storage": "full",
+     "dtype": "int32",
+     "shape": [4994]
+    }
+   ]
+  },
+  {
+   "id": "standard_scale.D3.mask",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "standard_scale",
+   "file": "golden_D3_scale.npz",
+   "args": {
+    "spec": {
+     "input": "D3",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D3",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D3",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "refscale",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [2000]
+    },
+    {
+     "name": "refmean",
+     "index": 2,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    },
+    {
+     "name": "Dvec",
+     "index": 0,
+     "storage": "scaled",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "covar.D3.scaled",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar",
+   "file": "golden_D3_scale.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D3.mask",
+     "output": "Dvec"
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "refmean",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50]
+    }
+   ]
+  },
+  {
+   "id": "cholesky_inv.D3.cov",
+   "kind": "golden",
+   "module": "gspice.matrixUtils",
+   "function": "cholesky_inv",
+   "file": "golden_D3_gaussian_estimate.npz",
+   "args": {
+    "M": {
+     "golden": "covar.D3.scaled",
+     "output": "cov"
+    }
+   },
+   "outputs": [
+    {
+     "name": "Minv",
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "Minv": 4.0410454326417135e-13
+   }
+  },
+  {
+   "id": "gaussian_estimate.D3.many21.guard5",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gaussian_estimate",
+   "file": "golden_D3_gaussian_estimate.npz",
+   "args": {
+    "icond": {
+     "array": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+     "dtype": "float64"
+    },
+    "ipred": {
+     "array": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+     "dtype": "float64"
+    },
+    "cov": {
+     "golden": "covar.D3.scaled",
+     "output": "cov"
+    },
+    "Dvec": {
+     "golden": "standard_scale.D3.mask",
+     "output": "Dvec"
+    },
+    "covinv": {
+     "golden": "cholesky_inv.D3.cov",
+     "output": "Minv"
+    },
+    "bruteforce": {
+     "value": false
+    }
+   },
+   "outputs": [
+    {
+     "name": "predoverD",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 21]
+    },
+    {
+     "name": "predcovar",
+     "index": 1,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [21, 21]
+    },
+    {
+     "name": "predkstar",
+     "index": 2,
+     "storage": "rows",
+     "derived": {
+      "left": "Dvec",
+      "golden": "gaussian_estimate.D3.many21.guard5",
+      "output": "predoverD"
+     },
+     "dtype": "float64",
+     "shape": [2000, 21]
+    },
+    {
+     "name": "kstar",
+     "index": 3,
+     "storage": "full",
+     "dtype": "int64",
+     "shape": [21]
+    }
+   ],
+   "baseline_accuracy": {
+    "predoverD": 7.719826711011226e-13,
+    "predcovar": 1.49461430650971e-11,
+    "predkstar": 2.5707132342834067e-12
+   }
+  },
+  {
+   "id": "gp_interp.D3.ng5.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D3_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 50
+    },
+    "cov": {
+     "golden": "covar.D3.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 6.819231329337139e-13,
+    "predvar": 7.5696906440015e-10
+   }
+  },
+  {
+   "id": "gp_interp.D3.ng5",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D3_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D3.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D3.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 5
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "rows",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D3.ng5.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [2000, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.4207729145315417e-12,
+    "predvar": 7.5696906440015e-10
+   }
+  },
+  {
+   "id": "gp_interp.D3.ng20.weights",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D3_gp_interp.npz",
+   "args": {
+    "spec": {
+     "eye": 50
+    },
+    "cov": {
+     "golden": "covar.D3.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "full",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [50, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 7.415575308200521e-13,
+    "predvar": 2.740893309955313e-10
+   }
+  },
+  {
+   "id": "gp_interp.D3.ng20",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "gp_interp",
+   "file": "golden_D3_gp_interp.npz",
+   "args": {
+    "spec": {
+     "golden": "standard_scale.D3.mask",
+     "output": "Dvec"
+    },
+    "cov": {
+     "golden": "covar.D3.scaled",
+     "output": "cov"
+    },
+    "nguard": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "pred",
+     "index": 0,
+     "storage": "rows",
+     "derived": {
+      "left": "spec",
+      "golden": "gp_interp.D3.ng20.weights",
+      "output": "pred"
+     },
+     "dtype": "float64",
+     "shape": [2000, 50]
+    },
+    {
+     "name": "predvar",
+     "index": 1,
+     "storage": "onerow",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "baseline_accuracy": {
+    "pred": 1.575761130339082e-12,
+    "predvar": 2.740893309955313e-10
+   }
+  },
+  {
+   "id": "get_chimask.D3.nsigma20",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D3_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D3",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D3",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D3",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "get_chimask.D3.nsigma6",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D3_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D3",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D3",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D3",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 6
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50]
+    }
+   ]
+  },
+  {
+   "id": "covar_iter_mask.D3.default",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar_iter_mask",
+   "file": "golden_D3_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D3",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D3",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D3",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [50, 50]
+    },
+    {
+     "name": "finalmask",
+     "index": 1,
+     "storage": "packbits",
+     "dtype": "float64",
+     "shape": [2000, 50]
+    }
+   ],
+   "extras": [
+    {
+     "name": "pass0_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50],
+     "nsigma": 20.0
+    },
+    {
+     "name": "pass1_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50],
+     "nsigma": 8.0
+    },
+    {
+     "name": "pass2_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [2000, 50],
+     "nsigma": 6.0
+    },
+    {
+     "name": "kept_rows",
+     "storage": "full",
+     "dtype": "int32",
+     "shape": [2000]
+    }
+   ]
+  },
+  {
+   "id": "get_chimask.D4.nsigma20",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D4_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D4",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D4",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D4",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 20
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [1500, 150]
+    }
+   ]
+  },
+  {
+   "id": "get_chimask.D4.nsigma6",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "get_chimask",
+   "file": "golden_D4_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D4",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D4",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D4",
+     "key": "mask"
+    },
+    "nsigma": {
+     "value": 6
+    }
+   },
+   "outputs": [
+    {
+     "name": "chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [1500, 150]
+    }
+   ]
+  },
+  {
+   "id": "covar_iter_mask.D4.default",
+   "kind": "golden",
+   "module": "gspice.specUtils",
+   "function": "covar_iter_mask",
+   "file": "golden_D4_masks.npz",
+   "args": {
+    "flux": {
+     "input": "D4",
+     "key": "flux"
+    },
+    "ivar": {
+     "input": "D4",
+     "key": "ivar"
+    },
+    "mask": {
+     "input": "D4",
+     "key": "mask"
+    }
+   },
+   "outputs": [
+    {
+     "name": "cov",
+     "index": 0,
+     "storage": "triu",
+     "dtype": "float64",
+     "shape": [150, 150]
+    },
+    {
+     "name": "finalmask",
+     "index": 1,
+     "storage": "packbits",
+     "dtype": "float64",
+     "shape": [1500, 150]
+    }
+   ],
+   "extras": [
+    {
+     "name": "pass0_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [1498, 150],
+     "nsigma": 20.0
+    },
+    {
+     "name": "pass1_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [1498, 150],
+     "nsigma": 8.0
+    },
+    {
+     "name": "pass2_chimask",
+     "storage": "packbits",
+     "dtype": "bool",
+     "shape": [1498, 150],
+     "nsigma": 6.0
+    },
+    {
+     "name": "kept_rows",
+     "storage": "full",
+     "dtype": "int32",
+     "shape": [1498]
+    }
+   ]
+  }
+ ]
+}
