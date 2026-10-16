@@ -5,7 +5,7 @@ import pytest
 from numpy.linalg import LinAlgError
 
 from gspice import _linalg
-from gspice._linalg import guard_weights, precision, solve_pattern
+from gspice._linalg import group_rows, guard_weights, precision, solve_pattern
 from oracle import conditional
 
 EPS = np.finfo(float).eps
@@ -180,7 +180,7 @@ def test_a_pattern_without_pixels_to_predict_skips_lapack(monkeypatch, G):
     _, P, X, *_ = case("spd1e5")
     monkeypatch.setattr(_linalg, "lapack", None)
     empty = mask([])
-    solution = solve_pattern(P, mask(G), empty, empty, X, X, covariance=True)
+    solution = solve_pattern(P, mask(G), empty, empty, X, normals=X, covariance=True)
     assert solution.mean.shape == solution.draws.shape == (NSPEC, 0)
     assert (solution.var.shape, solution.cov.shape) == ((0,), (0, 0))
     np.testing.assert_array_equal(solution.chi2, np.zeros(NSPEC))
@@ -197,3 +197,26 @@ def test_pattern_solve_rejects_a_pattern_on_which_P_is_not_positive_definite():
     P[7, 7] = -1.0
     with pytest.raises(LinAlgError, match="not positive definite on G"):
         solve_pattern(P, mask([6, 7]), mask([6]), mask([]), np.zeros((1, NPIX)))
+
+
+def test_rows_with_equal_keys_share_a_group_in_increasing_row_order():
+    # Keys 1 and 0 differ only in column 12, which packbits puts in the second byte.
+    # With 2000 rows, an unstable sort would reorder the rows of a group.
+    keys = np.zeros((3, 13), bool)
+    keys[1, 12] = True
+    keys[2, [0, 5]] = True
+    labels = np.random.default_rng(3).integers(0, 3, 2000)
+    groups = group_rows(keys[labels])
+    assert sorted(labels[rows[0]] for rows in groups) == [0, 1, 2]
+    for rows in groups:
+        np.testing.assert_array_equal(rows, np.flatnonzero(labels == labels[rows[0]]))
+
+
+def test_f_ordered_keys_give_the_same_groups():
+    keys = np.eye(3, 9, dtype=bool)[[0, 1, 0]]
+    groups = [rows.tolist() for rows in group_rows(keys)]
+    assert [rows.tolist() for rows in group_rows(np.asfortranarray(keys))] == groups
+
+
+def test_no_rows_give_no_groups():
+    assert group_rows(np.zeros((0, 5), bool)) == []

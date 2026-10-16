@@ -98,13 +98,16 @@ def solve_pattern(
     R, info = lapack.dpotrf(P[np.ix_(index, index)], lower=1)
     if info:
         raise LinAlgError("P is not positive definite on G")
-    # x0 is x with its entries in G set to 0, so that no value in G is read.
+    # x0 is x with its entries in G set to 0, so that no value in G enters the mean
+    # and an outlier there cannot cancel.
     X0 = X.copy()
     X0[:, G] = 0.0
     y, _ = lapack.dtrtrs(R, P[index] @ X0.T, lower=1)
     RMM = R[a:, a:]
     # mu_M = -(R^-T y)_M = -R_MM^-T y_M, because R^-T is upper triangular.
     mean, _ = lapack.dtrtrs(RMM, -y[a:], lower=1, trans=1)
+    # C_MM = (R_MM R_MM^T)^-1 = R_MM^-T R_MM^-1, whose diagonal is the column sums of
+    # (R_MM^-1)^2.
     inverse, _ = lapack.dtrtri(RMM, lower=1)
     var = np.einsum("ij,ij->j", inverse, inverse)
     # chi2 = ||R_TT^T r_T||^2, because C_TT^-1 is the Schur complement R_TT R_TT^T.
@@ -113,10 +116,9 @@ def solve_pattern(
     order = np.argsort(index[a:])
     cov: NDArray[np.float64] | None = None
     if covariance:
-        # C_MM = (R_MM R_MM^T)^-1 = R_MM^-T R_MM^-1.
         cov, _ = lapack.dlauum(inverse, lower=1)
         _mirror(cov)
-        # dlauum sums in another order; var is the diagonal bit for bit.
+        # dlauum sums in another order than einsum, so var replaces its diagonal.
         np.fill_diagonal(cov, var)
         cov = cov[np.ix_(order, order)]
     draws: NDArray[np.float64] | None = None
@@ -125,6 +127,19 @@ def solve_pattern(
         noise, _ = lapack.dtrtrs(RMM, normals[:, index[a:]].T, lower=1, trans=1)
         draws = (mean + noise).T[:, order]
     return Conditional(mean.T[:, order], var[order], chi2, cov, draws)
+
+
+def group_rows(keys: NDArray[np.bool_]) -> list[NDArray[np.intp]]:
+    # Each packed row is one void scalar, which np.unique sorts faster than rows with
+    # axis=0 (design decision A17). The view needs C order, which packbits copies from
+    # keys. The groups follow the order of the packed keys.
+    packed = np.ascontiguousarray(np.packbits(keys, axis=1))
+    rows = packed.view(np.dtype((np.void, packed.shape[1])))[:, 0]
+    _, inverse, counts = np.unique(rows, return_inverse=True, return_counts=True)
+    # A stable sort keeps the rows of each group in increasing order.
+    order = np.argsort(inverse, kind="stable")
+    starts = np.cumsum(counts) - counts
+    return [order[s : s + n] for s, n in zip(starts.tolist(), counts.tolist())]
 
 
 def _mirror(A: NDArray[np.float64]) -> None:
