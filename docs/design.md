@@ -232,7 +232,7 @@ def fit(flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | None = None, *,
 
     Returns the model, and the final training mask (nspec, npix) bool, all True for
     spectra not used. Raises ValueError, naming the counts or pixels, if a requirement
-    of section 4.1 fails, and LinAlgError, naming the bin, N_s and 1/rcond, if a
+    of section 4.1 fails, and LinAlgError, naming the bin, N_s and rcond, if a
     covariance fails A26, which can happen for N_s - 1 close to npix.
     Cost per pass: N_s npix^2 (covariance) + npix^3 + 2 N_s npix^2 (pixelwise).
     """
