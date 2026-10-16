@@ -14,7 +14,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 
 ## Commands
 
-- Set up: `uv venv --clear --python 3.13 .venv && uv pip install -e . --group dev`. mypy needs scipy-stubs, which requires Python 3.12 or later.
+- Set up: `uv venv --clear --python 3.13 .venv && uv pip install -e . --group dev`. mypy needs scipy-stubs, which requires Python 3.12 or later. Once per clone, in the main checkout and not in a worktree, also run `.venv/bin/pre-commit install --allow-missing-config`: its hook runs ruff on each commit in every worktree, also on branches without the hook configuration.
 - Test: `.venv/bin/python -m pytest --cov=gspice`. It skips `slow` tests and fails if the tests cover less than 90% of the code outside `gspice.legacy`.
 - All tests, `slow` ones included: `.venv/bin/python -m pytest -m ""`.
 - Lint, format and type check: `.venv/bin/ruff check src tests && .venv/bin/ruff format --check src tests && .venv/bin/mypy`.

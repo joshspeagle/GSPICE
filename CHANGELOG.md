@@ -10,6 +10,7 @@
 - `gspice.__version__`, which is `2.0.0.dev0`.
 - Type checks with mypy in strict mode for the code outside `gspice.legacy`.
 - A test coverage floor of 90% for the code outside `gspice.legacy`.
+- pre-commit hooks that run ruff.
 
 ### Removed
 

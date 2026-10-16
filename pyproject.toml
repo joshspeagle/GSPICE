@@ -24,6 +24,7 @@ dev = [
     "mypy==2.4.0",
     # scipy ships no type information; scipy-stubs 1.18 needs Python 3.12.
     "scipy-stubs==1.18.1.1; python_version >= '3.12'",
+    "pre-commit",
 ]
 
 [tool.hatch.version]
@@ -61,7 +62,7 @@ precision = 2
 
 [tool.ruff]
 # The 2022 code; PR 2.4 of the design lints it (decision A29). force-exclude also
-# applies the exclusion to files named on the command line, as pre-commit names them.
+# applies the exclusion to files named on the command line, as editors name them.
 extend-exclude = ["src/gspice/legacy"]
 force-exclude = true
 
