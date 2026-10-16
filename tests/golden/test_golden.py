@@ -103,6 +103,8 @@ ATOL = {
 CHANGED = {
     "behaviour.gp_interp.irange_two_elements_assert": "D-01",
     "behaviour.gp_interp.irange_empty": "D-18",
+    "behaviour.submatrix_inv.nr0_returns_input": "D-25",
+    "behaviour.submatrix_inv_mult.nr0_returns_input": "D-25",
 }
 
 

@@ -72,8 +72,7 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
     Returns
     -------
     Ainv : ndarray, shape (nk, nk)
-        The inverse of A. Without bruteforce, if imask keeps every row, Minv
-        itself, not a copy.
+        The inverse of A.
 
     Raises
     ------
@@ -106,7 +105,7 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
         return Ainv
 
     if nr == 0:
-        return Minv
+        return deepcopy(Minv)
 
     Uinv = linalg.inv(Minv[np.ix_(r, r)])
     Qt = Minv[np.ix_(r, k)]  # faster than Q assuming nr < nk
@@ -144,8 +143,7 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
     Returns
     -------
     ndarray, shape (N, m) if pad, else (nk, m)
-        A^-1 Y[k]. Without bruteforce, if imask keeps every row, MinvY itself,
-        not a copy.
+        A^-1 Y[k].
 
     Raises
     ------
@@ -184,7 +182,7 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
         return Ainvy
 
     if nr == 0:
-        return MinvY
+        return deepcopy(MinvY)
 
     U = Minv[np.ix_(r, r)]
     Yr = Y[r, :]

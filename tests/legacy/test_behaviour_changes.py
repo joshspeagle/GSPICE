@@ -108,6 +108,19 @@ def test_2022_assert_raises_an_error_that_is_also_a_value_error(
     assert isinstance(raised.value, AssertionError)
 
 
+@pytest.mark.parametrize(
+    ("function", "kwargs", "argument"),
+    [(submatrix_inv, INV, "Minv"), (submatrix_inv_mult, MULT, "MinvY")],
+)
+def test_submatrix_functions_copy_their_input_when_nothing_is_removed(
+    function, kwargs, argument
+):
+    # 1fbab9f returned Minv, or MinvY, itself: a later change to the result changed
+    # the caller's array. The golden cases nr0 check the values.
+    result = function(**kwargs | {"imask": np.ones(3)})
+    assert not np.shares_memory(result, kwargs[argument])
+
+
 def test_padded_submatrix_inv_mult_keeps_a_sparse_minvy():
     # 1fbab9f returned a csr_matrix equal to the result for the dense MinvY.
     M = EYE + np.ones((3, 3))
