@@ -15,6 +15,10 @@ def cholesky_inv(M):
     # Lower-triangular Cholesky factorization of M
     L = linalg.cholesky(M, lower=True)
 
+    # dpotri rejects a 0 x 0 matrix and prints a message.
+    if L.shape == (0, 0):
+        return np.zeros((0, 0))
+
     # Call LAPACK dpotri to get inverse (only lower triangle populated)
     Minv0 = lapack.dpotri(L, lower=True)[0]
 

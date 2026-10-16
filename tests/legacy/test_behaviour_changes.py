@@ -11,10 +11,12 @@ import pytest
 import gspice
 from _golden import Golden
 from gspice.legacy import (
+    cholesky_inv,
     covar,
     covar_iter_mask,
     gp_interp,
     maskinterp,
+    matrixUtils,
     submatrix_inv,
     submatrix_inv_mult,
 )
@@ -140,6 +142,14 @@ def test_legacy_checks_run_under_python_o():
         [sys.executable, "-O", "-c", code], capture_output=True, text=True, check=False
     )
     assert "spec.dtype must be float64" in result.stderr
+
+
+def test_empty_cholesky_inv_returns_an_empty_inverse_without_dpotri(monkeypatch):
+    # 1fbab9f returned the same array, and dpotri printed "** On entry to DPOTRI
+    # parameter number  4 had an illegal value" on stdout.
+    monkeypatch.setattr(matrixUtils.lapack, "dpotri", None)
+    inverse = cholesky_inv(np.zeros((0, 0)))
+    assert (inverse.shape, inverse.dtype) == ((0, 0), np.float64)
 
 
 @pytest.mark.parametrize(
