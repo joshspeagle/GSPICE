@@ -1,3 +1,5 @@
+from typing import NamedTuple
+
 import numpy as np
 from numpy.linalg import LinAlgError
 from numpy.typing import NDArray
@@ -5,6 +7,14 @@ from scipy.linalg import lapack
 
 # Design decision A26.
 MIN_RCOND = 1e-13
+
+
+class Conditional(NamedTuple):
+    mean: NDArray[np.float64]
+    var: NDArray[np.float64]
+    chi2: NDArray[np.float64]
+    cov: NDArray[np.float64] | None
+    draws: NDArray[np.float64] | None
 
 
 def precision(S: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -58,6 +68,63 @@ def guard_weights(
         Wt[i, g] = 0.0
         var[i] = v[i - g.start]
     return Wt.T, var
+
+
+def solve_pattern(
+    P: NDArray[np.float64],
+    G: NDArray[np.bool_],
+    M: NDArray[np.bool_],
+    T: NDArray[np.bool_],
+    X: NDArray[np.float64],
+    normals: NDArray[np.float64] | None = None,
+    covariance: bool = False,
+) -> Conditional:
+    nspec = X.shape[0]
+    m = np.count_nonzero(M)
+    if m == 0:
+        return Conditional(
+            np.zeros((nspec, 0)),
+            np.zeros(0),
+            np.zeros(nspec),
+            np.zeros((0, 0)) if covariance else None,
+            None if normals is None else np.zeros((nspec, 0)),
+        )
+    # G ordered as (G \ M, M \ T, T), so that M and T are trailing blocks of R.
+    index = np.concatenate(
+        [np.flatnonzero(G & ~M), np.flatnonzero(M & ~T), np.flatnonzero(T)]
+    )
+    a = index.size - m
+    t = index.size - np.count_nonzero(T)
+    R, info = lapack.dpotrf(P[np.ix_(index, index)], lower=1)
+    if info:
+        raise LinAlgError("P is not positive definite on G")
+    # x0 is x with its entries in G set to 0, so that no value in G is read.
+    X0 = X.copy()
+    X0[:, G] = 0.0
+    y, _ = lapack.dtrtrs(R, P[index] @ X0.T, lower=1)
+    RMM = R[a:, a:]
+    # mu_M = -(R^-T y)_M = -R_MM^-T y_M, because R^-T is upper triangular.
+    mean, _ = lapack.dtrtrs(RMM, -y[a:], lower=1, trans=1)
+    inverse, _ = lapack.dtrtri(RMM, lower=1)
+    var = np.einsum("ij,ij->j", inverse, inverse)
+    # chi2 = ||R_TT^T r_T||^2, because C_TT^-1 is the Schur complement R_TT R_TT^T.
+    r = X[:, T].T - mean[t - a :]
+    chi2 = np.sum((R[t:, t:].T @ r) ** 2, axis=0)
+    order = np.argsort(index[a:])
+    cov: NDArray[np.float64] | None = None
+    if covariance:
+        # C_MM = (R_MM R_MM^T)^-1 = R_MM^-T R_MM^-1.
+        cov, _ = lapack.dlauum(inverse, lower=1)
+        _mirror(cov)
+        # dlauum sums in another order; var is the diagonal bit for bit.
+        np.fill_diagonal(cov, var)
+        cov = cov[np.ix_(order, order)]
+    draws: NDArray[np.float64] | None = None
+    if normals is not None:
+        # (mu_G + R^-T z)_M = mu_M + R_MM^-T z_M.
+        noise, _ = lapack.dtrtrs(RMM, normals[:, index[a:]].T, lower=1, trans=1)
+        draws = (mean + noise).T[:, order]
+    return Conditional(mean.T[:, order], var[order], chi2, cov, draws)
 
 
 def _mirror(A: NDArray[np.float64]) -> None:
