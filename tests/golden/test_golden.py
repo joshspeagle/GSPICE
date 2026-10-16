@@ -100,6 +100,11 @@ ATOL = {
     ("covar", "refmean"): (1e-13, "spec"),
 }
 
+CHANGED = {
+    "behaviour.gp_interp.irange_two_elements_assert": "D-01",
+    "behaviour.gp_interp.irange_empty": "D-18",
+}
+
 
 @pytest.fixture(scope="session")
 def implementation():
@@ -110,8 +115,14 @@ def implementation():
     )
 
 
-def case_ids(kind):
-    return [case["id"] for case in GOLDEN.manifest["cases"] if case["kind"] == kind]
+def case_params(kind, keep=lambda case: True):
+    params = []
+    for case in GOLDEN.manifest["cases"]:
+        if case["kind"] == kind and keep(case):
+            reason = CHANGED.get(case["id"])
+            marks = pytest.mark.xfail(strict=True, reason=reason) if reason else ()
+            params.append(pytest.param(case["id"], marks=marks))
+    return params
 
 
 def assert_close(actual, expected, mode, rtol, atol, label):
@@ -198,7 +209,7 @@ def test_rtol_overrides_follow_the_baseline_accuracy_of_the_manifest():
     )
 
 
-@pytest.mark.parametrize("case_id", case_ids("golden"))
+@pytest.mark.parametrize("case_id", case_params("golden"))
 def test_golden_case_matches_2022_outputs(case_id, implementation):
     case = GOLDEN.cases[case_id]
     kwargs = GOLDEN.arguments(case)
@@ -221,7 +232,7 @@ def test_golden_case_matches_2022_outputs(case_id, implementation):
 
 
 @pytest.mark.parametrize(
-    "case_id", [i for i in case_ids("golden") if "extras" in GOLDEN.cases[i]]
+    "case_id", case_params("golden", lambda case: "extras" in case)
 )
 def test_covar_iter_mask_passes_match_2022(case_id, implementation):
     case = GOLDEN.cases[case_id]
@@ -237,7 +248,7 @@ def test_covar_iter_mask_passes_match_2022(case_id, implementation):
         check_output(case, output, chimask, expected[output["name"]], kwargs, "exact")
 
 
-@pytest.mark.parametrize("case_id", case_ids("behaviour"))
+@pytest.mark.parametrize("case_id", case_params("behaviour"))
 def test_2022_behaviour_holds(case_id, implementation):
     case = GOLDEN.cases[case_id]
     kwargs = GOLDEN.arguments(case)

@@ -1,3 +1,5 @@
+import operator
+
 import numpy as np
 from ._errors import _LegacyError
 from .djs_maskinterp import maskinterp
@@ -216,6 +218,15 @@ def gaussian_estimate(icond, ipred, cov, Dvec, covinv, bruteforce = False):
         #print('tst ', predcovar[0][0])
         return predoverD, predcovar, predkstar, kstar
 
+def _index(value, name):
+    # numpy 1.26 still reads a numpy bool as 0 or 1, with a DeprecationWarning.
+    if isinstance(value, np.bool_):
+        raise TypeError(f"{name}: expected an integer, got {value!r}")
+    try:
+        return operator.index(value)
+    except TypeError as err:
+        raise TypeError(f"{name}: expected an integer, got {value!r}") from err
+
 from time import time
 def gp_interp(spec, cov, nguard = 20, irange = None, bruteforce = False):
     """
@@ -241,12 +252,18 @@ def gp_interp(spec, cov, nguard = 20, irange = None, bruteforce = False):
         raise _LegacyError("cov: covariance must be square matrix.")
     if npix != cov.shape[0]:
         raise _LegacyError("spec, cov: spectra and covariance have incompatible dimensions.")
+    if npix == 0:
+        raise _LegacyError("spec: expected at least one pixel, got 0")
     
     #range of spectral bins to operate on
     if irange is not None: 
-        assert irange.size != 2, "Range must have 2 elements."
-        i0 = irange[0]
-        i1 = irange[1]
+        # The elements come from irange itself, so that np.asarray cannot promote them.
+        if np.ndim(irange) != 1 or np.size(irange) < 2:
+            raise _LegacyError(f"irange: expected a 1-D sequence of at least 2 integers, got shape {np.shape(irange)}")
+        i0 = _index(irange[0], "irange")
+        i1 = _index(irange[1], "irange")
+        if not 0 <= i0 <= i1 <= npix - 1:
+            raise _LegacyError(f"irange: expected 0 <= irange[0] <= irange[1] <= {npix - 1}, got {i0} and {i1}")
     else:
         i0 = 0
         i1 = npix - 1

@@ -1,12 +1,15 @@
+import ast
 import importlib
 import pickle
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 import gspice
+from _golden import Golden
 from gspice.legacy import (
     covar,
     covar_iter_mask,
@@ -37,6 +40,9 @@ PICKLE_2022 = (
     b"\x8c\x0estandard_scale\x94\x93\x94."
 )
 
+GOLDEN = Golden()
+GP_INTERP_D1 = GOLDEN.arguments(GOLDEN.cases["gp_interp.D1.ng5"])
+SPEC, COV = GP_INTERP_D1["spec"], GP_INTERP_D1["cov"]
 EYE = np.eye(3)
 INV = {"M": EYE, "Minv": EYE, "imask": EYE[0]}
 MULT = INV | {"Y": EYE, "MinvY": EYE}
@@ -98,6 +104,13 @@ def test_2022_assert_raises_an_error_that_is_also_a_value_error(
     assert isinstance(raised.value, AssertionError)
 
 
+def test_legacy_has_no_assert_statement():
+    # python -O removes asserts, so a check written as one would not run there.
+    for path in Path(gspice.legacy.__file__).parent.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        assert not any(isinstance(node, ast.Assert) for node in ast.walk(tree)), path
+
+
 def test_legacy_checks_run_under_python_o():
     # Under python -O, 1fbab9f skipped the assert and returned a float32 covariance.
     code = (
@@ -108,3 +121,50 @@ def test_legacy_checks_run_under_python_o():
         [sys.executable, "-O", "-c", code], capture_output=True, text=True, check=False
     )
     assert "spec.dtype must be float64" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "irange",
+    [
+        np.array([10, 30]),
+        [10, 30],
+        (10, 30),
+        np.array([10, 30, 0], np.uint64),
+        [np.uint64(10), 30],
+    ],
+)
+def test_integer_irange_equals_the_2022_form(irange):
+    # 1fbab9f raised AssertionError for a 2-element array, AttributeError for a list or
+    # a tuple, and IndexError (numpy 2) or TypeError (numpy 1.26) for a uint64 array.
+    # The golden cases use [10, 30, 0].
+    expected = gp_interp(SPEC, COV, 5, irange=np.array([10, 30, 0]))
+    np.testing.assert_equal(gp_interp(SPEC, COV, 5, irange=irange), expected)
+
+
+@pytest.mark.parametrize(
+    ("irange", "error"),
+    [
+        (np.array([-1, 49, 0]), ValueError),
+        (np.array([5, 4, 0]), ValueError),
+        (np.array([10, 50, 0]), ValueError),
+        (np.array([10]), ValueError),
+        (np.array([[10, 30, 0]]), ValueError),
+        (np.array([10.0, 30.0, 0.0]), TypeError),
+        (np.array([True, False, False]), TypeError),
+        ([np.True_, 30], TypeError),
+    ],
+)
+def test_invalid_irange_is_rejected(irange, error):
+    # 1fbab9f returned a (2000, 51) result whose first column is 0 for [-1, 49, 0],
+    # raised UnboundLocalError, IndexError or TypeError for the other arrays, and raised
+    # AttributeError for the list.
+    with pytest.raises(error, match="irange"):
+        gp_interp(SPEC, COV, 5, irange=irange)
+
+
+@pytest.mark.parametrize("irange", [None, [0, 0]])
+def test_spectra_without_pixels_are_rejected(irange):
+    # 1fbab9f raised UnboundLocalError from a print at its end, and AttributeError for
+    # the list.
+    with pytest.raises(ValueError, match="spec"):
+        gp_interp(np.zeros((3, 0)), np.zeros((0, 0)), irange=irange)
