@@ -31,7 +31,8 @@ RTOL = 1e-12
 # and 1.18.1, 1 and 2 threads, seven OpenBLAS kernels) the 2022 results moved by up to
 # 2.7 times that difference where it is at least 3e-14. The smallest margin of
 # tolerance over observed spread is 4.5 (gp_interp.D1 predvar at the default 1e-12). A
-# direct Cholesky solve and the precision route keep a margin of at least 6.
+# direct Cholesky solve and the precision route keep a margin of at least 6, and the
+# brute-force gp_interp 8.5 (numpy 2.5.4, scipy 1.18.1, 1 thread).
 RTOL_OVERRIDES = {
     # Looser than 1e-10. cond 1e6: the 2022 results are as accurate as a direct solve
     # (both about 1e-11 against extended precision), and the tolerance is about 10 times
@@ -103,6 +104,7 @@ ATOL = {
 CHANGED = {
     "behaviour.gp_interp.irange_two_elements_assert": "D-01",
     "behaviour.gp_interp.irange_empty": "D-18",
+    "behaviour.gp_interp.bruteforce_unpack": "D-02",
 }
 
 
@@ -209,15 +211,14 @@ def test_rtol_overrides_follow_the_baseline_accuracy_of_the_manifest():
     )
 
 
-@pytest.mark.parametrize("case_id", case_params("golden"))
-def test_golden_case_matches_2022_outputs(case_id, implementation):
+def check_golden_case(case_id, implementation, **options):
     case = GOLDEN.cases[case_id]
     kwargs = GOLDEN.arguments(case)
     pristine = {k: v.copy() for k, v in kwargs.items() if isinstance(v, np.ndarray)}
     with warnings.catch_warnings():
         # The fully masked spectrum of standard_scale.E divides 0 by 0.
         warnings.simplefilter("ignore", RuntimeWarning)
-        result = implementation(case["module"], case["function"])(**kwargs)
+        result = implementation(case["module"], case["function"])(**kwargs, **options)
     for name, value in pristine.items():
         assert kwargs[name].tobytes() == value.tobytes(), f"input {name} was modified"
     outputs = case["outputs"]
@@ -229,6 +230,24 @@ def test_golden_case_matches_2022_outputs(case_id, implementation):
         mode = MODE[(case["function"], output["name"])]
         actual = values[output.get("index", 0)]
         check_output(case, output, actual, expected[output["name"]], kwargs, mode)
+
+
+@pytest.mark.parametrize("case_id", case_params("golden"))
+def test_golden_case_matches_2022_outputs(case_id, implementation):
+    check_golden_case(case_id, implementation)
+
+
+@pytest.mark.parametrize(
+    "case_id", case_params("golden", lambda case: case["function"] == "gp_interp")
+)
+def test_bruteforce_gp_interp_matches_2022_outputs(
+    case_id, implementation, monkeypatch
+):
+    # The stored outputs come from the default path: with bruteforce=True, 1fbab9f
+    # crashed, as the record behaviour.gp_interp.bruteforce_unpack shows. The default
+    # path calls submatrix_inv_mult, so the test fails if it runs.
+    monkeypatch.setattr("gspice.legacy.specUtils.submatrix_inv_mult", None)
+    check_golden_case(case_id, implementation, bruteforce=True)
 
 
 @pytest.mark.parametrize(
