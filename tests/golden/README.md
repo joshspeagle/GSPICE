@@ -15,11 +15,12 @@ It stores the inputs and outputs here.
 
 ## Run
 
-From the repository root: `python -m pytest tests/golden` (about 10 s).
+From the repository root: `python -m pytest tests/golden` (about 19 s).
 `tests/conftest.py` sets 1 BLAS thread, for the reason it states.
 
 The tests check, for each golden case: every output, its dtype and shape, the tuple layout, and that no input array changed.
 For each `covar_iter_mask` case they replay the 2022 loop and check the mask of every pass.
+For each `gp_interp` case they also check `bruteforce=True` against the stored outputs.
 The behaviour records check 2022 errors, dtypes, aliasing, NaN propagation and the `>=` tie of `get_chimask`.
 
 ## Datasets

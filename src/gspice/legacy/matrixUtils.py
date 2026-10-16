@@ -1,5 +1,9 @@
 """The 2022 matrix functions: the inverse of a matrix and of its submatrices."""
 
+# deepcopy, unlike ndarray.copy, keeps the type of an input that is not an ndarray,
+# such as a sparse matrix, as the 2022 code did.
+from copy import deepcopy
+
 import numpy as np
 from scipy import linalg
 from scipy.linalg import lapack
@@ -68,8 +72,7 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
     Returns
     -------
     Ainv : ndarray, shape (nk, nk)
-        The inverse of A. Without bruteforce, if imask keeps every row, Minv
-        itself, not a copy.
+        The inverse of A.
 
     Raises
     ------
@@ -102,7 +105,7 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
         return Ainv
 
     if nr == 0:
-        return Minv
+        return deepcopy(Minv)
 
     Uinv = linalg.inv(Minv[np.ix_(r, r)])
     Qt = Minv[np.ix_(r, k)]  # faster than Q assuming nr < nk
@@ -140,8 +143,7 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
     Returns
     -------
     ndarray, shape (N, m) if pad, else (nk, m)
-        A^-1 Y[k]. Without bruteforce, if imask keeps every row, MinvY itself,
-        not a copy.
+        A^-1 Y[k].
 
     Raises
     ------
@@ -180,7 +182,7 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
         return Ainvy
 
     if nr == 0:
-        return MinvY
+        return deepcopy(MinvY)
 
     U = Minv[np.ix_(r, r)]
     Yr = Y[r, :]
@@ -193,7 +195,7 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
         UinvQtY = cholesky_inv(U) @ Qty
 
     if pad:
-        AinvY0 = MinvY.copy(order="K")
+        AinvY0 = deepcopy(MinvY)
         AinvY0[k, :] -= Qt.T @ (UinvQtY + Yr)
         AinvY0[r, :] = 0
         return AinvY0

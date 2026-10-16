@@ -200,7 +200,8 @@ def gaussian_estimate(icond, ipred, cov, Dvec, covinv, bruteforce=False):
     -----
     Cost: about 2 npix (npix + nk*) nk* + nr^3 + 2 nr (nr + npix) nk* +
     2 nspec npix nk* flops, where nr is the number of pixels outside k; with
-    bruteforce, about nk^3 + 2 nk nk* (2 nk + nk*) + 2 nspec nk nk* flops.
+    bruteforce, about nk^3 + 2 nk nk* (2 nk + nk*) + 2 nspec n nk* flops, where n
+    is npix for one predicted pixel and nk for more.
     """
 
     _, npix = Dvec.shape
@@ -259,7 +260,7 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
     """Predict each pixel from the pixels outside a guard window around it (GSPICE).
 
     For pixel i, gaussian_estimate conditions on every pixel outside i - nguard to
-    i + nguard, with the inverse of cov from cholesky_inv.
+    i + nguard.
 
     Parameters
     ----------
@@ -273,7 +274,9 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
         Predict the pixels irange[0] to irange[1], both included, and ignore later
         elements. The default is every pixel.
     bruteforce : bool, optional
-        True raises ValueError, as in 2022.
+        If True, gaussian_estimate inverts the covariance of the conditioning
+        pixels of each predicted pixel with cholesky_inv, instead of updating the
+        inverse of cov.
 
     Returns
     -------
@@ -298,7 +301,8 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
     -----
     Cost: about npix^3 flops for the inverse of cov, and per predicted pixel about
     2 npix^2 + w^3 + 2 w (w + npix) + 4 nspec npix flops, where w is the number of
-    pixels in the guard window, at most 2 nguard + 1.
+    pixels in the guard window, at most 2 nguard + 1. With bruteforce, per predicted
+    pixel about (npix - w)^3 + 2 nspec npix flops.
     """
 
     nspec, npix = spec.shape
@@ -338,6 +342,8 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
     else:
         predoverD = np.zeros((npix, szpred))
 
+    # With bruteforce, covinv is unused, but cholesky_inv still rejects a cov that is
+    # not finite or not positive definite.
     covinv = cholesky_inv(cov)
 
     for i in range(i0, i1 + 1):
@@ -349,7 +355,7 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
         j1 = np.min([i + nguard + 1, npix])
         icond[j0:j1] = 0
 
-        predoverD0, predcovar, predkstar, kstar = gaussian_estimate(
+        estimate = gaussian_estimate(
             icond=icond,
             ipred=ipred,
             cov=cov,
@@ -359,12 +365,16 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
         )
 
         if bruteforce:
-            pred[:, kstar - i0] = predkstar
+            predcovar, predkstar, kstar = estimate
+            # predkstar is 1-D, so it takes the column i - i0, not kstar - i0.
+            pred[:, i - i0] = predkstar
         else:
+            predoverD0, predcovar, _, kstar = estimate
             predoverD[:, kstar - i0] = predoverD0
         predvar[:, kstar - i0] = np.diag(predcovar)
 
-    pred = spec.dot(predoverD)
+    if not bruteforce:
+        pred = spec.dot(predoverD)
 
     return pred, predvar
 
