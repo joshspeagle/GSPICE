@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import scipy.sparse
 
 import gspice
 from _golden import Golden
@@ -105,6 +106,16 @@ def test_2022_assert_raises_an_error_that_is_also_a_value_error(
     with pytest.raises(ValueError, match=message) as raised:
         function(**kwargs)
     assert isinstance(raised.value, AssertionError)
+
+
+def test_padded_submatrix_inv_mult_keeps_a_sparse_minvy():
+    # 1fbab9f returned a csr_matrix equal to the result for the dense MinvY.
+    M = EYE + np.ones((3, 3))
+    Minv = np.linalg.inv(M)
+    kwargs = {"M": M, "Minv": Minv, "imask": np.array([1, 0, 1]), "Y": EYE}
+    result = submatrix_inv_mult(**kwargs, MinvY=scipy.sparse.csr_matrix(Minv))
+    assert isinstance(result, scipy.sparse.csr_matrix)
+    np.testing.assert_equal(result.toarray(), submatrix_inv_mult(**kwargs, MinvY=Minv))
 
 
 def legacy_trees():

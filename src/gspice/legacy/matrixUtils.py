@@ -1,5 +1,9 @@
 """The 2022 matrix functions: the inverse of a matrix and of its submatrices."""
 
+# deepcopy, unlike ndarray.copy, keeps the type of an input that is not an ndarray,
+# such as a sparse matrix, as the 2022 code did.
+from copy import deepcopy
+
 import numpy as np
 from scipy import linalg
 from scipy.linalg import lapack
@@ -193,7 +197,7 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
         UinvQtY = cholesky_inv(U) @ Qty
 
     if pad:
-        AinvY0 = MinvY.copy(order="K")
+        AinvY0 = deepcopy(MinvY)
         AinvY0[k, :] -= Qt.T @ (UinvQtY + Yr)
         AinvY0[r, :] = 0
         return AinvY0
