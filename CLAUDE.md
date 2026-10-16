@@ -10,6 +10,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - `notebooks/`, `notes/`, `paper/`: 2021-2022 working material.
 - `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
 - `tests/legacy/`: tests of the behaviour changes of `gspice.legacy`.
+- `benchmarks/run.py`: times benchmark cases of `docs/design.md` section 12 and prints the setup and the timings as JSON.
 - `pyproject.toml`: the build, the dependencies and the tool settings.
 
 ## Commands
@@ -17,7 +18,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - Set up: `uv venv --clear --python 3.13 .venv && uv pip install -e . --group dev`. mypy needs scipy-stubs, which requires Python 3.12 or later. Once per clone, in the main checkout and not in a worktree, also run `.venv/bin/pre-commit install --allow-missing-config`: its hook runs ruff on each commit in every worktree, also on branches without the hook configuration.
 - Test: `.venv/bin/python -m pytest --cov=gspice`. It skips `slow` tests and fails if the tests cover less than 90% of the code outside `gspice.legacy`.
 - All tests, `slow` ones included: `.venv/bin/python -m pytest -m ""`.
-- Lint, format and type check: `.venv/bin/ruff check src tests && .venv/bin/ruff format --check src tests && .venv/bin/mypy`.
+- Lint, format and type check: `.venv/bin/ruff check src tests benchmarks && .venv/bin/ruff format --check src tests benchmarks && .venv/bin/mypy`.
 
 ## Plan
 
@@ -109,7 +110,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 
 - State only measured figures, or figures computed from them with the computation shown.
 - A benchmark records the commit, machine, thread settings and library versions. Figures from different setups are not compared.
-- A change expected to affect speed reports a benchmark against `main` in its pull request.
+- A change expected to affect speed reports a benchmark against `main` in its pull request, made with `OPENBLAS_NUM_THREADS=1 .venv/bin/python benchmarks/run.py > <file>.json`.
 
 ## Agents
 
