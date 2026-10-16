@@ -5,7 +5,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 ## Layout
 
 - `gspice/`: the 2022 package (commit `1fbab9f`).
-- `pro/`, `julia/`: IDL and Julia implementations, kept unchanged and not ported.
+- `pro/`, `julia/`: IDL and Julia implementations, unchanged until the Python package is finished, then updated and modernized.
 - `notebooks/`, `notes/`, `paper/`: 2021-2022 working material.
 
 ## Commands
