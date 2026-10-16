@@ -20,6 +20,7 @@ from gspice.legacy import (
     maskinterp,
     maskinterp1,
     matrixUtils,
+    standard_scale,
     submatrix_inv,
     submatrix_inv_mult,
 )
@@ -281,3 +282,29 @@ def test_get_chimask_ignores_nan_flux_at_bad_pixels_of_a_one_good_pixel_spectrum
     kwargs["flux"][1930, kwargs["mask"][1930] != 0] = np.nan
     expected = GOLDEN.expected(case)["chimask"]
     np.testing.assert_array_equal(get_chimask(**kwargs), expected)
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32])
+@pytest.mark.parametrize("value", [np.nan, np.inf])
+def test_non_finite_ivar_at_bad_pixels_leaves_standard_scale_unchanged(value, dtype):
+    # 1fbab9f returned NaN in every value of Dvec and refmean, and in the refscale of the
+    # 281 spectra of D1 with a bad pixel.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["standard_scale.D1.mask"])
+    spec, ivar = kwargs["spec"].astype(dtype), kwargs["ivar"].astype(dtype)
+    mask = kwargs["mask"]
+    expected = standard_scale(spec, ivar, mask)
+    ivar[mask != 0] = value
+    for actual, wanted in zip(standard_scale(spec, ivar, mask), expected, strict=True):
+        assert same(actual, wanted)
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32])
+def test_refscale_of_finite_input_equals_the_2022_expression(dtype):
+    # The refscale of 1fbab9f, specUtils.py lines 27 and 34 to 36, on D1 with mask_alt,
+    # which also flags pixels whose ivar is not 0.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["standard_scale.D1.mask_alt"])
+    spec, ivar = kwargs["spec"].astype(dtype), kwargs["ivar"].astype(dtype)
+    mask = kwargs["mask"]
+    wt = 1 - np.where(mask == 0, 0, 1)
+    expected = np.sqrt(np.sum(ivar * wt, axis=1) / np.sum(wt, axis=1))
+    assert same(standard_scale(spec, ivar, mask)[1], expected)

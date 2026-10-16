@@ -33,8 +33,8 @@ def standard_scale(spec, ivar, mask=None):
         The scaled and centered spectra, dimensionless.
     refscale : ndarray, shape (nspec,)
         The scale of each spectrum, in units of 1/flux. A spectrum without good
-        pixels, or with a non-finite ivar at a bad pixel, gets NaN, which makes
-        every value of Dvec and refmean NaN.
+        pixels gets NaN, and one with a non-finite ivar at a good pixel a
+        non-finite value; either makes every value of Dvec and refmean non-finite.
     refmean : ndarray, shape (npix,)
         The mean of the scaled spectra.
     """
@@ -47,7 +47,9 @@ def standard_scale(spec, ivar, mask=None):
     Dvec = maskinterp(yval=spec, mask=pixmask, axis=0)
 
     wt = 1 - pixmask
-    meanivar = np.sum(ivar * wt, axis=1) / np.sum(wt, axis=1)
+    # ivar * wt would be NaN at a bad pixel with a non-finite ivar. The product with
+    # wt, an int64 array, keeps the float64 sum of a float32 ivar, as in 2022.
+    meanivar = np.sum(np.where(pixmask, 0, ivar) * wt, axis=1) / np.sum(wt, axis=1)
     refscale = np.sqrt(meanivar)
     Dvec = Dvec * refscale[:, np.newaxis]
     refmean = Dvec.mean(axis=0)
