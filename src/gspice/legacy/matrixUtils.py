@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 import numpy as np
 from scipy import linalg
 from scipy.linalg import lapack
@@ -52,7 +50,6 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
 
             U and M must be invertible and positive semi-definite.
     """
-    # print("reg " + str(bruteforce))
     # verify proper dimensionalities
     if M.shape[0] != M.shape[1]:
         raise _LegacyError("M must be a square matrix.")
@@ -79,13 +76,11 @@ def submatrix_inv(M, Minv, imask, bruteforce=False):
     # Evaluate  A^{-1} = P - Q U^{-1} Q.T
     Uinv = linalg.inv(Minv[np.ix_(r, r)])
     Qt = Minv[np.ix_(r, k)]  # faster than Q assuming nr < nk
-    # Q = Minv[np.ix_(k, r)]
     Ainv = Minv[np.ix_(k, k)] - Qt.T @ Uinv @ Qt
 
     return Ainv
 
 
-##?? why not call submatrix_inv here?
 def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
     """
     Returns (inverse of submatrix of M) * Y
@@ -136,7 +131,6 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
 
     # rows/columns to keep (k) and remove (r)
     k = np.where(imask)[0]
-    # nk = len(k)
 
     r = np.where(~imask)[0]
     nr = len(r)
@@ -150,30 +144,26 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad=True, bruteforce=False):
     if nr == 0:
         return MinvY
 
-    # Use Q.T y = Minv y - U y ?? why? known result?
+    # Qt @ Y[k] = MinvY[r] - U @ Y[r], because MinvY[r] = Qt @ Y[k] + U @ Y[r].
     U = Minv[np.ix_(r, r)]
     Yr = Y[r, :]
     Qty = MinvY[r, :] - U @ Yr
     Qt = Minv[np.ix_(r, k)]
 
     # evaluate A^{-1} Y = P Y - Q U^{-1} Q.T Y
-    # Faster for big U (and fast enough for small U)
     if U.shape[0] == 1:
         UinvQtY = Qty / U[0]
     else:
-        # L = linalg.cho_factor(U, lower = False, check_finite = False)
-        # UinvQtY = linalg.cho_solve(L, Qty, overwrite_b = False)
         UinvQtY = cholesky_inv(U) @ Qty
 
     # Evaluate A^{-1} Y = P Y - Q U^{-1} Q^T Y
     # using P Y = Minv Y - Q Y
 
     if pad:
-        AinvY0 = deepcopy(MinvY)
+        AinvY0 = MinvY.copy(order="K")
         AinvY0[k, :] -= Qt.T @ (UinvQtY + Yr)
         AinvY0[r, :] = 0
         return AinvY0
     else:
-        # AinvY = MinvY[k,:] - ((UinvQtY + Yr).T @ Qt).T
-        AinvY = MinvY[k, :] - Qt.T @ (UinvQtY + Yr)  # faster since fewer transpose
+        AinvY = MinvY[k, :] - Qt.T @ (UinvQtY + Yr)
         return AinvY

@@ -26,7 +26,7 @@ def maskinterp1(yval, mask):
     if ngood == 0:
         return yval
 
-    if np.sum(good) == 1:
+    if ngood == 1:
         return yval * 0 + yval[good][0]
 
     ynew = yval
@@ -34,7 +34,7 @@ def maskinterp1(yval, mask):
 
     igood = (np.where(good))[0]
     ibad = (np.where(bad))[0]
-    f = interp1d(igood, yval[igood], kind="linear", fill_value="extrapolate")
+    f = interp1d(igood, yval[igood], fill_value="extrapolate")
 
     yval[bad] = f(ibad)
 
@@ -76,9 +76,6 @@ def maskinterp(yval, mask, axis):
     else:
         # the x coord values of columns that need some interpolation
         bad_stripe_indices = np.unique(wbad[1])
-
-    if len(bad_stripe_indices) == 0:
-        return ynew
 
     for ind in bad_stripe_indices:
         if axis == 0:

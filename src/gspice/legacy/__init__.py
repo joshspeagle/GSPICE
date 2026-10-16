@@ -1,4 +1,3 @@
-# from .gspiceMain import gaussian_estimate, gp_interp
 from .djs_maskinterp import maskinterp, maskinterp1
 from .matrixUtils import cholesky_inv, submatrix_inv, submatrix_inv_mult
 from .specUtils import (

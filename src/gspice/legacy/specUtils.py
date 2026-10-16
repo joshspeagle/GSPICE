@@ -5,8 +5,6 @@ from scipy.ndimage import binary_dilation as dilate
 
 from ._errors import _LegacyError
 from .djs_maskinterp import maskinterp
-
-# from .gspiceMain import gp_interp
 from .matrixUtils import cholesky_inv, submatrix_inv_mult
 
 
@@ -44,7 +42,7 @@ def standard_scale(spec, ivar, mask=None):
     return Dvec, refscale, refmean
 
 
-def covar(spec, checkmean=False):  ##DONE
+def covar(spec, checkmean=False):
     """
     Compute covariance of cleaned data vector using BLAS
 
@@ -76,7 +74,7 @@ def covar(spec, checkmean=False):  ##DONE
     return cov, refmean
 
 
-def get_chimask(flux, ivar, mask, nsigma):  ##DONE
+def get_chimask(flux, ivar, mask, nsigma):
     """
     Compute mask of outliers with respect to GSPICE posterior covariance.
 
@@ -89,7 +87,7 @@ def get_chimask(flux, ivar, mask, nsigma):  ##DONE
             chimask (np.ndarray): mask of nonconformat pixels (0 == good)
     """
 
-    # interporlate over masked pixels in the spectral direction
+    # interpolate over masked pixels in the spectral direction
     Dvec, _, _ = standard_scale(flux, ivar, mask)
 
     # obtain empirical covariance for this data array
@@ -129,26 +127,14 @@ def gaussian_estimate(icond, ipred, cov, Dvec, covinv, bruteforce=False):
                                                   predicted
     """
 
-    # single = len()
     _, npix = Dvec.shape
 
     k = np.where(icond)[0]  # where is good data
-    # print('k :', k[:20])
-    # print('nk: ', nk)
     kstar = np.where(ipred)[0]
     nkstar = len(kstar)  # number of pixels to predict on
-    # print('kstar: ', kstar)
-    # print(f'nkstar : {nkstar}')
-    # print('cov ', cov.std(ddof = 1))
     cov_kkstar = cov[np.ix_(kstar, k)]
-    # print('cov_kkstar: ', cov_kkstar.shape)
-    # print(f'cov_kkstar 9: {cov_kkstar[0][9]} 10: {cov_kkstar[0][10]}')
     cov_kstark = cov_kkstar.T
-    # print('cov_kstark: ', cov_kstark.shape)
-    # print(f'cov_kstark 9: {cov_kstark[9][0]} 10: {cov_kstark[10][0]}')
     cov_kstarkstar = cov[np.ix_(kstar, kstar)]
-    # print(f'covk*k*: {cov_kstarkstar.shape}')
-    # print(f'k*k*: {cov_kstarkstar}')
 
     if bruteforce:
         cov_kk = cov[np.ix_(k, k)]
@@ -160,13 +146,11 @@ def gaussian_estimate(icond, ipred, cov, Dvec, covinv, bruteforce=False):
         # compute prediction covariance (See RW, Ch. 2)
         predcovar = cov_kstarkstar - cov_kkstar @ icov_kk @ cov_kstark
 
-        # if single: ?? why is this necessary?
-
         # compute icov_kk (dot) cov_kstark
         tmp = cov_kkstar @ icov_kk
         del icov_kk
 
-        if nkstar == 1:  # ?? why is this necessary?
+        if nkstar == 1:
             tmp2 = np.zeros(npix)
             tmp2[k] = tmp
             predkstar = Dvec @ tmp2
@@ -177,43 +161,17 @@ def gaussian_estimate(icond, ipred, cov, Dvec, covinv, bruteforce=False):
     else:
         # compute icov_kk (dot) cov_kstark using GSPICE
         Y = cov[:, kstar]
-        # print(Y.shape)
-        # print(Y[25][0])
 
-        # print('tst ',covinv.std(ddof = 1))
         Minvy = covinv @ Y
-        # print('tst ', Minvy.shape)
-        # print('tst ', Minvy.std(ddof = 1))
 
         # Ainvy is icov_kk (dot) cov_kstarK
         # Ainvy0 is Ainvy zero-padded
-        # print(cov.std(ddof = 1))
-        # print(covinv.std(ddof = 1))
-        # print(icond.std(ddof = 1))
-        # print(Y.std(ddof = 1))
-        # print(Minvy.std(ddof = 1))
-        Ainvy0 = submatrix_inv_mult(
-            M=cov, Minv=covinv, imask=icond, Y=Y, MinvY=Minvy, pad=True
-        )
-        # print('tst ', Ainvy0.shape)
-        # print('tst ', Ainvy0.std(ddof = 1))
-        # print('tst ', Ainvy0[4][0])
-        # print("aaaaaa")
-        predkstar = Dvec @ Ainvy0  # takes time; optional
-        # print('tst ', predkstar.shape)
-        # print('tst predkstar', predkstar.std(ddof =1))
+        Ainvy0 = submatrix_inv_mult(M=cov, Minv=covinv, imask=icond, Y=Y, MinvY=Minvy)
+        predkstar = Dvec @ Ainvy0
         predoverD = Ainvy0
-        # print('tst ', predoverD.shape)
-        # print('tst ', predoverD.std(ddof = 1))  ##--GOOD UP TO HERE--##
 
         # compute prediction covariance (See RW, Ch. 2)
-        # print('tst ',Ainvy0.shape)
-        # print('tst ',(Y.T).shape)
-        # print('tst ',cov_kstarkstar.shape)
-        # print('tst ', (Y.T @ Ainvy0)[0][0]) #precision up to 1e-8 with Julia
-        # print('tst ', cov_kstarkstar)
-        predcovar = cov_kstarkstar - Y.T @ Ainvy0  # precision up to 1e-8 with Julia
-        # print('tst ', predcovar[0][0])
+        predcovar = cov_kstarkstar - Y.T @ Ainvy0
         return predoverD, predcovar, predkstar, kstar
 
 
@@ -244,8 +202,6 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
 
     # shape of input spectra array
     nspec, npix = spec.shape
-    # print('tst ', nspec)
-    # print('tst ', npix)
     # check proper dimensionality
     if cov.shape[0] != cov.shape[1]:
         raise _LegacyError("cov: covariance must be square matrix.")
@@ -275,54 +231,31 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
     else:
         i0 = 0
         i1 = npix - 1
-    # print('tst ', i0)
-    # print('tst ', i1)
 
     # allocate output arrays
     szpred = i1 - i0 + 1
-    # print('tst ', szpred)
     predvar = np.zeros((nspec, szpred))
-    # print('tst ', predvar)
-    # print('tst ', predvar.shape)
 
     if bruteforce:
         pred = np.zeros((nspec, szpred))
     else:
         predoverD = np.zeros((npix, szpred))
-        # print('tst ', predoverD)
-        # print('tst ', predoverD.shape)
 
     # pre-compute inverse covariance
     covinv = cholesky_inv(cov)
-    # print('tst ', covinv.std(ddof = 1))
 
     # loop over pixels
     for i in range(i0, i1 + 1):
         # ipred == 1 for pixels to be predicted
         ipred = np.zeros(npix)
-        # print(ipred)
-        # print(ipred.shape)
         ipred[i] = 1
-        # print(ipred)
-        # print(ipred.shape)
 
         # condition on reference pixels specified by icond
         icond = np.ones(npix)
-        # print(icond)
-        # print(icond.shape)
         j0 = np.max([0, i - nguard])
         j1 = np.min([i + nguard + 1, npix])
-        # print(j0)
-        # print(j1)
         icond[j0:j1] = 0
-        # print(np.where(icond==0))
 
-        # print(icond)
-        # print(np.where(icond == 0))
-        # print(len(np.where(icond == 0)[0]))
-
-        # print('tst ', cov.std(ddof =1))
-        # print(covinv.std(ddof = 1))
         predoverD0, predcovar, predkstar, kstar = gaussian_estimate(
             icond=icond,
             ipred=ipred,
@@ -331,26 +264,14 @@ def gp_interp(spec, cov, nguard=20, irange=None, bruteforce=False):
             covinv=covinv,
             bruteforce=bruteforce,
         )
-        # kstar = i
-        # print(f'predoverD0 : {predoverD0.std(ddof = 1)}')
-        # print(f'predcovar: {predcovar[0][0]}')
-        # print(f'predcoar: {predcovar}')
-        # print(f'predcoar: {predcovar.shape}')
 
         if bruteforce:
             pred[:, kstar - i0] = predkstar
         else:
             predoverD[:, kstar - i0] = predoverD0
-            # print(predoverD.shape)
-            # print(predoverD.std(ddof = 1))
-        # j = np.arange(predcovar.ndim) #?? #this is getting dimensions?
-        predvar[:, kstar - i0] = np.diag(predcovar)  # [0,0] #?? #what is happening?
-        # print(predvar.shape)
-        # print(predvar.std(ddof =1))  ##GOOD UPTO HERE##
+        predvar[:, kstar - i0] = np.diag(predcovar)
 
     pred = spec.dot(predoverD)
-    # print(pred.std(ddof = 1))
-    # print(predvar.std(ddof = 1))
 
     return pred, predvar
 
@@ -387,7 +308,6 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
         )
 
     chimask = np.zeros(mask[wmask].shape)
-    # thismask = np.logical_or(chimask, (mask[wmask] != 0))
 
     for sigma in nsigma:  # loop over iteratively masking
         thismask = np.logical_or(chimask, (mask[wmask] != 0))
@@ -395,7 +315,6 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
         chimask = get_chimask(
             flux=flux[wmask], ivar=ivar[wmask], mask=thismask, nsigma=sigma
         )
-        # thismask = np.logical_or(chimask, thismask)
 
     finalmask = np.ones((nspec, npix))
     finalmask[wmask] = np.logical_or(thismask, chimask)
