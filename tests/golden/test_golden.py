@@ -103,8 +103,11 @@ ATOL = {
 
 @pytest.fixture(scope="session")
 def implementation():
-    # Phase 2 retargets the golden tests here.
-    return lambda module, function: getattr(importlib.import_module(module), function)
+    # The manifest names the 2022 modules, which now live in gspice.legacy.
+    return lambda module, function: getattr(
+        importlib.import_module(module.replace("gspice.", "gspice.legacy.", 1)),
+        function,
+    )
 
 
 def case_ids(kind):
