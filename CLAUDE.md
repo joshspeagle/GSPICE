@@ -7,10 +7,15 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - `gspice/`: the 2022 package (commit `1fbab9f`).
 - `pro/`, `julia/`: IDL and Julia implementations, unchanged until the Python package is finished, then updated and modernized.
 - `notebooks/`, `notes/`, `paper/`: 2021-2022 working material.
+- `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
+- `pytest.ini`: test paths and the `slow` marker.
 
 ## Commands
 
-No tests or linters run yet: the 2022 tests need data files that are not in the repository.
+- Set up: `uv venv .venv && uv pip install -r requirements-dev.txt`.
+- Test: `.venv/bin/python -m pytest`. It skips `slow` tests.
+- All tests, `slow` ones included: `.venv/bin/python -m pytest -m ""`.
+- Lint and format check: `.venv/bin/ruff check tests && .venv/bin/ruff format --check tests`.
 
 ## Plan
 
@@ -86,6 +91,7 @@ No tests or linters run yet: the 2022 tests need data files that are not in the 
 - Hermetic: no network, no data files outside the repository, no absolute paths.
 - Write a test only when it catches a plausible bug in this code that no other test catches.
 - Test contracts, invariants, agreement with a reference implementation (each fast path against a direct solve, at condition numbers up to 1e8 and a tolerance the test justifies), and regressions (each bug fix adds a test that fails without it). Do not test numpy's or scipy's behaviour.
+- Regenerate the golden files only when the lead asks, never to make a change pass. The command is in `tests/golden/README.md`.
 - Mark a test `slow` when its tolerance comes from Monte Carlo error or it takes more than 5 s on a CI runner. Never mark a test against the 2022 outputs or against a direct solve `slow`; keep its cases small instead.
 - CI on pushes and pull requests skips `slow` tests, and each job's test step takes under 2 minutes; if it does not, shrink or remove tests. A workflow started by hand runs all `slow` tests. Before a merge, run the `slow` tests in the test files of the changed modules locally.
 - Statistical tests are seeded, with tolerances from the Monte Carlo error.
