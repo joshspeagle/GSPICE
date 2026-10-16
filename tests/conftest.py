@@ -1,4 +1,6 @@
 import os
+import sys
+from pathlib import Path
 
 # Runs before numpy is imported. The 2022 per-pixel loop calls BLAS on tiny blocks,
 # where more threads give no speedup and slow the suite down on a busy CPU. The tests
@@ -11,3 +13,6 @@ for name in (
     "VECLIB_MAXIMUM_THREADS",
 ):
     os.environ.setdefault(name, "1")
+
+# tests/legacy reads the golden inputs through _golden.
+sys.path.insert(0, str(Path(__file__).parent / "golden"))

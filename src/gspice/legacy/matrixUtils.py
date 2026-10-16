@@ -3,6 +3,8 @@ from scipy import linalg
 from scipy.linalg import lapack
 from copy import deepcopy
 
+from ._errors import _LegacyError
+
 def cholesky_inv(M):
     """
     Returns inverse of positive-definite matrix M using Cholesky decomposition
@@ -45,8 +47,10 @@ def submatrix_inv(M, Minv, imask, bruteforce = False):
     """
     #print("reg " + str(bruteforce))
     #verify proper dimensionalities
-    assert M.shape[0] == M.shape[1], "M must be a square matrix."
-    assert imask.shape[0] == M.shape[0], "M and imask have incompatible dimensions."
+    if M.shape[0] != M.shape[1]:
+        raise _LegacyError("M must be a square matrix.")
+    if imask.shape[0] != M.shape[0]:
+        raise _LegacyError("M and imask have incompatible dimensions.")
 
     #ensure imask is boolean type because will use logical operators
     imask = imask.astype(bool) 
@@ -111,10 +115,14 @@ def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad = True, bruteforce = False)
             Y is assumed to be zero-padded at bad rows    
     """
     #verify proper dimensionalities
-    assert M.shape[0] == M.shape[1], "M must be a square matrix."
-    assert imask.shape[0] == M.shape[0], "M and imask have incompatible dimensions."
-    assert Y.ndim == 2, "Y must be column vector."
-    assert MinvY.ndim == 2, "MinvY must be column vector."
+    if M.shape[0] != M.shape[1]:
+        raise _LegacyError("M must be a square matrix.")
+    if imask.shape[0] != M.shape[0]:
+        raise _LegacyError("M and imask have incompatible dimensions.")
+    if Y.ndim != 2:
+        raise _LegacyError("Y must be column vector.")
+    if MinvY.ndim != 2:
+        raise _LegacyError("MinvY must be column vector.")
 
     #ensure imask is boolean type because will use logical operators
     imask = imask.astype(bool)

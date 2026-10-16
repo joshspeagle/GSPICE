@@ -6,6 +6,8 @@ From https://github.com/desihub/gfa_reduce/blob/master/py/gfa_reduce/analysis/dj
 import numpy as np
 from scipy.interpolate import interp1d
 
+from ._errors import _LegacyError
+
 def maskinterp1(yval, mask):
 # omitting xval arg (assume regular grid), omitting const kw arg
 # (assume const=True behavior is desired)
@@ -50,12 +52,16 @@ def maskinterp(yval, mask, axis):
     sh_yval = yval.shape
     sh_mask = mask.shape
     
-    assert(len(sh_yval) == 2)
-    assert(len(sh_mask) == 2)
+    if len(sh_yval) != 2:
+        raise _LegacyError(f"yval: expected a 2-D array, got {len(sh_yval)} dimensions")
+    if len(sh_mask) != 2:
+        raise _LegacyError(f"mask: expected a 2-D array, got {len(sh_mask)} dimensions")
 
-    assert((sh_yval[0] == sh_mask[0]) and (sh_yval[1] == sh_mask[1]))
+    if sh_yval != sh_mask:
+        raise _LegacyError(f"yval, mask: expected equal shapes, got {sh_yval} and {sh_mask}")
 
-    assert((axis == 0) or (axis == 1))
+    if axis not in (0, 1):
+        raise _LegacyError(f"axis: expected 0 or 1, got {axis!r}")
 
     wbad = (np.where(mask != 0))
     ynew = np.copy(yval) #to avoid yval pointer getting changed and stupid bugs popping up in the process because Python changes global variables with pointers!!

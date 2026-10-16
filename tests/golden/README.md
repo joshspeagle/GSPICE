@@ -77,3 +77,4 @@ The outputs are byte-identical only with the Python, numpy and scipy versions an
 ## Implementation under test
 
 The `implementation` fixture in `test_golden.py` maps a 2022 (module, function) to the callable under test.
+`CHANGED` lists the records that a behaviour change of `gspice.legacy` alters, with the inventory ID of the change; their tests must fail (`xfail(strict=True)`).
