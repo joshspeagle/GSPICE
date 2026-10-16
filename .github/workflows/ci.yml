@@ -25,6 +25,9 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
         include:
+          # One job checks the coverage floor. Coverage adds no measurable time on
+          # Python 3.14, which traces with sys.monitoring.
+          - { os: ubuntu-latest, python-version: "3.14", cov: "--cov=gspice" }
           - { os: macos-latest, python-version: "3.11" }
           - { os: macos-latest, python-version: "3.15" }
           - { os: windows-latest, python-version: "3.11" }
@@ -39,7 +42,7 @@ jobs:
       # --group needs pip 25.1.
       - run: python -m pip install --upgrade pip
       - run: python -m pip install --no-compile . --group test
-      - run: python -m pytest -q -ra
+      - run: python -m pytest -q -ra ${{ matrix.cov }}
 
   test-oldest:
     name: test (oldest stack, py3.11, numpy 1.26, scipy 1.11)

@@ -17,7 +17,7 @@ authors = [
 ]
 
 [dependency-groups]
-test = ["pytest>=8"]
+test = ["pytest>=8", "pytest-cov>=5"]
 dev = [
     { include-group = "test" },
     "ruff==0.17.1",
@@ -50,6 +50,14 @@ exclude = ["^src/gspice/legacy/"]
 [[tool.mypy.overrides]]
 module = "gspice.legacy.*"
 follow_imports = "skip"
+
+[tool.coverage.run]
+omit = ["*/gspice/legacy/*"]
+
+[tool.coverage.report]
+fail_under = 90
+# Without decimals, a total of 89.5% would round up and pass.
+precision = 2
 
 [tool.ruff]
 # The 2022 code; PR 2.4 of the design lints it (decision A29). force-exclude also
