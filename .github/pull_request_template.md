@@ -10,7 +10,7 @@ Closes #
 
 ## Decisions
 
-<!-- For each decision: what was decided, why, the alternatives, and the result of the adversarial review. Mark each behaviour change. Write "None" if there are no decisions. -->
+<!-- For each decision: what was decided, why, and the alternatives. For a departure from the plan, add the result of its adversarial review. Mark each behaviour change. Write "None" if there are no decisions. -->
 
 ## Testing
 
@@ -18,7 +18,7 @@ Closes #
 
 ## Checklist
 
-- [ ] Each decision has the result of its adversarial review.
+- [ ] Each departure from the plan has the result of its adversarial review, or there is none.
 - [ ] `/simplify` and `/code-review high` ran, and each finding is fixed or answered.
 - [ ] Before ready, each fix was folded into the commit it corrects, or the branch has a human's commits. Every commit passes the commands under Commands.
 - [ ] The `slow` tests of the changed modules pass locally, or there are none.

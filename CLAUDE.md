@@ -5,6 +5,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 ## Layout
 
 - `gspice/`: the 2022 package (commit `1fbab9f`).
+- `docs/design.md`: the design of the new package, which Phases 2 to 5 implement.
 - `pro/`, `julia/`: IDL and Julia implementations, unchanged until the Python package is finished, then updated and modernized.
 - `notebooks/`, `notes/`, `paper/`: 2021-2022 working material.
 - `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
@@ -74,15 +75,15 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - Write no code when the change is not needed, or when the codebase, numpy or scipy already does it.
 - Validate public inputs early, with errors that name the argument and what was expected. Internal functions trust their callers. Leanness never removes input validation or numerical safety checks.
 - Public functions never modify their input arrays.
-- No no-ops (passing a default, guarding a case that cannot happen), dead code, or linter-ignore rules except for vendored or generated paths.
+- No no-ops (passing a default, guarding a case that cannot happen), dead code, or linter-ignore rules, except for vendored or generated paths and for the 2022 module names and signatures that `gspice.legacy` keeps.
 - One purpose per function, one group of things per module. Add a helper only when it is reused or a function is too long.
 - Type hints on every public signature. Names are readable words, except matrices and index sets that follow the paper's notation (`X`, `S`, `P`, `k`, `G`).
 
 ## Numerics
 
-- Covariances, factorizations and solves are float64. Inputs may be float32.
+- Covariances, factorizations and solves are float64, except in legacy code that keeps the 2022 arithmetic. Inputs may be float32.
 - Solve with Cholesky factors. Form an explicit inverse only where the method needs the matrix itself: the precision matrix, the Appendix A updates and the legacy layer.
-- Outside the legacy layer, no per-pixel work scales with `nspec`: spectra that share a pixel set go through one matrix product, chunked to bound memory.
+- Outside the legacy layer, no per-pixel work scales with `nspec`: spectra that share a pixel set go through one matrix product, chunked to bound memory. Noise-aware models are the exception, because their covariance differs per spectrum.
 - Every array a public function returns is in stated units: scaled, or flux of the input spectrum.
 - Randomness comes only from a `numpy.random.Generator` that the caller passes.
 
@@ -101,7 +102,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 
 - A public module has a one-line docstring. A public class, function or method has a NumPy-style docstring: a one-line summary, the equation it implements if any, parameters and returns with shapes and units, and the cost when it is not obvious.
 - Private code has no docstring. A comment explains only a non-obvious why, such as a numerical subtlety or the paper equation it implements.
-- Docs state only what the code does now, and each fact has one home. Why a change was made goes in its issue or pull request.
+- Docs state only what the code does now, except the design document, which states the plan of Phases 2 to 5 and its reasons. Each fact has one home. Why a change was made goes in its issue or pull request.
 
 ## Measurements
 
