@@ -52,8 +52,8 @@ No tests or linters run yet: the 2022 tests need data files that are not in the 
 
 1. Make the first commit, push it, and open a draft that closes its issue.
 2. Record each decision under "Decisions". A decision is a choice that another competent developer could make differently and that affects behaviour, the public API, a number, a tolerance, a dependency or the process.
-3. Adversarial review: an independent subagent tries to refute each decision. It gets the diff, the decision and the requirements the change must meet (the design document, once it exists), not the session's reasoning. A refuted decision is changed, or the objection is answered in the record. A behaviour change gets three reviewers and stands if at least two uphold it; otherwise revise it and review it again, or drop it.
-4. Run `/simplify`, then `/code-review high`. Fix each valid finding and answer the rest in the pull request. A decision they add or change gets its own adversarial review.
+3. Adversarial review: one independent subagent tries to refute all decisions of the pull request. It gets the diff, the decisions and the requirements the change must meet (the design document, once it exists), not the session's reasoning. A refuted decision is changed, or the objection is answered in the record. A behaviour change gets three reviewers and stands if at least two uphold it; otherwise revise it and review it again, or drop it. A finding that only corrects wording or a number is fixed without another review; a decision that changes is reviewed again.
+4. Run `/simplify`, then `/code-review high`; a pull request that changes only prose runs `/code-review high` alone. Fix each valid finding and answer the rest in the pull request. A decision they add or change gets its own adversarial review.
 5. Run `git fetch origin`. If every commit in `origin/main..origin/<branch>` is by Claude, fold each fix into the commit it corrects: `git commit --fixup=<commit>`, then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash --keep-base --exec '<commands>' origin/main`, then `git push --force-with-lease --force-if-includes`. Otherwise fixes are new commits.
 6. Mark it ready when every item under "Checklist" in its description is done. After that, fixes are new commits.
 7. Merge it with a merge commit when CI passes, no review thread is unresolved, each request to Claude has an answer, and every approval this file requires is given. Until CI exists, the local commands take its place and the pull request says so. Then add its decisions to the phase's decision log.
@@ -106,6 +106,7 @@ No tests or linters run yet: the 2022 tests need data files that are not in the 
 ## Agents
 
 - Delegate implementation through self-contained briefs. Numerical or architectural work goes to the session's own model, routine work to a faster one. Each use of a more expensive model needs the lead's approval.
+- Competing proposals with a judge panel are for the design only. A pull request has one implementer.
 - Subagents never commit. Claude reads every line a subagent writes before committing it.
 - Parallel subagents that write files get separate worktrees.
 
