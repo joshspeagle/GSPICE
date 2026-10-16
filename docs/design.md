@@ -165,8 +165,8 @@ Every new-API algorithm uses this identity. Schur updates of a precomputed inver
 |---|---|---|
 | `precision(S)` | P = S⁻¹ by `dpotrf` and `dpotri`, lower triangle mirrored in place; P is then exactly symmetric, so its transpose is a C-contiguous view; `LinAlgError` if `dpotrf` fails or the reciprocal condition number of S scaled to unit diagonal, which `dpocon` estimates in the 1-norm, is below 1e-13 (A26) | npix³ |
 | `woodbury(V, values, d)` | P = D⁻¹ − L Lᵀ, L = D⁻¹ V R_K⁻ᵀ, R_K R_Kᵀ = Λ⁻¹ + Vᵀ D⁻¹ V; never forms C; `LinAlgError` if κ_W > 1e13 (A28), with c_ii = d_i + Σ_k λ_k V_ik² the model variances, d̃ = d/c, Ṽ = diag(c)^−½ V and κ_W = (max d̃ + λ_max(Λ^½ ṼᵀṼ Λ^½))/min d̃, a bound on the condition number of C scaled to unit diagonal and on max c_ii/d_i | npix² K |
-| `guard_weights(P, c, nguard, columns=slice(None))` | for each i in `columns`, with g = `slice(max(0, i−nguard), min(npix, i+nguard+1))`: v = P_gg⁻¹ e_i by Cholesky; W[:, i] = −P[g, :]ᵀ v, then W[g, i] = 0 exactly; var_i = v[i − g.start]. A window that covers all pixels gives W[:, i] = 0 and var_i = c_i, the exact prior, from c = diag(C) and without a factorization | npix (w³/3 + 2 npix w) |
-| `solve_pattern(P, G, M, T, X0)` | G ordered as (G \ M, M \ T, T), with T ⊆ M the pixels whose χ² is wanted; R = lower Cholesky factor of P_GG; μ_G = −R⁻ᵀR⁻¹ (P_{G,:} X0ᵀ); C_MM = (R_MM R_MMᵀ)⁻¹, so var_M = column sums of (R_MM⁻¹)²; χ² = ‖R_TTᵀ r_T‖², because C_TT⁻¹ is the Schur complement R_TT R_TTᵀ; draws μ_G + R⁻ᵀ z. Empty blocks skip LAPACK, and an empty T gives χ² = 0 | per pattern \|G\|³/3 + \|M\|³/3; per spectrum 2\|G\| (npix + \|G\|) |
+| `guard_weights(P, c, nguard)` | for each pixel i, with g = `slice(max(0, i−nguard), min(npix, i+nguard+1))`: v = P_gg⁻¹ e_i by Cholesky; W[:, i] = −P[g, :]ᵀ v, then W[g, i] = 0 exactly; var_i = v[i − g.start]. A window that covers all pixels gives W[:, i] = 0 and var_i = c_i, the exact prior, from c = diag(C) and without a factorization. `LinAlgError` if `dpotrf` fails | npix (w³/3 + 2 npix w) |
+| `solve_pattern(P, G, M, T, X, normals=None, covariance=False)` | G, M and T are boolean masks with T ⊆ M ⊆ G, and the results follow the pixel order of M; G ordered as (G \ M, M \ T, T), with T the pixels whose χ² is wanted; R = lower Cholesky factor of P_GG; μ_G = −R⁻ᵀR⁻¹ (P_{G,:} X0ᵀ), where X0 is X with its G columns set to 0; C_MM = (R_MM R_MMᵀ)⁻¹, so var_M = column sums of (R_MM⁻¹)²; χ² = ‖R_TTᵀ r_T‖², because C_TT⁻¹ is the Schur complement R_TT R_TTᵀ; draws μ_M + R_MM⁻ᵀ z_M, the M rows of μ_G + R⁻ᵀ z, with z = `normals` (nspec × npix); `covariance=True` adds C_MM, with var_M as its diagonal; `LinAlgError` if `dpotrf` fails. Empty blocks skip LAPACK, and an empty T gives χ² = 0; callers give the exact prior where G covers all pixels (below) | per pattern \|G\|³/3 + \|M\|³/3, and \|M\|³/3 more for C_MM; per spectrum 2\|G\| (npix + \|G\|) |
 | `group_rows(keys)` | rows with identical boolean key rows: `np.unique` of a void view of `np.packbits(keys, axis=1)`; the infill key packs G, M and T, and grouping runs per S/N bin | O(nspec log nspec) |
 
 Guard windows are contiguous, so slices replace gathers; this is the IDL "contiguous" fast path (D-47) and needs no separate code. The trailing-block identities of `solve_pattern` give the variances, covariance and χ² from the one factorization (verified to 1.8e-15 at κ 1e2 to 1e8).
@@ -232,7 +232,7 @@ def fit(flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | None = None, *,
 
     Returns the model, and the final training mask (nspec, npix) bool, all True for
     spectra not used. Raises ValueError, naming the counts or pixels, if a requirement
-    of section 4.1 fails, and LinAlgError, naming the bin, N_s and 1/rcond, if a
+    of section 4.1 fails, and LinAlgError, naming the bin, N_s and rcond, if a
     covariance fails A26, which can happen for N_s - 1 close to npix.
     Cost per pass: N_s npix^2 (covariance) + npix^3 + 2 N_s npix^2 (pixelwise).
     """
@@ -617,7 +617,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 - Reference: a 60-digit Cholesky solve of S_kk with the standard-library `decimal` module, for n ≤ 60, the same on every platform. It takes 5 to 30 ms per solve at n 30 to 60, so tests subsample pixels. Low-rank cases at κ ≥ 1e5 may use an exact `fractions` reference at npix ≤ 36 (0.8 s per pattern).
 - Matrices: random symmetric positive definite (SPD) with log-spaced eigenvalues and κ = 1e2, 1e5 and 1e8; squared-exponential kernels of lengths 5 and 15 plus a nugget; low rank plus diagonal. Data are drawn from N(0, C).
 - Paths: precision, with A26 raising at κ 1e14; Woodbury, with A28; guard weights (nguard 0, 1, 5, about npix/3 on the kernel of length 5 at npix ≤ 60, where the error relative to κε is largest, and ≥ npix − 1, the exact prior); pattern solve (means, variances, covariance, χ², draws through R); block χ²; noise-model C_s.
-- Tolerances, with κ the condition number of the matrix scaled to unit diagonal: dense routes 10κε in |Δμ|/σ, |Δvar|/var and |Δχ²|/(χ² + |T|) (worst measured 0.98κε over 86 matrices); Woodbury routes 10ε·κ_W, and 1e-9 when |O| ≥ 2K and κ_W ≤ 1e8 (10κε failed 108 of 526 swept results; 10ε·κ_W none); κ ≤ 1e3 cases 1e-12 against a float64 direct solve (measured 9.7e-14).
+- Tolerances, with κ the condition number of the matrix scaled to unit diagonal: dense routes 10κε in |Δμ|/σ, |Δvar|/var and |Δχ²|/(χ² + |T|) (worst measured 0.98κε over 86 matrices); Woodbury routes 10ε·κ_W, and 1e-9 when |O| ≥ 2K and κ_W ≤ 1e8 (10κε failed 108 of 526 swept results; 10ε·κ_W none).
 
 **Property tests** (hypothesis, at most 50 examples, npix ≤ 60, a profile with `derandomize=True` and `database=None`; `.hypothesis/` in `.gitignore`).
 
