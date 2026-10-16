@@ -723,7 +723,7 @@ path = "src/gspice/__init__.py"           # __version__ = "2.0.0.dev0" (Q8)
 ```
 
 - The pytest and ruff settings of `pytest.ini` and `ruff.toml` (#9) move into `pyproject.toml`.
-- ruff (lint and format) checks `tests` from #9. PR 2.1 extends it to `src` except `src/gspice/legacy/`, and updates `ci.yml` and the lint command of CLAUDE.md; PR 2.4 adds `src/gspice/legacy/` (A29). mypy, with `scipy-stubs` because scipy ships no type information, coverage and pre-commit run from PR 2.2; mypy runs in the lint job on Python 3.13. The `dev` group replaces `requirements-dev.txt`; PR 2.1 removes the unused astropy import (D-07), so no group needs astropy. `pip install --group` needs pip 25.1, so CI upgrades pip first.
+- ruff (lint and format) checks `tests` from #9. PR 2.1 extends it to `src` except `src/gspice/legacy/`, and updates `ci.yml` and the lint command of CLAUDE.md; PR 2.4 adds `src/gspice/legacy/` (A29), and PR 2.9 adds `benchmarks/`. mypy, with `scipy-stubs` because scipy ships no type information, coverage and pre-commit run from PR 2.2; mypy runs in the lint job on Python 3.13. The `dev` group replaces `requirements-dev.txt`; PR 2.1 removes the unused astropy import (D-07), so no group needs astropy. `pip install --group` needs pip 25.1, so CI upgrades pip first.
 - CI (#9): Linux on Python 3.10 to 3.15; macOS and Windows on 3.10 and 3.15; an oldest-stack job on Python 3.11 with numpy 1.26 and scipy 1.11. PR 2.1 drops 3.10 (S11.10): Linux then runs 3.11 to 3.15, and macOS and Windows 3.11 and 3.15. Phase 5 adds a wheel and sdist build check.
 - No h5py, matplotlib or tqdm, not even as extras: `save` writes .npz, `progress` is a callback, and the package draws no plots. A `docs` group arrives with the docs phase.
 - Deleted: `setup.py`, `dist/`, `gspiceMain.py`, the 2022 tests (D-08, D-09, D-10).
@@ -748,9 +748,9 @@ Each line is one issue, one branch and one pull request with a single goal; line
 
 1. `_spectra`: validation, interpolation, dilation, `scale`, `unscale`, `snr`; equivalence with `standard_scale`; BC-new tests of Q1, Q11 and Q15 (BC). [2.1]
 2. `Model` (dense), `save`, `load`. [3.1, 2.8]
-3. `pixelwise`, `Prediction`, chunking, cache, logging, progress; equivalence with `gp_interp`; the D3 test of S11.4 (BC). [3.2]
+3. `pixelwise`, `Prediction`, chunking, cache, logging, progress; equivalence with `gp_interp`; the D3 test of S11.4 (BC); benchmark case 1 on `pixelwise`. [3.2]
 4. `fit` (dense, cumulative and 2022 modes, centre, weights); equivalence with `covar_iter_mask`; BC-new tests of S11.1, S11.2, Q2, and the `fit` parts of Q1 and Q11 (BC). [3.3]
-5. `infill`, `Repaired` (replace, ignore, chi2, covariance); equivalence with `gaussian_estimate`; the D3 test of S11.4 (BC). [3.3]
+5. `infill`, `Repaired` (replace, ignore, chi2, covariance); equivalence with `gaussian_estimate`; the D3 test of S11.4 (BC); benchmark case 2 on `infill`. [3.3]
 6. Draws in `infill`. [3.5]
 7. `finite_sample_factor`, `inflate`, exact in-sample identity tests, held-out f_s test. [3.4, 3.5, 3.8]
 8. `simulate`. [3.1]

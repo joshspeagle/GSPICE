@@ -11,6 +11,7 @@
 - Type checks with mypy in strict mode for the code outside `gspice.legacy`.
 - A test coverage floor of 90% for the code outside `gspice.legacy`.
 - pre-commit hooks that run ruff.
+- `benchmarks/run.py`, which times the conditioning primitives of pixelwise prediction and infill and the 2022 `gp_interp`, and prints the timings and the setup as JSON.
 
 ### Removed
 
