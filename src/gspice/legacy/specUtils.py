@@ -384,8 +384,9 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
         Flux.
     ivar : ndarray, shape (nspec, npix)
         Inverse variance of the flux.
-    mask : ndarray, shape (nspec, npix)
-        Nonzero, NaN included, marks a bad pixel. None is not supported.
+    mask : ndarray, shape (nspec, npix), or None
+        Nonzero, NaN included, marks a bad pixel. None marks the pixels where
+        ivar == 0.
     nsigma : sequence of float, optional
         The thresholds of the passes, in order; at least one.
     maxbadpix : int, optional
@@ -415,6 +416,9 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
     """
 
     nspec, npix = flux.shape
+    name = "mask"
+    if mask is None:
+        mask, name = ivar == 0, "ivar"
 
     nbadpix = np.sum(mask != 0, axis=1)
     objmask = nbadpix <= maxbadpix
@@ -423,10 +427,10 @@ def covar_iter_mask(flux, ivar, mask, nsigma=np.array([20, 8, 6]), maxbadpix=64)
 
     if nmask < npix:
         raise _LegacyError(
-            f"Not enough good spectra: {nmask} spectra have at most maxbadpix = {maxbadpix} bad pixels in mask, and at least npix = {npix} are needed"
+            f"Not enough good spectra: {nmask} spectra have at most maxbadpix = {maxbadpix} bad pixels in {name}, and at least npix = {npix} are needed"
         )
     # The checks name rows of flux, which standard_scale cannot know.
-    _require_good_pixel(mask[wmask] != 0, wmask, "mask")
+    _require_good_pixel(mask[wmask] != 0, wmask, name)
 
     chimask = np.zeros(mask[wmask].shape)
 

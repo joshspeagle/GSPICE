@@ -358,15 +358,19 @@ def test_spectrum_that_clipping_masks_completely_is_rejected(
         covar_iter_mask(**kwargs, nsigma=nsigma, maxbadpix=maxbadpix)
 
 
-@pytest.mark.parametrize("nsigma", [[6], []])
-def test_kept_spectrum_without_a_good_pixel_in_mask_is_rejected(nsigma):
-    # maxbadpix 64 keeps the fully masked row 5. 1fbab9f raised ValueError, "array must
-    # not contain infs or NaNs", in the first pass, and UnboundLocalError for an empty
-    # nsigma (D-32).
+@pytest.mark.parametrize(
+    ("nsigma", "name"), [([6], "mask"), ([], "mask"), ([6], "ivar")]
+)
+def test_kept_spectrum_without_a_good_pixel_in_mask_is_rejected(nsigma, name):
+    # maxbadpix 64 keeps the fully masked row 5, whose ivar is 0 everywhere. 1fbab9f
+    # raised ValueError, "array must not contain infs or NaNs", in the first pass,
+    # UnboundLocalError for an empty nsigma (D-32), and AxisError for mask=None (D-14).
     kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
     kwargs["mask"][5] = 1
     kwargs["ivar"][5] = 0
-    with pytest.raises(ValueError, match="^mask: no good pixel in rows 5$"):
+    if name == "ivar":
+        kwargs["mask"] = None
+    with pytest.raises(ValueError, match=f"^{name}: no good pixel in rows 5$"):
         covar_iter_mask(**kwargs, nsigma=nsigma)
 
 
@@ -375,3 +379,18 @@ def test_empty_nsigma_without_a_fully_masked_spectrum_still_raises_unbound_local
     kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
     with pytest.raises(UnboundLocalError):
         covar_iter_mask(**kwargs, nsigma=[])
+
+
+def test_mask_none_names_ivar_when_too_few_spectra_are_kept():
+    with pytest.raises(ValueError, match="bad pixels in ivar"):
+        covar_iter_mask(EYE[:2], EYE[:2], None)
+
+
+def test_mask_none_marks_the_pixels_where_ivar_is_0():
+    # ivar is 0 exactly where the mask of D1 is not 0, and maxbadpix 8 drops 8 spectra.
+    # 1fbab9f raised numpy's AxisError (record behaviour.covar_iter_mask.mask_none).
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.nsig10_5p5.maxbad8"])
+    expected = covar_iter_mask(**kwargs)
+    actual = covar_iter_mask(**kwargs | {"mask": None})
+    for value, wanted in zip(actual, expected, strict=True):
+        assert same(value, wanted)

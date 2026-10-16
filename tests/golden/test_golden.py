@@ -105,6 +105,7 @@ CHANGED = {
     "behaviour.gp_interp.irange_empty": "D-18",
     "standard_scale.E.with_fully_masked": "Q1",
     "behaviour.standard_scale.fully_masked_nan": "Q1",
+    "behaviour.covar_iter_mask.mask_none": "D-14",
 }
 
 
