@@ -103,6 +103,8 @@ ATOL = {
 CHANGED = {
     "behaviour.gp_interp.irange_two_elements_assert": "D-01",
     "behaviour.gp_interp.irange_empty": "D-18",
+    "standard_scale.E.with_fully_masked": "Q1",
+    "behaviour.standard_scale.fully_masked_nan": "Q1",
 }
 
 
@@ -214,10 +216,7 @@ def test_golden_case_matches_2022_outputs(case_id, implementation):
     case = GOLDEN.cases[case_id]
     kwargs = GOLDEN.arguments(case)
     pristine = {k: v.copy() for k, v in kwargs.items() if isinstance(v, np.ndarray)}
-    with warnings.catch_warnings():
-        # The fully masked spectrum of standard_scale.E divides 0 by 0.
-        warnings.simplefilter("ignore", RuntimeWarning)
-        result = implementation(case["module"], case["function"])(**kwargs)
+    result = implementation(case["module"], case["function"])(**kwargs)
     for name, value in pristine.items():
         assert kwargs[name].tobytes() == value.tobytes(), f"input {name} was modified"
     outputs = case["outputs"]

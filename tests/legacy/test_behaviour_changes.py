@@ -308,3 +308,70 @@ def test_refscale_of_finite_input_equals_the_2022_expression(dtype):
     wt = 1 - np.where(mask == 0, 0, 1)
     expected = np.sqrt(np.sum(ivar * wt, axis=1) / np.sum(wt, axis=1))
     assert same(standard_scale(spec, ivar, mask)[1], expected)
+
+
+@pytest.mark.parametrize("fill", [1.0, 0.5, np.nan])
+def test_fully_masked_spectrum_is_rejected(fill):
+    # Row 1 of E is bad at every pixel by the 2022 mask rule, which also counts 0.5 and
+    # NaN as bad. For each fill, 1fbab9f returned NaN in its refscale and in every value
+    # of Dvec and refmean, as the record behaviour.standard_scale.fully_masked_nan holds
+    # for a fill of 1.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["standard_scale.E.with_fully_masked"])
+    kwargs["mask"] = kwargs["mask"].astype(float)
+    kwargs["mask"][1] = fill
+    with pytest.raises(ValueError, match="^mask: no good pixel in rows 1$"):
+        standard_scale(**kwargs)
+
+
+def test_rejection_names_the_first_10_rows_and_the_count():
+    # 1fbab9f returned NaN in every value of Dvec, refscale and refmean.
+    rows = r"0, 1, 2, 3, 4, 5, 6, 7, 8, 9, \.\.\. \(12 rows\)$"
+    with pytest.raises(ValueError, match=f"^ivar: no good pixel in rows {rows}"):
+        standard_scale(np.zeros((12, 3)), np.zeros((12, 3)))
+
+
+def test_one_dimensional_input_keeps_the_maskinterp_error():
+    # 1fbab9f failed the 2-D assert of maskinterp, which runs before the check for
+    # spectra without a good pixel.
+    with pytest.raises(AssertionError, match="^yval: expected a 2-D array"):
+        standard_scale(np.zeros(3), np.zeros(3))
+
+
+@pytest.mark.parametrize(("maxbadpix", "row3_bad"), [(64, 0), (47, 48)])
+@pytest.mark.parametrize("nsigma", [[6], [6, 6]])
+def test_spectrum_that_clipping_masks_completely_is_rejected(
+    nsigma, maxbadpix, row3_bad
+):
+    # Row 11 of D1 is good only at pixels 24 to 26, and a 20 sigma spike at pixel 25
+    # makes the first pass flag all three. With maxbadpix 47, row 3, given 48 bad
+    # pixels, and row 1930 are dropped, so row 11 is row 10 of the kept spectra.
+    # 1fbab9f returned a covariance of NaN for nsigma [6], and for [6, 6] raised
+    # ValueError, "array must not contain infs or NaNs", in the second pass.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
+    flux, ivar, mask = kwargs["flux"], kwargs["ivar"], kwargs["mask"]
+    mask[11] = 1
+    mask[11, 24:27] = 0
+    mask[3, :row3_bad] = 1
+    ivar[mask != 0] = 0
+    flux[11, 25] += 20 / np.sqrt(ivar[11, 25])
+    with pytest.raises(ValueError, match="^nsigma: no good pixel in rows 11$"):
+        covar_iter_mask(**kwargs, nsigma=nsigma, maxbadpix=maxbadpix)
+
+
+@pytest.mark.parametrize("nsigma", [[6], []])
+def test_kept_spectrum_without_a_good_pixel_in_mask_is_rejected(nsigma):
+    # maxbadpix 64 keeps the fully masked row 5. 1fbab9f raised ValueError, "array must
+    # not contain infs or NaNs", in the first pass, and UnboundLocalError for an empty
+    # nsigma (D-32).
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
+    kwargs["mask"][5] = 1
+    kwargs["ivar"][5] = 0
+    with pytest.raises(ValueError, match="^mask: no good pixel in rows 5$"):
+        covar_iter_mask(**kwargs, nsigma=nsigma)
+
+
+def test_empty_nsigma_without_a_fully_masked_spectrum_still_raises_unbound_local_error():
+    # D-32 stays: 1fbab9f raised UnboundLocalError, as no pass binds thismask.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
+    with pytest.raises(UnboundLocalError):
+        covar_iter_mask(**kwargs, nsigma=[])
