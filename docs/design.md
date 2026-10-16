@@ -697,6 +697,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 - (d) Batched small-pattern infill.
 - (e) Full-rank noise-model infill from chol(C_s) and P_{:,G} = L⁻ᵀ(L⁻¹ E_G), without `dpotri`.
 - (f) Blockwise prediction on spectra with their own bad pixels: one factor for the shared part of G and a rank-|E_s| update for the extra bad pixels E_s of each spectrum.
+- (g) No copy of X in `solve_pattern`: a sum of products over the runs of pixels outside G, or a zeroing of G in the rows that the caller already gathered. PR 2.9 (#31) measured the sum over runs faster with one shared pattern and not faster with one spectrum per pattern.
 
 ## 13. Packaging
 
@@ -730,7 +731,7 @@ path = "src/gspice/__init__.py"           # __version__ = "2.0.0.dev0" (Q8)
 
 ## 14. Phase plan
 
-Each line is one issue, one branch and one pull request with a single goal; line 5.6 is six such lines, one per optimization. Brackets give dependencies. "BC" marks an item with a behaviour change or a BC-new item, which adds its CHANGELOG line and its old-and-new test (section 10). Every pull request keeps the golden suite green. A phase ends when its items are merged and its "Done when" condition holds.
+Each line is one issue, one branch and one pull request with a single goal; line 5.6 is one such line per gated optimization of section 12. Brackets give dependencies. "BC" marks an item with a behaviour change or a BC-new item, which adds its CHANGELOG line and its old-and-new test (section 10). Every pull request keeps the golden suite green. A phase ends when its items are merged and its "Done when" condition holds.
 
 **Phase 2: package and legacy.** Done when every golden test passes through `gspice.legacy`, with only the records of section 7.1 marked xfail, and `benchmarks/run.py` has cases 1, 2 and 7.
 
@@ -771,7 +772,7 @@ Each line is one issue, one branch and one pull request with a single goal; line
 3. Noise-aware model, full rank; `slow` test of the noise-free estimator. [3.4]
 4. Noise-aware model, rank K. [5.1, 5.3]
 5. `benchmarks/run.py` cases 3 to 6 and 8, and a report against 2022. [5.4, 4.3]
-6. Each gated optimization of section 12, in its own pull request (5.6a to 5.6f), only if 5.5 shows a gain. [5.5]
+6. Each gated optimization (x) of section 12, in its own pull request 5.6x, only if 5.5 shows a gain. [5.5]
 7. Wheel and sdist check. [5.1 to 5.4]
 
 **Later phases**
