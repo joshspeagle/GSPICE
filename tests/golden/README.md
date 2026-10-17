@@ -11,6 +11,7 @@ It stores the inputs and outputs here.
 | `inputs_*.npz`, `golden_*.npz` | Stored inputs and outputs |
 | `_golden.py` | Rebuilds the dataset arrays bit for bit, checks their sha256, decodes the outputs (numpy only) |
 | `test_golden.py` | The tests and the tolerance table |
+| `test_new_api.py` | The tests of the new API against the same outputs and tolerances, and of its BC-new results (design section 11) |
 | `generate_golden.py` | The generator |
 
 ## Run
@@ -79,3 +80,4 @@ The outputs are byte-identical only with the Python, numpy and scipy versions an
 
 The `implementation` fixture in `test_golden.py` maps a 2022 (module, function) to the callable under test.
 `CHANGED` lists the records that a behaviour change of `gspice.legacy` alters, with the inventory ID of the change; their tests must fail (`xfail(strict=True)`).
+`NEW_API` in `test_new_api.py` maps a 2022 function to the new function that replaces it, and `BC_NEW` lists the records that a BC-new decision changes.

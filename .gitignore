@@ -9,3 +9,4 @@ test
 .coverage
 __pycache__/
 .ruff_cache/
+.hypothesis/

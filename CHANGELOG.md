@@ -12,6 +12,7 @@
 - A test coverage floor of 90% for the code outside `gspice.legacy`.
 - pre-commit hooks that run ruff.
 - `benchmarks/run.py`, which times the conditioning primitives of pixelwise prediction and infill and the 2022 `gp_interp`, and prints the timings and the setup as JSON.
+- `gspice.scale`, `gspice.unscale` and `gspice.snr`. `scale` interpolates each spectrum over its bad pixels and scales it to unit mean noise, `unscale` returns scaled values and variances to flux units, and `snr` gives the median signal-to-noise ratio of each spectrum.
 
 ### Removed
 
@@ -34,3 +35,7 @@
 - `standard_scale` ignores a non-finite ivar at a bad pixel. The 2022 code made the refscale of that spectrum NaN, and with it every value of Dvec and refmean, so `get_chimask` and `covar_iter_mask` raised ValueError.
 - `standard_scale` and `get_chimask` raise `_LegacyError` for a spectrum without a good pixel, and name its row. `covar_iter_mask` raises it for a kept spectrum that its mask or the clipping masks completely, and names its row in `flux`. The 2022 code returned NaN or raised another error.
 - `covar_iter_mask` accepts `mask=None`, which marks the pixels where ivar == 0, also for `maxbadpix`. The 2022 code raised numpy's AxisError.
+- `scale` raises ValueError for a non-finite flux at a good pixel, a non-finite or negative ivar at a pixel not in `mask`, and zero spectra without `refmean`. For such inputs, the 2022 `standard_scale` returned NaN or a wrong refscale.
+- `scale` counts a pixel with ivar = 0 as bad also where `mask` is given. It interpolates the flux of such a pixel and leaves the pixel out of refscale. The 2022 `standard_scale` with a mask used that flux and counted the 0 in the mean ivar.
+- `scale` casts flux to float64 before it interpolates. The 2022 `standard_scale` interpolated in the dtype of the flux, so it truncated the interpolated values of integer flux and rounded those of float32 flux to float32.
+- `scale` and `snr` raise ValueError for a spectrum without a good pixel, and name its row. For such a spectrum, the 2022 `standard_scale` returned NaN in every value of Dvec and refmean.

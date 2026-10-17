@@ -1,5 +1,6 @@
 """Gaussian pixelwise conditional estimation for spectra."""
 
+from ._spectra import scale, snr, unscale
 from .legacy import (
     cholesky_inv,
     covar,
@@ -26,7 +27,10 @@ __all__ = [
     "legacy",
     "maskinterp",
     "maskinterp1",
+    "scale",
+    "snr",
     "standard_scale",
     "submatrix_inv",
     "submatrix_inv_mult",
+    "unscale",
 ]

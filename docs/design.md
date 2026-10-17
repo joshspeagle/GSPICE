@@ -78,7 +78,7 @@ The bad set is always `bad = (mask != 0) | (ivar == 0)` in the new API (Q11). Va
 - m_b is the training mean of a_s f̃_s in S/N bin b (one bin by default), weighted by the user weights ω_s (section 4.1) when they are given.
 - c is in flux units, because it is a continuum level such as 0.95 (paper l.722).
 
-The inverse, used once, in `unscale`: f = (x + m)/a + c, var_f = var/a², cov_f = cov/a². For the noise-aware model, a = 1, m = μ and c = 0.
+The inverse: f = (x + m)/a + c and var_f = var/a² in `unscale`, and cov_f = cov/a² in `Repaired.covariance` (section 6). For the noise-aware model, a = 1, m = μ and c = 0.
 
 ### 3.3 Model
 
@@ -619,7 +619,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 - Paths: precision, with A26 raising at κ 1e14; Woodbury, with A28; guard weights (nguard 0, 1, 5, about npix/3 on the kernel of length 5 at npix ≤ 60, where the error relative to κε is largest, and ≥ npix − 1, the exact prior); pattern solve (means, variances, covariance, χ², draws through R); block χ²; noise-model C_s.
 - Tolerances, with κ the condition number of the matrix scaled to unit diagonal: dense routes 10κε in |Δμ|/σ, |Δvar|/var and |Δχ²|/(χ² + |T|) (worst measured 0.98κε over 86 matrices); Woodbury routes 10ε·κ_W, and 1e-9 when |O| ≥ 2K and κ_W ≤ 1e8 (10κε failed 108 of 526 swept results; 10ε·κ_W none).
 
-**Property tests** (hypothesis, at most 50 examples, npix ≤ 60, a profile with `derandomize=True` and `database=None`; `.hypothesis/` in `.gitignore`).
+**Property tests** (hypothesis, at most 50 examples, npix ≤ 60, a profile with `derandomize=True`, `database=None` and `deadline=None`; `.hypothesis/` in `.gitignore`).
 
 - C → αC leaves the conditional mean unchanged and multiplies the covariance by α.
 - Conditional covariances are symmetric and positive semi-definite.
@@ -747,10 +747,10 @@ Each line is one issue, one branch and one pull request with a single goal; line
 
 **Phase 3: model and prediction.** Done when the equivalence, BC-new and exact-identity tests of section 11 pass and the top-level 2022 names warn.
 
-1. `_spectra`: validation, interpolation, dilation, `scale`, `unscale`, `snr`; equivalence with `standard_scale`; BC-new tests of Q1, Q11 and Q15 (BC). [2.1]
+1. `_spectra`: validation, interpolation, `scale`, `unscale`, `snr`; equivalence with `standard_scale`; BC-new tests of Q1, Q11 and Q15 (BC). [2.1]
 2. `Model` (dense), `save`, `load`. [3.1, 2.8]
 3. `pixelwise`, `Prediction`, chunking, cache, logging, progress; equivalence with `gp_interp`; the D3 test of S11.4 (BC); benchmark case 1 on `pixelwise`. [3.2]
-4. `fit` (dense, cumulative and 2022 modes, centre, weights); equivalence with `covar_iter_mask`; BC-new tests of S11.1, S11.2, Q2, and the `fit` parts of Q1 and Q11 (BC). [3.3]
+4. `fit` (dense, cumulative and 2022 modes, centre, weights), with the dilation of `_spectra`; equivalence with `covar_iter_mask`; BC-new tests of S11.1, S11.2, Q2, and the `fit` parts of Q1 and Q11 (BC). [3.3]
 5. `infill`, `Repaired` (replace, ignore, chi2, covariance); equivalence with `gaussian_estimate`; the D3 test of S11.4 (BC); benchmark case 2 on `infill`. [3.3]
 6. Draws in `infill`. [3.5]
 7. `finite_sample_factor`, `inflate`, exact in-sample identity tests, held-out f_s test. [3.4, 3.5, 3.8]
