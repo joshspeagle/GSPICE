@@ -8,6 +8,7 @@ from gspice import (
     Model,
     finite_sample_factor,
     fit,
+    fit_blocks,
     infill,
     legacy,
     pixelwise,
@@ -25,6 +26,7 @@ REJECT_EMPTY = {
     "snr": snr,
     "pixelwise": partial(pixelwise, MODEL),
     "infill": partial(infill, MODEL),
+    "fit_blocks": partial(fit_blocks, MODEL),
 }
 # fit drops a spectrum without a good pixel, which the others reject.
 FLUX_IVAR_MASK = pytest.mark.parametrize(
@@ -114,11 +116,14 @@ def test_spectra_without_a_good_pixel_are_counted_and_the_first_10_named(functio
 
 # Four pixels, one more than MODEL has.
 WIDER = {"flux": np.ones((2, 4)), "ivar": np.ones((2, 4)), "mask": np.zeros((2, 4))}
-# The checks that pixelwise and infill share.
+# The checks of the functions that take a model and spectra.
 MODEL_ARGUMENTS = [
     pytest.param({"model": 5}, TypeError, "model", id="model=5"),
     pytest.param(WIDER, ValueError, "flux", id="npix=4"),
     pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
+]
+# The checks of inflate.
+INFLATE_ARGUMENTS = [
     pytest.param({"inflate": 1}, TypeError, "inflate", id="inflate=1"),
     # Design section 4.3: f_s is derived only for mean-centred, unweighted models.
     *(
@@ -134,15 +139,16 @@ MODEL_ARGUMENTS = [
         )
     ),
 ]
+# The checks of nguard.
+NGUARD_ARGUMENTS = [
+    pytest.param({"nguard": -1}, ValueError, "nguard", id="nguard=-1"),
+    pytest.param({"nguard": 2.0}, TypeError, "nguard", id="nguard=2.0"),
+]
 
 
 @pytest.mark.parametrize(
     ("changes", "error", "name"),
-    [
-        *MODEL_ARGUMENTS,
-        pytest.param({"nguard": -1}, ValueError, "nguard", id="nguard=-1"),
-        pytest.param({"nguard": 2.0}, TypeError, "nguard", id="nguard=2.0"),
-    ],
+    [*MODEL_ARGUMENTS, *INFLATE_ARGUMENTS, *NGUARD_ARGUMENTS],
 )
 def test_an_invalid_argument_of_pixelwise_is_rejected(changes, error, name):
     with pytest.raises(error, match=f"^{name}: "):
@@ -175,6 +181,7 @@ def test_an_invalid_argument_of_simulate_is_rejected(changes, error, name):
     ("changes", "error", "name"),
     [
         *MODEL_ARGUMENTS,
+        *INFLATE_ARGUMENTS,
         # An integer array would read as pixel indices (D-70).
         pytest.param(
             {"replace": np.ones((2, 3), int)}, TypeError, "replace", id="replace=int"
@@ -210,6 +217,36 @@ def test_an_invalid_argument_of_simulate_is_rejected(changes, error, name):
 def test_an_invalid_argument_of_infill_is_rejected(changes, error, name):
     with pytest.raises(error, match=f"^{name}: "):
         infill(**({"model": MODEL} | SPECTRA | changes))
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "name"),
+    [
+        *MODEL_ARGUMENTS,
+        *NGUARD_ARGUMENTS,
+        pytest.param({"width": 0}, ValueError, "width", id="width=0"),
+        pytest.param({"width": 4}, ValueError, "width", id="width=4"),
+        pytest.param({"width": 2.0}, TypeError, "width", id="width=2.0"),
+        pytest.param({"stride": 0}, ValueError, "stride", id="stride=0"),
+        pytest.param({"stride": True}, TypeError, "stride", id="stride=True"),
+        pytest.param({"nguard": 2**63}, ValueError, "nguard", id="nguard=2^63"),
+        pytest.param({"percentile": 0}, ValueError, "percentile", id="percentile=0"),
+        pytest.param(
+            {"percentile": 100}, ValueError, "percentile", id="percentile=100"
+        ),
+        pytest.param(
+            {"percentile": np.nan}, ValueError, "percentile", id="percentile=nan"
+        ),
+        pytest.param(
+            {"percentile": "50"}, TypeError, "percentile", id="percentile='50'"
+        ),
+    ],
+)
+def test_an_invalid_argument_of_fit_blocks_is_rejected(changes, error, name):
+    # Valid otherwise: two spectra suffice at the percentile 50.
+    arguments = {"model": MODEL} | SPECTRA | {"width": 2, "percentile": 50}
+    with pytest.raises(error, match=f"^{name}: "):
+        fit_blocks(**(arguments | changes))
 
 
 @pytest.mark.parametrize(
