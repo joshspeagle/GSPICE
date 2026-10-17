@@ -194,7 +194,7 @@ N_k counts conditioning pixels only; guard and ignored pixels do not count. The 
 
 f_s is derived only for dense full-rank, unweighted, mean-centred models, binned or not (A13), with the N_s of the spectrum's bin. They report f_s, or NaN where N_s − N_k − N_* − 2 ≤ 0 or N_* = 0. Other kinds report 1, as no factor is derived, although their held-out factor reached 1.58 to 2.56 at N_s 200.
 
-`inflate=True` multiplies var, every covariance and the spread of the draws by f_s(N_s, N_k, 1), and χ² uses the inflated covariance; `Repaired.fs` is then f_s(N_s, N_k, dof)/f_s(N_s, N_k, 1), so χ²/(dof·fs) stays the calibration statistic. This factor calibrates every fixed linear combination of the predicted pixels; f_s(N_s, N_k, N_*) calibrates only the joint χ² (a fixed combination measured 2.474 ± 0.003 at (60, 20, 8), where f_s(·, 1) = 2.474 and f_s(·, 8) = 3.052). `inflate=True` raises ValueError for a model without a derived f_s, and, naming N_s and N_k, where f_s(N_s, N_k, 1) is NaN; where only f_s(N_s, N_k, dof) is NaN, `Repaired.fs` is NaN.
+`inflate=True` multiplies var and every covariance by f_s(N_s, N_k, 1) and the deviation of each draw from the mean by f_s(N_s, N_k, 1)^½. χ² uses the inflated covariance, and `Repaired.fs` is then f_s(N_s, N_k, dof)/f_s(N_s, N_k, 1), so χ²/(dof·fs) stays the calibration statistic. This factor calibrates every fixed linear combination of the predicted pixels; f_s(N_s, N_k, N_*) calibrates only the joint χ² (a fixed combination measured 2.474 ± 0.003 at (60, 20, 8), where f_s(·, 1) = 2.474 and f_s(·, 8) = 3.052). `inflate=True` raises ValueError for a model without a derived f_s, and, naming N_s and N_k, where f_s(N_s, N_k, 1) is NaN; where only f_s(N_s, N_k, dof) is NaN, `Repaired.fs` is NaN.
 
 ## 5. Public API
 
@@ -449,7 +449,7 @@ All are frozen dataclasses with `eq=False`. Arrays are read-only.
 | | `snr`, `labels` | (nspec,) | S/N, population label |
 
 - **Draws.** Normals come from `rng.standard_normal((n, npix))` per chunk of n rows, in row order, and nothing else draws from rng in that call. Spectrum s uses its entries at M_s. The normals therefore do not depend on the chunk size or the grouping, and the draws agree to rounding.
-- **Covariance storage.** `Repaired` keeps each pattern's C_MM in working units and divides by a_s² (and multiplies by f_s(N_s, N_k, 1) with `inflate=True`) on access. At one 30-pixel pattern per spectrum this takes 7.2 KB per spectrum (720 MB per 1e5), so it is opt-in.
+- **Covariance storage.** `Repaired` keeps each pattern's C_MM in working units, multiplied by f_s(N_s, N_k, 1) with `inflate=True`, and divides it by a_s² on access. At one 30-pixel pattern per spectrum this takes 7.2 KB per spectrum (720 MB per 1e5), so it is opt-in.
 - **Calibration from any result.** `Calibration(z2=r.chi2[:, None], n=r.dof[:, None], fs=r.fs[:, None])` calibrates a held-out infill whose replace and ignore masks do not depend on the data. `Calibration(z2=p.z**2, n=1, fs=1)` calibrates a pixelwise result computed with `inflate=True`.
 
 ## 7. Legacy layer and deprecation policy

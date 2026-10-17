@@ -153,6 +153,11 @@ class Model:
         ):
             object.__setattr__(self, name, value)
 
+    @property
+    def _derived(self) -> bool:
+        # The kinds of model for which f_s is derived (design section 4.3, A13).
+        return self.center is None and not self.weighted
+
     def __reduce__(self) -> tuple[partial["Model"], tuple[()]]:
         # Pickle, copy and deepcopy rebuild through __init__, so they check the fields
         # again. Keywords keep a pickle valid when a later version adds a field.
@@ -218,6 +223,23 @@ class Model:
             array.flags.writeable = False
         self._cache["guard", b] = nguard, W, var
         return W, var
+
+
+def sample_factor(
+    n_train: ArrayLike, n_cond: ArrayLike, n_pred: ArrayLike
+) -> NDArray[np.float64]:
+    # f_s of design section 4.3, NaN where n_pred < 1 or n_train - n_cond - n_pred - 2
+    # <= 0 (then n_train > 3 for n_cond >= 0, so every denominator is positive). The
+    # counts become float64, which holds every integer below 2^53, so an unsigned dtype
+    # cannot wrap around.
+    N, k, m = np.broadcast_arrays(
+        *(np.asarray(count, dtype=np.float64) for count in (n_train, n_cond, n_pred))
+    )
+    defined = (m >= 1) & (N - k - m - 2 > 0)
+    factor = np.full(N.shape, np.nan)
+    N, k, m = N[defined], k[defined], m[defined]
+    factor[defined] = (1 + 1 / N) * (N - 2) / (N - k - 2) * (N - 1) / (N - k - m - 2)
+    return factor
 
 
 def fit(

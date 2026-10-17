@@ -54,13 +54,17 @@ def conditional(C, G, X, T=()):
     return mean, np.array(cov, float), np.array(chi2, float)
 
 
+def window(i, nguard, npix):
+    # The guard window of pixel i: the pixels within nguard of it.
+    return range(max(0, i - nguard), min(npix, i + nguard + 1))
+
+
 def guard_conditional(C, nguard, X, pixels):
     # Mean (nspec, len(pixels)) and variance (len(pixels),) of each pixel given the
     # pixels farther than nguard from it, as pixelwise predicts it.
-    npix = len(C)
     means, variances = [], []
     for i in pixels:
-        g = range(max(0, i - nguard), min(npix, i + nguard + 1))
+        g = window(i, nguard, len(C))
         mean, cov, _ = conditional(C, g, X)
         means.append(mean[:, i - g.start])
         variances.append(cov[i - g.start, i - g.start])

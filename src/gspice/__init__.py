@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from . import legacy
 from ._datasets import Simulation, simulate
+from ._diagnostics import finite_sample_factor
 from ._model import Model, fit, load, save
 from ._predict import Prediction, Repaired, infill, pixelwise
 from ._spectra import scale, snr, unscale
@@ -21,6 +22,7 @@ __all__ = [
     "Prediction",
     "Repaired",
     "Simulation",
+    "finite_sample_factor",
     "fit",
     "infill",
     "legacy",
