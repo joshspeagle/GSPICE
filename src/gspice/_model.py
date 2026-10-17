@@ -153,6 +153,11 @@ class Model:
         ):
             object.__setattr__(self, name, value)
 
+    @property
+    def _derived(self) -> bool:
+        # The kinds of model for which f_s is derived (design section 4.3, A13).
+        return self.center is None and not self.weighted
+
     def __reduce__(self) -> tuple[partial["Model"], tuple[()]]:
         # Pickle, copy and deepcopy rebuild through __init__, so they check the fields
         # again. Keywords keep a pickle valid when a later version adds a field.

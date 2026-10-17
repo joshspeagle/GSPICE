@@ -11,6 +11,7 @@ from gspice import (
     Model,
     _model,
     _spectra,
+    finite_sample_factor,
     fit,
     infill,
     pixelwise,
@@ -25,6 +26,7 @@ from oracle import (
     conditional,
     guard_conditional,
     random_spd,
+    window,
 )
 
 EPS = np.finfo(float).eps
@@ -233,25 +235,35 @@ def test_the_prior_needs_no_precision_matrix():
 
 
 @pytest.mark.parametrize("name", FUNCTIONS)
-def test_a_covariance_that_fails_its_check_raises_before_any_chunk(monkeypatch, name):
+@pytest.mark.parametrize("inflate", [False, True], ids=["singular", "inflate"])
+def test_a_bin_that_fails_a_check_raises_before_any_chunk(monkeypatch, name, inflate):
     monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
     model, flux, ivar, mask = two_bins(1e2)
-    singular = Model(MEANS, (model.cov[0], SINGULAR), (100, 100), edges=model.edges)
+    if inflate:
+        # With N_s 5 in bin 1, N_s - N_k - 3 <= 0 for N_k >= 2: pixel 0 of pixelwise
+        # has N_k 12 - 3, and row 1, row 4 below, replaces its 3 bad pixels.
+        model = dataclasses.replace(model, n_train=(100, 5))
+        where = {"pixelwise": "bin 1, pixel 0", "infill": "row 4"}[name]
+        error, message = ValueError, rf"^inflate: .* N_s = 5 and N_k = 9 at {where}$"
+    else:
+        model = dataclasses.replace(model, cov=(model.cov[0], SINGULAR))
+        error, message = LinAlgError, r"^model: cov\[1\] is not positive definite"
     # The spectra of bin 0 first, so that the chunks of bin 1 come last.
     rows = np.argsort(BINS, kind="stable")
     calls = []
-    with pytest.raises(LinAlgError, match=r"^model: cov\[1\] is not positive definite"):
+    with pytest.raises(error, match=message):
         FUNCTIONS[name](
-            singular,
+            model,
             flux[rows],
             ivar[rows],
             mask[rows],
+            inflate=inflate,
             progress=lambda *args: calls.append(args),
         )
     assert calls == []
-    # The spectra of bin 0 alone never need the precision matrix of bin 1.
+    # The spectra of bin 0 alone never need bin 1.
     rows = BINS == 0
-    FUNCTIONS[name](singular, flux[rows], ivar[rows], mask[rows])
+    FUNCTIONS[name](model, flux[rows], ivar[rows], mask[rows], inflate=inflate)
 
 
 def test_a_guard_window_that_fails_its_factorization_names_the_bin(monkeypatch):
@@ -323,7 +335,8 @@ def test_a_call_on_a_new_model_logs_its_timings_at_debug(caplog, name, count):
             FUNCTIONS["infill"],
             [((0, 3), np.float64)] * 2
             + [((0, 3), np.bool_)] * 2
-            + [((0,), np.float64), ((0,), np.int64), ((0, 3), np.float64)],
+            + [((0,), np.float64), ((0,), np.int64), ((0,), np.float64)]
+            + [((0, 3), np.float64)],
         ),
     ],
     ids=["pixelwise", "infill"],
@@ -390,6 +403,18 @@ def test_infill_matches_the_60_digit_reference(center, kappa, given):
         assert abs(result.chi2[s] - chi2[0]) <= tol * (chi2[0] + t.size)
 
 
+# The seed of the normals of the tests that compare draws with REPLACE and IGNORE, and
+# the bound in sigma on the difference of two triangular solves of them. A draw adds
+# R_MM^-T z_M to the mean. The solve errs by at most
+# gamma_m sqrt(m) kappa(R_MM) sqrt(lambda_max(C_MM)) |z_M| in the 2-norm, with
+# gamma_m = m u / (1 - m u), u = 2^-53 (Higham 2002, Theorem 8.5) and
+# kappa(R_MM)^2 = kappa(C_MM). In the patterns of two_bins(1e2), m <= 5,
+# kappa(C_MM) <= 18 and sqrt(lambda_max(C_MM)) <= 2.9 sigma, and with this seed
+# |z_M| < 3.5. Two solves then differ by at most
+# 2 gamma_5 sqrt(5) sqrt(18) 2.9 x 3.5 sigma = 1.1e-13 sigma.
+DRAW_SEED, DRAW_TOL = 8, 1.1e-13
+
+
 def test_slices_and_chunks_of_infill_agree_with_one_call_to_rounding(monkeypatch):
     model, flux, ivar, mask = two_bins(1e2, center=0.9)
 
@@ -398,17 +423,18 @@ def test_slices_and_chunks_of_infill_agree_with_one_call_to_rounding(monkeypatch
         sets = {"replace": REPLACE[rows], "ignore": IGNORE[rows]}
         return infill(model, *spectra, **sets, covariance=True, rng=rng)
 
-    whole = repaired(slice(None), np.random.default_rng(8))
+    whole = repaired(slice(None), np.random.default_rng(DRAW_SEED))
     # The pattern of rows 0 and 6 spans slices and chunks, and each row alone is a
     # grouping of its own (design section 11). Consecutive slices share a generator,
     # so that they draw the normals of one call.
     singles = [slice(s, s + 1) for s in range(len(flux))]
     results = []
     for spans in ((slice(0, 3), slice(3, 4), slice(4, None)), singles):
-        rng = np.random.default_rng(8)
+        rng = np.random.default_rng(DRAW_SEED)
         results += [(rows, repaired(rows, rng)) for rows in spans]
     monkeypatch.setattr(_spectra, "CHUNK", 3 * NPIX)
-    results.append((slice(None), repaired(slice(None), np.random.default_rng(8))))
+    rng = np.random.default_rng(DRAW_SEED)
+    results.append((slice(None), repaired(slice(None), rng)))
     # Every grouping factorizes the same P_GG, which gives the variances and
     # covariances, and then divides them by the same a^2. The means and chi2 also come
     # from products and solves with other numbers of spectra, whose rounding can
@@ -418,16 +444,10 @@ def test_slices_and_chunks_of_infill_agree_with_one_call_to_rounding(monkeypatch
     sigma = np.sqrt(whole.var)
     dflux = 2 * tol * sigma + 4 * EPS * (np.abs(whole.flux) + 0.9)
     dchi2 = 2 * tol * (whole.chi2 + whole.dof)
-    # A draw adds R_MM^-T z_M to the mean, with the same R_MM and normals z_M in every
-    # grouping. The triangular solve errs by at most
-    # gamma_m sqrt(m) kappa(R_MM) sqrt(lambda_max(C_MM)) |z_M| in the 2-norm, with
-    # gamma_m = m u / (1 - m u), u = 2^-53 (Higham 2002, Theorem 8.5) and
-    # kappa(R_MM)^2 = kappa(C_MM). In these patterns m <= 5, kappa(C_MM) <= 18,
-    # sqrt(lambda_max(C_MM)) <= 2.9 sigma and |z_M| < 3.5, so two solves differ by at
-    # most 2 gamma_5 sqrt(5) sqrt(18) 2.9 x 3.5 sigma = 1.1e-13 sigma. Two draws then
-    # agree within that and the 2 tol sigma of the means, and round as flux does
+    # Every grouping draws with the same R_MM and normals z_M, so two draws agree
+    # within DRAW_TOL sigma and the 2 tol sigma of the means, and round as flux does
     # (design section 11).
-    ddraws = (2 * tol + 1.1e-13) * sigma + 4 * EPS * (np.abs(whole.draws) + 0.9)
+    ddraws = (2 * tol + DRAW_TOL) * sigma + 4 * EPS * (np.abs(whole.draws) + 0.9)
     for rows, result in results:
         for name in ("var", "replaced", "ignored", "dof"):
             assert same(getattr(result, name), getattr(whole, name)[rows])
@@ -654,3 +674,112 @@ def test_the_in_sample_mean_of_z2_is_exact_for_any_data(center, weighted):
     assert np.all(np.abs(w @ z**2 / w.sum() - expected) <= 1e-12)
     result = infill(model, flux, ivar, replace=PIXELS % 4 == 1, ignore=PIXELS % 4 == 2)
     assert abs(w @ (result.chi2 / result.dof) / w.sum() - expected) <= 1e-12
+
+
+@pytest.mark.parametrize("nbin", [1, 2])
+@pytest.mark.parametrize("nguard", [2, NPIX - 1])
+def test_inflate_multiplies_the_variance_of_each_pixel_by_its_f_s(nguard, nbin):
+    model, flux, ivar, mask = two_bins(1e2)
+    # The first nbin bins, with an N_s that differs between them.
+    model = Model(
+        MEANS[:nbin], model.cov[:nbin], (30, 60)[:nbin], edges=model.edges[: nbin - 1]
+    )
+    plain, inflated = (
+        pixelwise(model, flux, ivar, mask, nguard=nguard, inflate=inflate)
+        for inflate in (False, True)
+    )
+    # N_k = npix - |g|, with the window g of each pixel clipped at the ends.
+    size = [len(window(i, nguard, NPIX)) for i in PIXELS]
+    n_train = np.array(model.n_train)[BINS if nbin == 2 else 0]
+    f = finite_sample_factor(np.reshape(n_train, (-1, 1)), NPIX - np.array(size))
+    assert same(inflated.flux, plain.flux)
+    # Each side of var rounds twice and each side of z at most four times, by at most
+    # eps/2 each time: 2 eps and 3.25 eps to first order.
+    np.testing.assert_allclose(inflated.var, plain.var * f, rtol=4 * EPS, atol=0)
+    np.testing.assert_allclose(inflated.z, plain.z / np.sqrt(f), rtol=4 * EPS, atol=0)
+
+
+def test_inflate_scales_the_infill_variances_covariances_draws_and_chi2_by_f_s():
+    model, flux, ivar, mask = two_bins(1e2)
+    model = dataclasses.replace(model, n_train=(30, 60))
+    sets = {"replace": REPLACE, "ignore": IGNORE, "covariance": True}
+    plain, inflated = (
+        infill(
+            model,
+            flux,
+            ivar,
+            mask,
+            **sets,
+            inflate=inflate,
+            rng=np.random.default_rng(DRAW_SEED),
+        )
+        for inflate in (False, True)
+    )
+    # N_k = npix - |G| of each spectrum.
+    G = REPLACE | IGNORE | mask | (ivar == 0)
+    f = finite_sample_factor(np.array(model.n_train)[BINS], NPIX - G.sum(axis=1))
+    M = REPLACE
+    assert same(inflated.flux, plain.flux)
+    assert same(inflated.var[~M], plain.var[~M])
+    # Each side of var and cov rounds twice, and each side of chi2 once.
+    expected = plain.var * f[:, np.newaxis]
+    np.testing.assert_allclose(inflated.var[M], expected[M], rtol=4 * EPS, atol=0)
+    np.testing.assert_allclose(inflated.chi2, plain.chi2 / f, rtol=2 * EPS, atol=0)
+    for s in range(len(flux)):
+        pixels, cov = inflated.covariance(s)
+        expected = plain.covariance(s)[1] * f[s]
+        np.testing.assert_allclose(cov, expected, rtol=4 * EPS, atol=0)
+        assert same(np.diagonal(cov), inflated.var[s, pixels])
+    # The deviation of a draw from the mean grows by f^1/2. Both solves, R_MM^-T of
+    # the normals times f^1/2 and f^1/2 times R_MM^-T of the normals, err by at most
+    # DRAW_TOL / 2 sigma times f^1/2, and flux rounds as in the test of slices and
+    # chunks.
+    root = np.sqrt(f)[:, np.newaxis]
+    deviation = inflated.draws - inflated.flux
+    scaled = root * (plain.draws - plain.flux)
+    size = np.abs(inflated.draws) + np.abs(plain.flux)
+    size += root * (np.abs(plain.draws) + np.abs(plain.flux))
+    tol = root * DRAW_TOL * np.sqrt(plain.var) + 4 * EPS * size
+    assert np.all(np.abs(deviation - scaled)[M] <= tol[M])
+
+
+def test_fs_is_f_s_of_each_spectrum_over_its_inflation_factor_with_inflate():
+    model, flux, ivar, mask = two_bins(1e2)
+    model = dataclasses.replace(model, n_train=(11, 60))
+    # Row 2 replaces only its bad pixel, so its dof is 0. Row 5 replaces no pixel, so
+    # its f_s(N_s, N_k, 1), undefined at N_s 11 and N_k 10, is not needed. With N_s 11,
+    # rows 0 and 6 have N_s - N_k - dof - 2 = 0; row 3, whose G covers all pixels,
+    # has N_k 0.
+    replace = REPLACE.copy()
+    replace[2] = PIXELS == 9
+    replace[5] = False
+    plain, inflated = (
+        infill(model, flux, ivar, mask, replace=replace, ignore=IGNORE, inflate=inflate)
+        for inflate in (False, True)
+    )
+    bad = mask | (ivar == 0)
+    n_train = np.array(model.n_train)[BINS]
+    n_cond = NPIX - np.count_nonzero(replace | IGNORE | bad, axis=1)
+    dof = np.count_nonzero(replace & ~bad, axis=1)
+
+    def factor(n_pred):
+        return np.array(
+            [
+                finite_sample_factor(N, k, m) if m > 0 and N - k - m - 2 > 0 else np.nan
+                for N, k, m in zip(n_train, n_cond, n_pred, strict=True)
+            ]
+        )
+
+    np.testing.assert_array_equal(plain.fs, factor(dof))
+    np.testing.assert_array_equal(inflated.fs, factor(dof) / factor(np.ones(8, int)))
+
+
+@pytest.mark.parametrize("kind", [{"center": 0.9}, {"weighted": True}])
+def test_fs_is_1_for_a_model_without_a_derived_factor(kind):
+    model, flux, ivar, mask = two_bins(1e2)
+    # As in the test above, with rows of dof 0 and an undefined f_s(N_s, N_k, dof).
+    replace = REPLACE.copy()
+    replace[5] = False
+    model = dataclasses.replace(model, n_train=(11, 60), **kind)
+    result = infill(model, flux, ivar, mask, replace=replace)
+    assert same(result.fs, np.ones(len(flux)))

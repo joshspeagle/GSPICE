@@ -75,17 +75,26 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
     )
     assert_type(flux_var, tuple[NDArray[np.float64], NDArray[np.float64] | None])
     assert_type(snr(flux, ivar, mask), NDArray[np.float64])
+    # inflate needs a mean-centred, unweighted model.
+    centred = Model(np.zeros((1, 4)), [eye], [np.int64(50)])
     prediction = pixelwise(
-        model, flux, ivar, mask, nguard=np.int64(1), progress=progress
+        centred,
+        flux,
+        ivar,
+        mask,
+        nguard=np.int64(1),
+        inflate=np.True_,
+        progress=progress,
     )
     assert_type(prediction, Prediction)
     repaired = infill(
-        model,
+        centred,
         flux,
         ivar,
         mask,
         replace=[False, True, False, False],
         ignore=np.array([True, False, False, False]),
+        inflate=np.True_,
         covariance=np.True_,
         rng=rng,
         progress=progress,

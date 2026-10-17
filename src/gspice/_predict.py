@@ -8,7 +8,7 @@ from numpy.linalg import LinAlgError
 from numpy.typing import ArrayLike, NDArray
 
 from ._linalg import Conditional, group_rows, solve_pattern, solve_prior
-from ._model import Model
+from ._model import Model, sample_factor
 from ._spectra import (
     Boolean,
     Integer,
@@ -20,6 +20,7 @@ from ._spectra import (
     chunks,
     integer,
     interpolate,
+    located,
     require_good_pixel,
     root_mean_ivar,
     to_flux,
@@ -41,7 +42,8 @@ class Prediction:
     flux : ndarray, shape (nspec, npix)
         The prediction of each pixel (flux).
     var : ndarray, shape (nspec, npix)
-        The conditional variance of each pixel (flux^2), which includes the noise.
+        The conditional variance of each pixel (flux^2), which includes the noise;
+        multiplied by f_s(N_s, N_k, 1) with inflate=True.
     z : ndarray, shape (nspec, npix)
         (f - flux) / sqrt(var) at good pixels, with f the input flux, and NaN at bad
         pixels (unit-free).
@@ -72,8 +74,9 @@ class Repaired:
         The conditional mean at the replaced pixels, and the input flux elsewhere
         (flux).
     var : ndarray, shape (nspec, npix)
-        The conditional variance at the replaced pixels, which includes the noise;
-        1/ivar at the other good pixels; inf at the other bad pixels (flux^2).
+        The conditional variance at the replaced pixels, which includes the noise,
+        multiplied by f_s(N_s, N_k, 1) with inflate=True; 1/ivar at the other good
+        pixels; inf at the other bad pixels (flux^2).
     replaced : ndarray of bool, shape (nspec, npix)
         The replaced pixels M.
     ignored : ndarray of bool, shape (nspec, npix)
@@ -81,12 +84,22 @@ class Repaired:
     chi2 : ndarray, shape (nspec,)
         r_T^T C_TT^-1 r_T over the replaced pixels T that are good in the input, with
         r_T their input values minus the conditional mean and C_TT their conditional
-        covariance; 0 where dof is 0 (unit-free).
+        covariance, which inflate=True multiplies by f_s(N_s, N_k, 1); 0 where dof is
+        0 (unit-free).
     dof : ndarray of int64, shape (nspec,)
         The number |T| of replaced pixels that are good in the input.
+    fs : ndarray, shape (nspec,)
+        f_s(N_s, N_k, dof) of `finite_sample_factor`, with N_s the n_train of the bin
+        of the spectrum and N_k = npix - |G| its conditioning pixels, divided by
+        f_s(N_s, N_k, 1) with inflate=True. NaN where dof is 0 or
+        N_s - N_k - dof - 2 <= 0. 1 for a model with a constant centre or with
+        weights, for which no factor is derived (unit-free). For the other models and
+        replace and ignore masks that do not depend on the data, chi2 / (dof fs) has
+        the mean 1 for held-out Gaussian spectra, with or without inflate.
     draws : ndarray, shape (nspec, npix), or None
-        A draw from the conditional distribution at the replaced pixels, and the
-        input flux elsewhere (flux); None if infill ran without rng.
+        A draw from the conditional distribution at the replaced pixels, with the
+        covariance of `covariance`, and the input flux elsewhere (flux); None if
+        infill ran without rng.
     """
 
     flux: NDArray[np.float64]
@@ -95,6 +108,7 @@ class Repaired:
     ignored: NDArray[np.bool_]
     chi2: NDArray[np.float64]
     dof: NDArray[np.int64]
+    fs: NDArray[np.float64]
     draws: NDArray[np.float64] | None
     _covariances: _Covariances | None = field(default=None, repr=False)
 
@@ -111,7 +125,8 @@ class Repaired:
         pixels : ndarray of int64, shape (m,)
             The replaced pixels of spectrum s, in increasing order.
         cov : ndarray, shape (m, m)
-            Their conditional covariance (flux^2). Its diagonal is var[s, pixels].
+            Their conditional covariance (flux^2), multiplied by f_s(N_s, N_k, 1) with
+            inflate=True. Its diagonal is var[s, pixels].
 
         Raises
         ------
@@ -144,6 +159,7 @@ def pixelwise(
     mask: ArrayLike | None = None,
     *,
     nguard: Integer = 20,
+    inflate: Boolean = False,
     progress: Progress | None = None,
 ) -> Prediction:
     """Predict each pixel from all pixels farther than nguard from it (paper Alg. 3).
@@ -168,6 +184,11 @@ def pixelwise(
         As in `scale`, with the npix of model.
     nguard : int, optional
         The half-width of the guard window g (pixels); >= 0.
+    inflate : bool, optional
+        If True, multiply var by f_s(N_s, N_k, 1) of `finite_sample_factor`, with N_s
+        the n_train of the bin of the spectrum and N_k = npix - |g| the conditioning
+        pixels of each pixel, more near the ends, where g is clipped. z^2 then has the
+        mean 1 for held-out Gaussian spectra. Needs a mean-centred, unweighted model.
     progress : callable, optional
         progress(stage, done, total), called after each chunk of spectra with the
         stage "pixelwise", the number of spectra done and their total.
@@ -180,11 +201,15 @@ def pixelwise(
     Raises
     ------
     TypeError
-        If model is not a Model, nguard is not an integer, progress is not callable or
-        None, or flux, ivar or mask has a dtype that `scale` does not allow.
+        If model is not a Model, nguard is not an integer, inflate is not a bool,
+        progress is not callable or None, or flux, ivar or mask has a dtype that
+        `scale` does not allow.
     ValueError
         If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
-        has another npix than model, nguard < 0, or a spectrum has no good pixel.
+        has another npix than model, nguard < 0, or a spectrum has no good pixel. If
+        inflate is True and model has a constant centre or weights, or
+        N_s - N_k - 3 <= 0 at a pixel of a bin with spectra, where f_s(N_s, N_k, 1)
+        is not defined; the message names N_s and N_k.
     numpy.linalg.LinAlgError
         If nguard < npix - 1 and the covariance of a bin with spectra fails the check
         of its precision matrix: it is not positive definite, or the reciprocal
@@ -200,10 +225,21 @@ def pixelwise(
     """
     start = time.perf_counter()
     nguard = integer(nguard, "nguard", 0)
+    inflate = boolean(inflate, "inflate")
     check_progress(progress)
-    flux, ivar, bad = _validated(model, flux, ivar, mask)
+    flux, ivar, bad = _validated(model, flux, ivar, mask, inflate)
     nspec, npix = flux.shape
     bins = model._bins(flux, ivar, bad)
+    # f_s(N_s, N_k, 1) of each bin and pixel with inflate, and 1 without.
+    inflation = np.ones((len(model.cov), npix))
+    if inflate:
+        # |g| of each pixel. A half-width above npix changes no window, and could
+        # overflow int64.
+        pixels, half = np.arange(npix), min(nguard, npix)
+        window = np.minimum(pixels + half + 1, npix) - np.maximum(pixels - half, 0)
+        n_train = np.array(model.n_train)[:, np.newaxis]
+        used = np.isin(range(len(model.cov)), bins)[:, np.newaxis]
+        inflation = _inflation(n_train, npix - window, used, ("bin", "pixel"))
     # The weights of the bins with spectra, before any spectrum, so that a covariance
     # that fails its check raises at once. A bin without spectra computes no P.
     for b in np.unique(bins).tolist():
@@ -214,9 +250,9 @@ def pixelwise(
         a = root_mean_ivar(ivar[rows], bad[rows])
         out = predicted[rows], variance[rows], z[rows]
         if len(model.cov) == 1:
-            _predict(model, 0, nguard, ftilde, a, *out)
+            _predict(model, 0, nguard, inflation[0], ftilde, a, *out)
         else:
-            _predict_bins(model, nguard, ftilde, a, bins[rows], out)
+            _predict_bins(model, nguard, inflation, ftilde, a, bins[rows], out)
         z[rows][bad[rows]] = np.nan
         if progress is not None:
             progress("pixelwise", rows.stop, nspec)
@@ -234,6 +270,7 @@ def infill(
     *,
     replace: ArrayLike | None = None,
     ignore: ArrayLike | None = None,
+    inflate: Boolean = False,
     covariance: Boolean = False,
     rng: np.random.Generator | None = None,
     progress: Progress | None = None,
@@ -272,6 +309,14 @@ def infill(
     ignore : array_like of bool, shape (nspec, npix) or (npix,), optional
         Pixels that are neither conditioned on nor replaced, unless they are in
         replace, such as a guard around a block. None: no pixels.
+    inflate : bool, optional
+        If True, multiply var and the covariance at the replaced pixels by
+        f_s(N_s, N_k, 1) of `finite_sample_factor`, with N_s the n_train of the bin of
+        the spectrum and N_k = npix - |G| its conditioning pixels, divide chi2 by it,
+        and multiply the deviation F z_M of each draw from the mean by its square
+        root. For held-out Gaussian spectra, the squared residual of every fixed
+        linear combination of the replaced pixels, divided by its variance from the
+        covariance, then has the mean 1. Needs a mean-centred, unweighted model.
     covariance : bool, optional
         If True, keep the conditional covariance of each pattern for
         `Repaired.covariance`.
@@ -295,14 +340,17 @@ def infill(
     Raises
     ------
     TypeError
-        If model is not a Model, covariance is not a bool, rng is neither None nor a
-        numpy.random.Generator, progress is not callable or None, flux, ivar or mask
-        has a dtype that `scale` does not allow, or replace or ignore is not of a bool
-        dtype.
+        If model is not a Model, inflate or covariance is not a bool, rng is neither
+        None nor a numpy.random.Generator, progress is not callable or None, flux, ivar
+        or mask has a dtype that `scale` does not allow, or replace or ignore is not of
+        a bool dtype.
     ValueError
         If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
         has another npix than model, a spectrum has no good pixel, or replace or
-        ignore has another shape than (nspec, npix) or (npix,).
+        ignore has another shape than (nspec, npix) or (npix,). If inflate is True and
+        model has a constant centre or weights, or N_s - N_k - 3 <= 0 for a spectrum
+        with a pixel to replace, where f_s(N_s, N_k, 1) is not defined; the message
+        names N_s and N_k.
     numpy.linalg.LinAlgError
         If the covariance of a bin fails the check of its precision matrix, as in
         `pixelwise`, where a spectrum of the bin has a pixel to replace and G does not
@@ -324,23 +372,33 @@ def infill(
     the factor of cov[b] at M.
     """
     start = time.perf_counter()
+    inflate = boolean(inflate, "inflate")
     covariance = boolean(covariance, "covariance")
     if rng is not None:
         check_rng(rng)
     check_progress(progress)
-    flux, ivar, bad = _validated(model, flux, ivar, mask)
+    flux, ivar, bad = _validated(model, flux, ivar, mask, inflate)
     nspec, npix = flux.shape
     replace = _pixels(replace, "replace", bad)
     ignore = _pixels(ignore, "ignore", np.broadcast_to(False, bad.shape))
     replaced, ignored = (np.empty((nspec, npix), dtype=bool) for _ in range(2))
     needs = np.empty(nspec, dtype=bool)
+    # N_k = npix - |G|, the conditioning pixels of each spectrum.
+    n_cond = np.empty(nspec, dtype=np.int64)
     for rows in chunks(nspec, npix):
         M = replace[rows]
         G = M | ignore[rows] | bad[rows]
         replaced[rows] = M
         ignored[rows] = G & ~M
-        needs[rows] = M.any(axis=1) & ~G.all(axis=1)
+        n_cond[rows] = npix - np.count_nonzero(G, axis=1)
+        needs[rows] = M.any(axis=1) & (n_cond[rows] > 0)
     bins = model._bins(flux, ivar, bad)
+    n_train = np.array(model.n_train)[bins]
+    # f_s(N_s, N_k, 1) of each spectrum with inflate, defined where a pixel is
+    # replaced, and 1 without.
+    inflation = np.ones(nspec)
+    if inflate:
+        inflation = _inflation(n_train, n_cond, replaced.any(axis=1), ("row",))
     # P of the bins that need it, before any spectrum, so that a covariance that fails
     # its check raises at once.
     for b in np.unique(bins[needs]).tolist():
@@ -384,22 +442,33 @@ def infill(
                 X = x[group]
                 to_working(X, a[group], center, model.mean[b])
                 key = G[first], M[first], T[first]
-                z = None if normals is None else normals[np.ix_(group, pixels)]
+                # The key holds the bin and G, so the spectra of a pattern share N_s,
+                # N_k and their factor. Both solves are linear in the normals.
+                factor = inflation[spectra[0]]
+                z = None
+                if normals is not None:
+                    z = normals[np.ix_(group, pixels)]
+                    z *= np.sqrt(factor)
                 solution = _solve(model, b, *key, X, z, covariance, spectra[0])
                 at = np.ix_(spectra, pixels)
                 mean = model.mean[b, pixels]
                 result[at] = to_flux(solution.mean, a[group], mean, center)
                 if draws is not None and solution.draws is not None:
                     draws[at] = to_flux(solution.draws, a[group], mean, center)
-                var[at] = solution.var / np.square(a[group])[:, np.newaxis]
-                chi2[spectra] = solution.chi2
-                cov = solution.cov
+                var[at] = solution.var * factor / np.square(a[group])[:, np.newaxis]
+                chi2[spectra] = solution.chi2 / factor
+                # f C_MM, which covariance(s) divides by a^2 as var.
+                cov = None if solution.cov is None else solution.cov * factor
             if cov is not None:
                 pattern[spectra] = len(patterns)
                 patterns.append(cov)
         if progress is not None:
             progress("infill", rows.stop, nspec)
-    for array in (result, var, replaced, ignored, chi2, dof):
+    # Design section 4.3: the models without a derived factor report 1.
+    fs = np.ones(nspec)
+    if model._derived:
+        fs = sample_factor(n_train, n_cond, dof) / inflation
+    for array in (result, var, replaced, ignored, chi2, dof, fs):
         array.flags.writeable = False
     if draws is not None:
         draws.flags.writeable = False
@@ -413,15 +482,24 @@ def infill(
         _Covariances(tuple(patterns), pattern, refscale) if covariance else None
     )
     return Repaired(
-        result, var, replaced, ignored, chi2, dof, draws, _covariances=covariances
+        result, var, replaced, ignored, chi2, dof, fs, draws, _covariances=covariances
     )
 
 
 def _validated(
-    model: Model, flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | None
+    model: Model,
+    flux: ArrayLike,
+    ivar: ArrayLike,
+    mask: ArrayLike | None,
+    inflate: bool,
 ) -> tuple[NDArray[Any], NDArray[Any], NDArray[np.bool_]]:
     if not isinstance(model, Model):
         raise TypeError(f"model: expected a Model, got {type(model).__name__}")
+    if inflate and not model._derived:
+        raise ValueError(
+            f"inflate: expected a mean-centred, unweighted model, for which f_s is "
+            f"derived, got center {model.center} and weighted {model.weighted}"
+        )
     flux, ivar, bad = validate(flux, ivar, mask)
     if flux.shape[1] != model.mean.shape[1]:
         raise ValueError(
@@ -430,6 +508,27 @@ def _validated(
         )
     require_good_pixel(bad)
     return flux, ivar, bad
+
+
+def _inflation(
+    n_train: NDArray[np.int64],
+    n_cond: NDArray[np.int64],
+    used: NDArray[np.bool_],
+    axes: tuple[str, ...],
+) -> NDArray[np.float64]:
+    # f_s(N_s, N_k, 1) at each entry of the broadcast arguments, after a check that it
+    # is defined where used is True; axes name the dimensions in the message.
+    inflation = sample_factor(n_train, n_cond, 1)
+    undefined = np.isnan(inflation) & used
+    if undefined.any():
+        index = np.unravel_index(np.argmax(undefined), undefined.shape)
+        n_s = np.broadcast_to(n_train, undefined.shape)[index]
+        n_k = np.broadcast_to(n_cond, undefined.shape)[index]
+        raise ValueError(
+            f"inflate: expected N_s - N_k - 3 > 0, for which f_s(N_s, N_k, 1) is "
+            f"defined, got N_s = {n_s} and N_k = {n_k}{located(index, axes)}"
+        )
+    return inflation
 
 
 def _pixels(
@@ -474,6 +573,7 @@ def _solve(
 def _predict_bins(
     model: Model,
     nguard: int,
+    inflation: NDArray[np.float64],
     ftilde: NDArray[np.float64],
     a: NDArray[np.float64],
     bins: NDArray[np.intp],
@@ -483,7 +583,7 @@ def _predict_bins(
     for b in np.unique(bins).tolist():
         at = np.flatnonzero(bins == b)
         parts = np.empty((3, at.size, ftilde.shape[1]))
-        _predict(model, b, nguard, ftilde[at], a[at], *parts)
+        _predict(model, b, nguard, inflation[b], ftilde[at], a[at], *parts)
         for array, part in zip(out, parts, strict=True):
             array[at] = part
 
@@ -492,6 +592,7 @@ def _predict(
     model: Model,
     b: int,
     nguard: int,
+    inflation: NDArray[np.float64],
     x: NDArray[np.float64],
     a: NDArray[np.float64],
     predicted: NDArray[np.float64],
@@ -499,6 +600,7 @@ def _predict(
     z: NDArray[np.float64],
 ) -> None:
     W, var = model._guard_weights(b, nguard)
+    var = var * inflation
     center = 0.0 if model.center is None else model.center
     mean = model.mean[b]
     # x holds the interpolated flux of spectra of bin b and becomes their working

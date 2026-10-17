@@ -19,6 +19,7 @@
 - `gspice.infill`, which replaces chosen pixels of each spectrum by their Gaussian conditional mean given the other pixels, and its result `gspice.Repaired`. It reports the replaced and ignored pixels and χ², with `covariance=True` the conditional covariance of the replaced pixels of each spectrum, and with a `numpy.random.Generator` as `rng` a draw from the conditional distribution in `Repaired.draws`.
 - `gspice.fit`, which fits a model to training spectra with the iterative outlier clipping of paper Alg. 4, and returns the model and the final training mask.
 - `gspice.finite_sample_factor`, which gives f_s(N_s, N_k, N_*), the mean χ² per predicted pixel of a held-out Gaussian spectrum when a model fitted to N_s spectra predicts N_* pixels from N_k others.
+- The option `inflate` of `gspice.pixelwise` and `gspice.infill`, which multiplies the variances and covariances of a mean-centred, unweighted model by f_s(N_s, N_k, 1). The field `Repaired.fs` holds the factor of each spectrum by which `chi2 / dof` is divided, so that `chi2 / (dof * fs)` has the mean 1 for held-out Gaussian spectra of such a model, with or without `inflate`.
 - `gspice/py.typed`, the PEP 561 marker, so that type checkers read the annotations of an installed `gspice`. The functions of `gspice.legacy` keep their 2022 signatures without annotations.
 
 ### Deprecated

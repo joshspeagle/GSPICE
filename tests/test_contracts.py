@@ -1,3 +1,4 @@
+import dataclasses
 from functools import partial
 
 import numpy as np
@@ -118,6 +119,20 @@ MODEL_ARGUMENTS = [
     pytest.param({"model": 5}, TypeError, "model", id="model=5"),
     pytest.param(WIDER, ValueError, "flux", id="npix=4"),
     pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
+    pytest.param({"inflate": 1}, TypeError, "inflate", id="inflate=1"),
+    # Design section 4.3: f_s is derived only for mean-centred, unweighted models.
+    *(
+        pytest.param(
+            {"model": dataclasses.replace(MODEL, **kind), "inflate": True},
+            ValueError,
+            "inflate",
+            id=f"inflate+{name}",
+        )
+        for name, kind in (
+            ("center", {"center": 0.9}),
+            ("weighted", {"weighted": True}),
+        )
+    ),
 ]
 
 
