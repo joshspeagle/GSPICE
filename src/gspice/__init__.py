@@ -3,7 +3,7 @@
 import logging
 
 from ._datasets import Simulation, simulate
-from ._model import Model, load, save
+from ._model import Model, fit, load, save
 from ._predict import Prediction, Repaired, infill, pixelwise
 from ._spectra import scale, snr, unscale
 from .legacy import (
@@ -34,6 +34,7 @@ __all__ = [
     "cholesky_inv",
     "covar",
     "covar_iter_mask",
+    "fit",
     "gaussian_estimate",
     "get_chimask",
     "gp_interp",

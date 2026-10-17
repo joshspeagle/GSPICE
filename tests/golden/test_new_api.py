@@ -1,11 +1,19 @@
 import numpy as np
 import pytest
+from numpy.linalg import LinAlgError
 
 import gspice
 from _golden import same
-from gspice import legacy
+from gspice import _model, legacy
 from oracle import conditional, guard_conditional
-from test_golden import GOLDEN, MODE, RTOL, check_golden_case, check_output
+from test_golden import (
+    GOLDEN,
+    MODE,
+    RTOL,
+    assert_close,
+    check_golden_case,
+    check_output,
+)
 
 
 def pixelwise_as_gp_interp(spec, cov, nguard, irange=None):
@@ -37,6 +45,15 @@ def infill_as_gaussian_estimate(icond, ipred, cov, Dvec, covinv, bruteforce=Fals
     return predoverD, predcovar, predkstar, kstar
 
 
+def fit_as_covar_iter_mask(flux, ivar, mask, nsigma=(20, 8, 6), maxbadpix=64):
+    # The defaults of covar_iter_mask, and its passes, which mask only the flags of
+    # the pass before.
+    model, training = gspice.fit(
+        flux, ivar, mask, nsigma=nsigma, maxbadpix=maxbadpix, cumulative=False
+    )
+    return model.cov[0], training.astype(np.float64)
+
+
 def new_api(module, function):
     return NEW_API[function]
 
@@ -45,6 +62,7 @@ NEW_API = {
     "standard_scale": lambda spec, ivar, mask=None: gspice.scale(spec, ivar, mask),
     "gp_interp": pixelwise_as_gp_interp,
     "gaussian_estimate": infill_as_gaussian_estimate,
+    "covar_iter_mask": fit_as_covar_iter_mask,
 }
 
 BC_NEW = {
@@ -172,3 +190,101 @@ def test_infill_moves_the_d3_predcovar_to_the_60_digit_reference():
     assert np.all(np.abs(np.diagonal(new) - variance) <= 1e-12 * variance)
     # The 2022 result is more than 1e-10 from the reference at some of the pixels.
     assert np.any(np.abs(np.diagonal(old) - variance) > 1e-10 * variance)
+
+
+# The entries in which the final mask of the default fit differs from the stored 2022
+# mask (design section 11).
+CUMULATIVE_CHANGES = {"D1": 157, "D2": 152, "D3": 106, "D4": 8}
+
+
+@pytest.mark.parametrize(("dataset", "changed"), CUMULATIVE_CHANGES.items())
+def test_fit_masks_the_flags_of_every_pass_as_paper_algorithm_4(dataset, changed):
+    case = GOLDEN.cases[f"covar_iter_mask.{dataset}.default"]
+    kwargs = GOLDEN.arguments(case)
+    flux, ivar, mask = kwargs["flux"], kwargs["ivar"], kwargs["mask"]
+    _, training = gspice.fit(flux, ivar, mask)
+    # Alg. 4 on legacy get_chimask, with its >= and Schur updates, on the spectra with
+    # at most 64 bad pixels.
+    expected = GOLDEN.expected(case)
+    kept = expected["kept_rows"]
+    flux, ivar = flux[kept], ivar[kept]
+    M = (mask[kept] != 0) | (ivar == 0)
+    for nsigma in (20, 8, 6):
+        M |= legacy.get_chimask(flux, ivar, M, nsigma)
+    replay = np.ones(mask.shape, dtype=bool)
+    replay[kept] = M
+    np.testing.assert_array_equal(training, replay)
+    # 2022 masked the flags of the last two passes only.
+    assert np.count_nonzero(training != (expected["finalmask"] != 0)) == changed
+
+
+def test_fit_flags_a_pixel_whose_z_exceeds_nsigma_but_not_one_that_equals_it():
+    # The record behaviour.get_chimask.ge_tie holds the 2022 >=: get_chimask flags the
+    # pixel at nsigma equal to its own |z|.
+    case = GOLDEN.cases["behaviour.get_chimask.ge_tie"]
+    kwargs = GOLDEN.arguments(case)
+    flux, ivar, mask = kwargs["flux"], kwargs["ivar"], kwargs["mask"]
+    index = tuple(case["expect"]["tie"]["index"])
+    # A tie exists only bit for bit, so |z| comes from the function that computes z in
+    # fit, here for pass 1: fit uses every spectrum of D1, and M_1 = bad.
+    bad = (mask != 0) | (ivar == 0)
+    z = _model._clipping_z(flux, ivar, np.arange(len(flux)), bad, None, 20, "", None)
+    tie = abs(float(z[index]))
+    for nsigma, flagged in ((tie, False), (np.nextafter(tie, 0), True)):
+        _, training = gspice.fit(flux, ivar, mask, nsigma=(nsigma,))
+        assert training[index] == flagged
+
+
+def test_fit_counts_ivar_0_as_bad_also_against_maxbadpix():
+    inputs = GOLDEN.inputs("D1")
+    flux, ivar, mask = inputs["flux"], inputs["ivar_z"], inputs["mask"]
+    model, training = gspice.fit(flux, ivar, mask, maxbadpix=8, cumulative=False)
+    assert model.n_train == (1990,)
+    live = legacy.covar_iter_mask(flux, ivar, (mask != 0) | (ivar == 0), maxbadpix=8)
+    mode = MODE[("covar_iter_mask", "cov")]
+    assert_close(model.cov[0], live[0], mode, RTOL, 0.0, "cov")
+    np.testing.assert_array_equal(training, live[1] != 0)
+    # 2022 counted only the pixels in mask against maxbadpix.
+    _, old = legacy.covar_iter_mask(flux, ivar, mask, maxbadpix=8)
+    assert np.count_nonzero(~old.all(axis=1)) == 1992
+
+
+def test_fit_drops_the_spectrum_that_clipping_masks_completely():
+    # The inherited-Q1 input of design section 11: row 11 of D1 is good only at pixels
+    # 24 to 26, and pass 1 flags its spike at pixel 25 with both neighbours.
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
+    flux, ivar, mask = kwargs["flux"], kwargs["ivar"], kwargs["mask"]
+    mask[11] = 1
+    mask[11, 24:27] = 0
+    ivar[mask != 0] = 0
+    flux[11, 25] += 20 / np.sqrt(ivar[11, 25])
+    # 2022 returned a covariance of NaN, and legacy raises.
+    with pytest.raises(ValueError, match="^nsigma: no good pixel in rows 11$"):
+        legacy.covar_iter_mask(flux, ivar, mask, nsigma=[6])
+    model, training = gspice.fit(flux, ivar, mask, nsigma=[6])
+    assert model.n_train == (1999,)
+    assert training[11].all()
+
+
+def test_fit_needs_a_good_pixel_at_every_pixel():
+    kwargs = GOLDEN.arguments(GOLDEN.cases["covar_iter_mask.D1.default"])
+    flux, ivar, mask = kwargs["flux"], kwargs["ivar"], kwargs["mask"]
+    mask[:, [25, 31]] = 1
+    # 2022 interpolated the two pixels from their neighbours in every spectrum, which
+    # makes the covariance singular.
+    with pytest.raises(LinAlgError):
+        legacy.covar_iter_mask(flux, ivar, mask)
+    message = r"^fit: pass 1 needs a good pixel .* got none at pixels 25, 31$"
+    with pytest.raises(ValueError, match=message):
+        gspice.fit(flux, ivar, mask)
+
+
+def test_fit_needs_one_spectrum_more_than_pixels():
+    inputs = GOLDEN.inputs("D1")
+    flux, ivar, mask = (inputs[key][:50] for key in ("flux", "ivar", "mask"))
+    # 2022 accepted 50 spectra for 50 pixels, whose covariance is singular.
+    with pytest.raises(LinAlgError):
+        legacy.covar_iter_mask(flux, ivar, mask)
+    message = r"^fit: pass 1 needs at least 51 spectra .*, got 50: of 50 spectra, "
+    with pytest.raises(ValueError, match=message):
+        gspice.fit(flux, ivar, mask)

@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from scipy.ndimage import maximum_filter1d
 
 # Elements per chunk of rows (design section 8): 6990 rows at npix 2400.
 CHUNK = 2**24
@@ -97,6 +98,17 @@ def interpolate(flux: NDArray[Any], bad: NDArray[np.bool_]) -> NDArray[np.float6
     slope = (flat[hi] - f_lo) / np.maximum(span, 1)
     flat[holes] = np.where(span > 0, slope * (holes - lo) + f_lo, f_lo)
     return x
+
+
+def dilate(flags: NDArray[np.bool_], d: int) -> NDArray[np.bool_]:
+    # The maximum over the 2 d + 1 pixels around each pixel of a row, with the pixels
+    # beyond its ends unflagged, at a cost that does not grow with d. From any pixel,
+    # d = npix - 1 already reaches the whole row.
+    size = 2 * min(d, flags.shape[1] - 1) + 1
+    dilated: NDArray[np.bool_] = maximum_filter1d(
+        flags, size, axis=1, mode="constant", cval=0
+    )
+    return dilated
 
 
 def root_mean_ivar(ivar: NDArray[Any], bad: NDArray[np.bool_]) -> NDArray[np.float64]:
