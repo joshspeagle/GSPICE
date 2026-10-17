@@ -120,11 +120,13 @@ def scale(
     """Scale spectra to unit mean noise:  X_s = a_s (ftilde_s - center) - refmean.
 
     The bad pixels are (mask != 0) | (ivar == 0), and scale never reads flux or ivar
-    there. ftilde_s is flux_s cast to float64, then linearly interpolated over its bad
-    pixels and held constant beyond its first and last good pixels. a_s is the square
-    root of the mean of ivar_s over its good pixels. With float64 flux,
-    scale(flux, ivar, mask) equals the 2022 standard_scale with the mask
-    (mask != 0) | (ivar == 0), to rounding.
+    there. It checks and computes the float64 values of the inputs: a long double
+    beyond the float64 range is not finite, and one that rounds to 0 in float64 is 0.
+    ftilde_s is flux_s cast to float64, then linearly interpolated over its bad pixels
+    and held constant beyond its first and last good pixels. a_s is the square root of
+    the mean of ivar_s over its good pixels. With float64 flux, scale(flux, ivar, mask)
+    equals the 2022 standard_scale with the mask (mask != 0) | (ivar == 0), to
+    rounding.
 
     Parameters
     ----------
@@ -197,6 +199,8 @@ def unscale(
 ) -> tuple[NDArray[np.float64], NDArray[np.float64] | None]:
     """Invert scale:  f = (x + refmean)/refscale + center,  var_f = var/refscale^2.
 
+    It computes with the float64 values of the inputs, as scale does.
+
     Parameters
     ----------
     x : array_like, shape (nspec, n)
@@ -239,13 +243,12 @@ def unscale(
                 f"var: expected shape ({n},) or {x.shape} like x, got {var.shape}"
             )
         require(var >= 0, var, "var", "values >= 0", ("row", "pixel")[-var.ndim :])
-    # dtype=np.float64 keeps a long double x or var from making long double results.
-    f = np.add(x, refmean, dtype=np.float64)
+    f = x + refmean
     f /= refscale[:, np.newaxis]
     f += center
     if var is None:
         return f, None
-    return f, np.divide(var, np.square(refscale)[:, np.newaxis], dtype=np.float64)
+    return f, var / np.square(refscale)[:, np.newaxis]
 
 
 def snr(
@@ -304,14 +307,21 @@ def numeric(value: ArrayLike, name: str) -> NDArray[Any]:
         raise TypeError(
             f"{name}: expected an integer or floating dtype, got {array.dtype}"
         )
+    # A long double can hold values beyond the float64 range. It is cast here, so the
+    # checks and the computation see float64 values: inf beyond that range, and 0
+    # where float64 rounds it to 0, also under a caller's errstate. The test is on the
+    # type, because numpy treats a long double of the size of float64 as float64. The
+    # other dtypes are cast per chunk.
+    if array.dtype.type is np.longdouble:
+        with np.errstate(over="ignore", under="ignore"):
+            array = array.astype(np.float64)
     return array
 
 
 def finite_array(
     value: NDArray[Any], name: str, axes: tuple[str, ...]
 ) -> NDArray[np.float64]:
-    # A new C-contiguous float64 array (the default order keeps the input layout). The
-    # check runs after the cast, so a long double beyond the float64 range fails it.
+    # A new C-contiguous float64 array (the default order keeps the input layout).
     array = np.array(value, dtype=np.float64, order="C")
     require(np.isfinite(array), array, name, "finite values", axes)
     return array
