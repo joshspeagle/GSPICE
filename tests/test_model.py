@@ -1,12 +1,17 @@
 import copy
 import pickle
+import re
 from dataclasses import FrozenInstanceError, fields
+from pathlib import Path
 
 import numpy as np
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+from hypothesis.extra import numpy as hnp
 
 from _golden import same
-from gspice import Model
+from gspice import Model, __version__, load, save
 
 NBIN, NPIX = 3, 4
 
@@ -141,3 +146,152 @@ def test_pickle_and_copy_rebuild_a_model_through_its_checks(duplicate):
     object.__setattr__(model, "n_train", (10, 0, 30))
     with pytest.raises(ValueError, match=r"^n_train\[1\]: "):
         duplicate(model)
+
+
+@st.composite
+def models(draw):
+    nbin = draw(st.integers(1, 3))
+    npix = draw(st.integers(1, 6))
+    values = st.floats(-1e100, 1e100)
+    mean = draw(hnp.arrays(np.float64, (nbin, npix), elements=values))
+    cov = []
+    for _ in range(nbin):
+        A = draw(hnp.arrays(np.float64, (npix, npix), elements=values))
+        # A + A.T is exactly symmetric, because float addition commutes.
+        cov.append((A + A.T) / 2)
+    n_train = draw(st.lists(st.integers(1, 10**6), min_size=nbin, max_size=nbin))
+    edges = st.sets(st.floats(-1e6, 1e6), min_size=nbin - 1, max_size=nbin - 1)
+    center = draw(st.none() | values)
+    return Model(
+        mean,
+        cov,
+        n_train,
+        edges=sorted(draw(edges)),
+        center=center,
+        weighted=draw(st.booleans()),
+    )
+
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(model=models())
+def test_load_of_save_gives_bit_identical_arrays_and_equal_scalars(tmp_path, model):
+    save(model, tmp_path / "model.npz")
+    assert same_fields(load(tmp_path / "model.npz"), model)
+
+
+@pytest.mark.parametrize("kind", [str, Path])
+def test_save_writes_exactly_the_given_path_for_a_str_and_a_path(tmp_path, kind):
+    model = Model(**arguments())
+    path = kind(tmp_path / "model.dat")
+    save(model, path)
+    assert [p.name for p in tmp_path.iterdir()] == ["model.dat"]
+    assert same_fields(load(path), model)
+
+
+def test_save_writes_the_keys_and_dtypes_of_the_format(tmp_path):
+    save(Model(np.zeros((1, 2)), (np.eye(2),), (5,)), tmp_path / "model.npz")
+    with np.load(tmp_path / "model.npz") as archive:
+        stored = dict(archive)
+    version = stored.pop("gspice_version")
+    assert (version.item(), version.shape) == (__version__, ())
+    assert {key: (value.dtype, value.shape) for key, value in stored.items()} == {
+        "schema": (np.int64, ()),
+        "mean": (np.float64, (1, 2)),
+        "n_train": (np.int64, (1,)),
+        "edges": (np.float64, (0,)),
+        "center": (np.float64, ()),
+        "weighted": (np.bool_, ()),
+        "cov0": (np.float64, (2, 2)),
+    }
+    assert stored["schema"] == 1
+    assert np.isnan(stored["center"])
+
+
+@pytest.mark.parametrize("schema", [None, 2, 1.0, True, np.array([1])])
+def test_load_rejects_an_archive_whose_schema_is_not_the_integer_1(tmp_path, schema):
+    path = tmp_path / "model.npz"
+    save(Model(**arguments()), path)
+    with np.load(path) as archive:
+        contents = dict(archive)
+    del contents["schema"]
+    if schema is not None:
+        contents["schema"] = schema
+    np.savez(path, **contents)
+    with pytest.raises(ValueError, match=rf"^path: .* in {re.escape(str(path))}$"):
+        load(path)
+
+
+@pytest.mark.parametrize(
+    ("extra", "drop", "message"),
+    [
+        ({"noise": np.True_}, (), r"^path: .* got noise, written by gspice .*, in "),
+        # The arrays of a low-rank bin in place of its covariance.
+        (
+            {
+                "vectors0": np.eye(NPIX),
+                "values0": np.ones(NPIX),
+                "diag0": np.ones(NPIX),
+            },
+            ("cov0", "cov1", "cov2"),
+            r"^path: .* got diag0, values0, vectors0, ",
+        ),
+        ({}, ("center",), r"^path: .* got no center in "),
+        ({"cov3": np.eye(NPIX)}, (), r"^cov: "),
+    ],
+)
+def test_load_rejects_a_file_whose_arrays_differ_from_those_of_save(
+    tmp_path, extra, drop, message
+):
+    path = tmp_path / "model.npz"
+    save(Model(**arguments()), path)
+    with np.load(path) as archive:
+        contents = {key: archive[key] for key in archive.files if key not in drop}
+    np.savez(path, **(contents | extra))
+    with pytest.raises(ValueError, match=message):
+        load(path)
+
+
+def test_load_raises_os_error_for_a_missing_file(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load(tmp_path / "missing.npz")
+
+
+@pytest.mark.parametrize("damage", ["truncate", "flip"])
+def test_load_raises_value_error_for_a_damaged_archive(tmp_path, damage):
+    path = tmp_path / "model.npz"
+    model = Model(**arguments())
+    save(model, path)
+    data = bytearray(path.read_bytes())
+    if damage == "truncate":
+        data = data[:100]
+    else:
+        # A bit of the data of cov0, which the CRC-32 of its member covers.
+        data[data.find(model.cov[0].tobytes()) + 8] ^= 1
+    path.write_bytes(data)
+    with pytest.raises(ValueError, match=r"^path: .* damaged zip archive"):
+        load(path)
+
+
+def test_save_and_load_reject_an_integer_path():
+    # open would take an integer as a file descriptor.
+    with pytest.raises(TypeError):
+        save(Model(**arguments()), 10**6)
+    with pytest.raises(TypeError):
+        load(10**6)
+
+
+def test_save_rejects_what_is_not_a_model(tmp_path):
+    # fit returns the model and the training mask.
+    with pytest.raises(TypeError, match="^model: "):
+        save((Model(**arguments()), None), tmp_path / "model.npz")
+
+
+@pytest.mark.parametrize("name", ["model.npy", "model.txt"])
+def test_load_rejects_a_file_that_is_not_an_npz_archive(tmp_path, name):
+    path = tmp_path / name
+    if name.endswith(".npy"):
+        np.save(path, np.zeros(3))
+    else:
+        path.write_text("1\n")
+    with pytest.raises(ValueError, match=r"^path: .* not a zip archive in "):
+        load(path)

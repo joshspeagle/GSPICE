@@ -1,6 +1,6 @@
 """Gaussian pixelwise conditional estimation for spectra."""
 
-from ._model import Model
+from ._model import Model, load, save
 from ._spectra import scale, snr, unscale
 from .legacy import (
     cholesky_inv,
@@ -27,8 +27,10 @@ __all__ = [
     "get_chimask",
     "gp_interp",
     "legacy",
+    "load",
     "maskinterp",
     "maskinterp1",
+    "save",
     "scale",
     "snr",
     "standard_scale",

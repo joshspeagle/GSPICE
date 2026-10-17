@@ -1,3 +1,6 @@
+import math
+import os
+import zipfile
 from collections.abc import Callable, Iterable
 from dataclasses import KW_ONLY, dataclass, fields
 from functools import partial
@@ -9,6 +12,9 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.linalg import issymmetric
 
 from ._spectra import finite_array, integer, numeric, real
+
+# The arrays that load reads. save also writes gspice_version and cov0, cov1, ...
+_REQUIRED = ("schema", "mean", "n_train", "edges", "center", "weighted")
 
 
 @dataclass(frozen=True, eq=False)
@@ -105,6 +111,141 @@ class Model:
         # again. Keywords keep a pickle valid when a later version adds a field.
         init = {f.name: getattr(self, f.name) for f in fields(self) if f.init}
         return partial(type(self), **init), ()
+
+
+def save(model: Model, path: str | os.PathLike[str]) -> None:
+    """Write model to the .npz file path.
+
+    The archive is not compressed. It holds the arrays schema (the integer 1),
+    gspice_version, mean, n_train, edges, center (NaN if None) and weighted, and cov0,
+    cov1, ... for the covariance of each bin. `load` reads it.
+
+    Parameters
+    ----------
+    model : Model
+        The model to write.
+    path : str or path-like
+        The file to write, with any suffix: save adds none. An existing file is
+        replaced.
+
+    Raises
+    ------
+    TypeError
+        If model is not a Model, or path is not a str or path-like.
+    OSError
+        If the file cannot be written.
+    """
+    if not isinstance(model, Model):
+        raise TypeError(f"model: expected a Model, got {type(model).__name__}")
+    arrays = _arrays(model)
+    # fspath rejects an integer, which open would take as a file descriptor.
+    with open(os.fspath(path), "wb") as file:
+        np.savez(file, **arrays)
+
+
+def load(path: str | os.PathLike[str]) -> Model:
+    """Read a model written by `save`.
+
+    Parameters
+    ----------
+    path : str or path-like
+        A file written by `save`.
+
+    Returns
+    -------
+    Model
+        The model.
+
+    Raises
+    ------
+    ValueError
+        If the file is not a zip archive, is a damaged one, has no schema or a schema
+        other than the 0-d integer 1, lacks one of the arrays schema, mean, n_train,
+        edges, center and weighted, or holds an array that `save` does not write; the
+        message names path. Also if `Model` rejects a field, for example a count of
+        covariances other than the number of bins; the message names the field.
+    TypeError
+        If path is not a str or path-like, or if `Model` rejects a field.
+    OSError
+        If the file cannot be read, and for some damaged archives.
+    """
+    with open(os.fspath(path), "rb") as file:
+        # The prefixes by which np.load recognizes a zip archive. It returns an array
+        # for an .npy file and tries pickle for other files.
+        if file.read(4) not in (b"PK\x03\x04", b"PK\x05\x06"):
+            raise ValueError(
+                f"path: expected an .npz archive written by save, got a file that is "
+                f"not a zip archive in {path}"
+            )
+        file.seek(0)
+        # The zip directory is read on opening, and each array on access with its
+        # CRC-32 check.
+        try:
+            with np.load(file, allow_pickle=False) as archive:
+                return _from_archive(archive, path)
+        except zipfile.BadZipFile as error:
+            raise ValueError(
+                f"path: expected an .npz archive written by save, got a damaged zip "
+                f"archive ({error}) in {path}"
+            ) from None
+
+
+def _from_archive(archive: Any, path: str | os.PathLike[str]) -> Model:
+    schema = archive.get("schema")
+    if (
+        not isinstance(schema, np.ndarray)
+        or schema.ndim
+        or schema.dtype.kind not in "iu"
+        or schema != 1
+    ):
+        # The slices bound the message for a raw zip member.
+        found = "no schema" if schema is None else f"schema {str(schema)[:40]}"
+        raise ValueError(
+            f"path: expected a file written by save, with schema 1, got {found} in "
+            f"{path}"
+        )
+    missing = [key for key in _REQUIRED if key not in archive]
+    if missing:
+        raise ValueError(
+            f"path: expected the arrays that save writes, got no {', '.join(missing)} "
+            f"in {path}"
+        )
+    cov: list[NDArray[Any]] = []
+    while f"cov{len(cov)}" in archive:
+        cov.append(archive[f"cov{len(cov)}"])
+    known = {*_REQUIRED, "gspice_version", *(f"cov{b}" for b in range(len(cov)))}
+    unknown = sorted(set(archive.files) - known)
+    if unknown:
+        writer = archive.get("gspice_version")
+        by = "" if writer is None else f", written by gspice {str(writer)[:40]},"
+        raise ValueError(
+            f"path: expected only the arrays that save writes, got "
+            f"{', '.join(unknown)}{by} in {path}"
+        )
+    center = archive["center"][()]
+    return Model(
+        archive["mean"],
+        tuple(cov),
+        archive["n_train"],
+        edges=archive["edges"],
+        center=None if isinstance(center, float) and math.isnan(center) else center,
+        weighted=archive["weighted"][()],
+    )
+
+
+def _arrays(model: Model) -> dict[str, Any]:
+    # __init__ defines __version__ after it imports this module.
+    from . import __version__
+
+    return {
+        "schema": np.int64(1),
+        "gspice_version": __version__,
+        "mean": model.mean,
+        "n_train": np.array(model.n_train, dtype=np.int64),
+        "edges": np.array(model.edges),
+        "center": np.nan if model.center is None else model.center,
+        "weighted": model.weighted,
+    } | {f"cov{b}": C for b, C in enumerate(model.cov)}
 
 
 def _covariance(value: ArrayLike, name: str, npix: int) -> NDArray[np.float64]:
