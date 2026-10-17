@@ -5,7 +5,13 @@ import pytest
 from numpy.linalg import LinAlgError
 
 from gspice import _linalg
-from gspice._linalg import group_rows, guard_weights, precision, solve_pattern
+from gspice._linalg import (
+    group_rows,
+    guard_weights,
+    precision,
+    solve_pattern,
+    solve_prior,
+)
 from oracle import condition, conditional, guard_conditional, random_spd
 
 EPS = np.finfo(float).eps
@@ -184,8 +190,38 @@ def test_an_empty_T_gives_chi2_0():
 def test_pattern_solve_rejects_a_pattern_on_which_P_is_not_positive_definite():
     P = np.eye(NPIX)
     P[7, 7] = -1.0
-    with pytest.raises(LinAlgError, match="not positive definite on G"):
+    with pytest.raises(LinAlgError, match="^not positive definite in its precision"):
         solve_pattern(P, mask([6, 7]), mask([6]), mask([]), np.zeros((1, NPIX)))
+
+
+@pytest.mark.parametrize("name", MATRICES)
+def test_the_prior_is_exact_and_its_chi2_matches_the_reference(name):
+    C, _, X, tol = case(name)
+    _, M, T = (mask(pixels) for pixels in PATTERNS["prior"])
+    solution = solve_prior(C, M, T, X, covariance=True)
+    _, _, chi2 = conditional(C, range(NPIX), X, np.flatnonzero(T))
+    np.testing.assert_array_equal(solution.mean, np.zeros((NSPEC, np.sum(M))))
+    np.testing.assert_array_equal(solution.var, np.diagonal(C)[M])
+    np.testing.assert_array_equal(solution.cov, C[np.ix_(M, M)])
+    assert np.max(np.abs(solution.chi2 - chi2) / (chi2 + np.sum(T))) <= tol
+
+
+def test_the_prior_rejects_a_covariance_that_is_numerically_singular_at_t():
+    # Rank 1 plus 1e-14 I: dpotrf succeeds, but C at T scaled to unit diagonal has an
+    # rcond near 1e-14, below the limit of decision A26.
+    v = 2.0 ** (np.arange(NPIX) % 3 - 1)
+    C = np.outer(v, v) + 1e-14 * np.eye(NPIX)
+    T = mask([0, 1, 2])
+    with pytest.raises(LinAlgError, match="^numerically singular on the pixels T: "):
+        solve_prior(C, T, T, np.zeros((1, NPIX)))
+
+
+def test_the_prior_without_t_skips_lapack_and_gives_chi2_0(monkeypatch):
+    C, _, X, _ = case("spd1e5")
+    # LAPACK rejects an empty triangular solve, with a message on stderr.
+    monkeypatch.setattr(_linalg, "lapack", None)
+    solution = solve_prior(C, mask([3, 4]), mask([]), X)
+    np.testing.assert_array_equal(solution.chi2, np.zeros(NSPEC))
 
 
 def test_rows_with_equal_keys_share_a_group_in_increasing_row_order():

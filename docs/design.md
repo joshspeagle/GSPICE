@@ -534,7 +534,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 | S11.1 | `fit(cumulative=True)`; legacy non-cumulative. **BC-new** | paper Alg. 4 | False everywhere |
 | S11.2 | `>` in the new API with no flag; legacy `>=`. **BC-new** | paper, IDL and Julia; golden masks are tie-free | `strict=` flag |
 | S11.3 | Divisor N_s − 1 (mean-centred), no `ddof` argument | code, revised paper and f_s agree; deleting a concept beats a flag | `ddof=` argument |
-| S11.4 | Precision route only, in the new API. **BC-new**: on D3, `pixelwise` moves the 2022 `gp_interp` predvar by 7.6e-10 and 2.7e-10 at nguard 5 and 20 toward the 60-digit reference, and `infill` moves the D3 `gaussian_estimate` covariance by 6.4e-11 normwise in the same way | never cheaper by operation count; its error stayed within about κε in every measured regime, while the Schur error has no bound where the window is coupled to the conditioning pixels (section 4.2) | `method="schur"` |
+| S11.4 | Precision route only, in the new API. **BC-new**: on D3, `pixelwise` moves the 2022 `gp_interp` predvar by 7.6e-10 and 2.7e-10 at nguard 5 and 20 toward the 60-digit reference, and `infill` moves the D3 `gaussian_estimate` covariance by up to 3.0e-10 relative on the diagonal in the same way | never cheaper by operation count; its error stayed within about κε in every measured regime, while the Schur error has no bound where the window is coupled to the conditioning pixels (section 4.2) | `method="schur"` |
 | S11.5 | Flux in and out; scaled units through `scale`/`unscale` | one unit system per layer, hard to misuse | `scaled=` flag |
 | S11.6 | (nspec, npix) | all existing Python and Julia code | none |
 | S11.7 | Import and distribution name `gspice` | continuity | none |
@@ -612,7 +612,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
   - Q15: integer flux and float32 flux.
   - Q1: `E.with_fully_masked`; `fit` on the inherited-Q1 input (2022: an all-NaN covariance; legacy raises; `fit` drops row 11 and fits 1999 spectra).
   - Q2: `fit` on D1[:50] raises ValueError (2022: LinAlgError).
-  - S11.4: the D3 test of `pixelwise` above; `infill` on the input of `gaussian_estimate.D3.many21.guard5` within 1e-12 of the 60-digit reference, where the record errs by 6.4e-11 normwise and 3.1e-10 on the diagonal (precision route: 2.8e-14 and 8.8e-14).
+  - S11.4: the D3 test of `pixelwise` above; `infill` on the input of `gaussian_estimate.D3.many21.guard5` within 1e-12 of the 60-digit reference, where the record errs by 1.5e-11 in its largest entry relative to the largest entry of the reference, and by 3.0e-10 on the diagonal (precision route: 8.4e-15 and 8.8e-14).
 
 **Oracle** (`tests/oracle.py`, about 70 lines, with the test matrices).
 

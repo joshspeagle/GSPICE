@@ -15,7 +15,16 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.linalg import issymmetric
 
 from ._linalg import guard_weights, precision
-from ._spectra import boolean, finite_array, integer, numeric, real, require
+from ._spectra import (
+    boolean,
+    chunks,
+    finite_array,
+    integer,
+    median_snr,
+    numeric,
+    real,
+    require,
+)
 
 # The arrays that load reads. save also writes gspice_version and cov0, cov1, ...
 _REQUIRED = ("schema", "mean", "n_train", "edges", "center", "weighted")
@@ -138,6 +147,17 @@ class Model:
             P.flags.writeable = False
             self._cache["precision", b] = P
         return P
+
+    def _bins(
+        self, flux: NDArray[Any], ivar: NDArray[Any], bad: NDArray[np.bool_]
+    ) -> NDArray[np.intp]:
+        bins = np.zeros(len(flux), dtype=np.intp)
+        # A model with one bin skips the S/N, which sorts every row.
+        if len(self.cov) > 1:
+            for rows in chunks(*flux.shape):
+                snr = median_snr(flux[rows], ivar[rows], bad[rows])
+                bins[rows] = np.searchsorted(self.edges, snr, side="right")
+        return bins
 
     def _guard_weights(
         self, b: int, nguard: int

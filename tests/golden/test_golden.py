@@ -216,7 +216,8 @@ def test_rtol_overrides_follow_the_baseline_accuracy_of_the_manifest():
     )
 
 
-def check_golden_case(case_id, implementation, **options):
+def check_golden_case(case_id, implementation, skip=(), **options):
+    # Checks each output of the case except those named in skip, and returns them all.
     case = GOLDEN.cases[case_id]
     kwargs = GOLDEN.arguments(case)
     pristine = {k: v.copy() for k, v in kwargs.items() if isinstance(v, np.ndarray)}
@@ -229,9 +230,12 @@ def check_golden_case(case_id, implementation, **options):
     assert len(values) == len(outputs)
     expected = GOLDEN.expected(case)
     for output in outputs:
+        if output["name"] in skip:
+            continue
         mode = MODE[(case["function"], output["name"])]
         actual = values[output.get("index", 0)]
         check_output(case, output, actual, expected[output["name"]], kwargs, mode)
+    return values
 
 
 @pytest.mark.parametrize("case_id", case_params("golden"))

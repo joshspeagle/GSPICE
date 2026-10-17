@@ -1,13 +1,15 @@
 import logging
+from dataclasses import fields
+from functools import partial
 
 import numpy as np
 import pytest
 from numpy.linalg import LinAlgError
 
 from _golden import checked, same
-from gspice import Model, _model, _spectra, pixelwise, scale, snr, unscale
+from gspice import Model, _model, _spectra, infill, pixelwise, scale, snr, unscale
 from gspice._linalg import precision
-from oracle import condition, guard_conditional, random_spd
+from oracle import condition, conditional, guard_conditional, random_spd
 
 EPS = np.finfo(float).eps
 NPIX = 12
@@ -53,8 +55,45 @@ def two_bins(kappa, center=None):
     return model, flux, ivar, mask
 
 
-def arrays(prediction):
-    return prediction.flux, prediction.var, prediction.z
+def arrays(result):
+    # The public arrays of a Prediction or a Repaired.
+    return tuple(getattr(result, f.name) for f in fields(result) if f.name[0] != "_")
+
+
+def rows_of(pixels):
+    selected = np.zeros((len(pixels), NPIX), bool)
+    for s, row in enumerate(pixels):
+        selected[s, row] = True
+    return selected
+
+
+# replace and ignore for the spectra of two_bins. With the bad pixels of BAD, they hold
+# runs at both edges (rows 1 and 2), scattered pixels (3 and 4), pixels in both sets
+# (1 and 4), bad pixels ignored (0, 1, 4 and 6) and replaced (1, 2 and 3), and a G
+# that covers all pixels (3). Rows 0 and 6 of bin 0 share a pattern, rows 2 and 7 of
+# bin 1 have equal G and M but not equal T, and rows 5 and 7 have equal patterns in
+# different bins.
+REPLACE = rows_of(
+    [
+        [4, 5],
+        [0, 1, 2, 5, 6],
+        [9, 10, 11],
+        [1, 4, 7, 10],
+        [2, 6, 9, 11],
+        [9, 10, 11],
+        [4, 5],
+        [9, 10, 11],
+    ]
+)
+IGNORE = rows_of(
+    [[8], [2, 3], [7, 8], [0, 2, 3, 5, 6, 8, 9], [5, 6], [7, 8], [0, 1], [7, 8]]
+)
+# pixelwise and infill, with the options of the tests that run both.
+FUNCTIONS = {"pixelwise": partial(pixelwise, nguard=2), "infill": infill}
+# Singular with a positive diagonal. Its entries are powers of 2, so the Cholesky factor
+# at one pixel is exact, and dpotrf finds the leading minor of order 2 exactly 0.
+ROOT = 2.0 ** (PIXELS % 3 - 1)
+SINGULAR = np.outer(ROOT, ROOT)
 
 
 def reference(model, b, nguard, flux, ivar, mask):
@@ -158,47 +197,38 @@ def test_a_model_reuses_its_precision_matrix_when_nguard_changes(monkeypatch):
 
 
 def test_the_prior_needs_no_precision_matrix():
-    model, flux, ivar, mask = two_bins(1e2, center=0.9)
-    # Singular with a positive diagonal. Its entries are powers of 2, so dpotrf finds
-    # the leading minor of order 2 exactly 0.
-    v = 2.0 ** (PIXELS % 3 - 1)
-    C = np.outer(v, v)
-    prior = Model(MEANS[:1], (C,), (100,), center=0.9)
+    _, flux, ivar, mask = two_bins(1e2, center=0.9)
+    prior = Model(MEANS[:1], (SINGULAR,), (100,), center=0.9)
     result = pixelwise(prior, flux, ivar, mask, nguard=NPIX - 1)
     X, a, _ = scale(flux, ivar, mask, center=0.9, refmean=MEANS[0])
     assert same(result.flux, MEANS[0] / a[:, np.newaxis] + 0.9)
-    assert same(result.var, np.diagonal(C) / np.square(a)[:, np.newaxis])
-    expected_z = np.where(mask | (ivar == 0), np.nan, X / np.sqrt(np.diagonal(C)))
+    assert same(result.var, np.diagonal(SINGULAR) / np.square(a)[:, np.newaxis])
+    expected_z = np.where(mask | (ivar == 0), np.nan, X / ROOT)
     assert same(result.z, expected_z)
     with pytest.raises(LinAlgError, match=r"^model: cov\[0\] is not positive definite"):
         pixelwise(prior, flux, ivar, mask, nguard=0)
-    # Only bin 1 is singular: the message names it, and the spectra of bin 0 alone
-    # never need its precision matrix.
-    mixed = Model(MEANS, (model.cov[0], C), (100, 100), edges=model.edges)
-    with pytest.raises(LinAlgError, match=r"^model: cov\[1\] is not positive definite"):
-        pixelwise(mixed, flux, ivar, mask, nguard=0)
-    rows = BINS == 0
-    pixelwise(mixed, flux[rows], ivar[rows], mask[rows], nguard=0)
 
 
-def test_a_covariance_that_fails_its_check_raises_before_any_chunk(monkeypatch):
+@pytest.mark.parametrize("name", FUNCTIONS)
+def test_a_covariance_that_fails_its_check_raises_before_any_chunk(monkeypatch, name):
     monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
     model, flux, ivar, mask = two_bins(1e2)
-    cov = (model.cov[0], np.ones((NPIX, NPIX)))
-    singular = Model(MEANS, cov, (100, 100), edges=model.edges)
+    singular = Model(MEANS, (model.cov[0], SINGULAR), (100, 100), edges=model.edges)
     # The spectra of bin 0 first, so that the chunks of bin 1 come last.
     rows = np.argsort(BINS, kind="stable")
     calls = []
-    with pytest.raises(LinAlgError, match=r"^model: cov\[1\] is "):
-        pixelwise(
+    with pytest.raises(LinAlgError, match=r"^model: cov\[1\] is not positive definite"):
+        FUNCTIONS[name](
             singular,
             flux[rows],
             ivar[rows],
             mask[rows],
-            nguard=2,
             progress=lambda *args: calls.append(args),
         )
     assert calls == []
+    # The spectra of bin 0 alone never need the precision matrix of bin 1.
+    rows = BINS == 0
+    FUNCTIONS[name](singular, flux[rows], ivar[rows], mask[rows])
 
 
 def test_a_guard_window_that_fails_its_factorization_names_the_bin(monkeypatch):
@@ -212,57 +242,260 @@ def test_a_guard_window_that_fails_its_factorization_names_the_bin(monkeypatch):
         pixelwise(Model(MEANS[:1], model.cov[:1], (100,)), flux, ivar, mask, nguard=0)
 
 
-def test_inputs_are_unchanged_and_outputs_are_read_only_and_not_shared():
+# The options of the tests that run both functions with replace and ignore.
+SETS = {"pixelwise": {}, "infill": {"replace": REPLACE, "ignore": IGNORE}}
+
+
+@pytest.mark.parametrize("name", FUNCTIONS)
+def test_inputs_are_unchanged_and_outputs_are_read_only_and_not_shared(name):
     model, flux, ivar, mask = two_bins(1e2)
-    outputs = checked(
-        lambda *spectra: arrays(pixelwise(model, *spectra, nguard=2)), flux, ivar, mask
-    )
-    assert not any(output.flags.writeable for output in outputs)
+
+    def outputs(*spectra, **sets):
+        return arrays(FUNCTIONS[name](model, *spectra, **sets))
+
+    result = checked(outputs, flux, ivar, mask, **SETS[name])
+    assert not any(output.flags.writeable for output in result)
 
 
-def test_float32_and_f_ordered_inputs_give_the_result_of_a_float64_c_copy():
+@pytest.mark.parametrize("name", FUNCTIONS)
+def test_float32_and_f_ordered_inputs_give_the_result_of_a_float64_c_copy(name):
     model, flux, ivar, mask = two_bins(1e2, center=0.9)
+    function = partial(FUNCTIONS[name], model, **SETS[name])
     flux32, ivar32 = flux.astype(np.float32), ivar.astype(np.float32)
-    cast = pixelwise(model, flux32.astype(float), ivar32.astype(float), mask, nguard=2)
-    assert same(arrays(pixelwise(model, flux32, ivar32, mask, nguard=2)), arrays(cast))
+    cast = function(flux32.astype(float), ivar32.astype(float), mask)
+    assert same(arrays(function(flux32, ivar32, mask)), arrays(cast))
     fortran = [np.asfortranarray(array) for array in (flux, ivar, mask)]
-    expected = arrays(pixelwise(model, flux, ivar, mask, nguard=2))
-    assert same(arrays(pixelwise(model, *fortran, nguard=2)), expected)
+    assert same(arrays(function(*fortran)), arrays(function(flux, ivar, mask)))
 
 
-def test_progress_counts_the_spectra_done_after_each_chunk(monkeypatch):
+@pytest.mark.parametrize("name", FUNCTIONS)
+def test_progress_counts_the_spectra_done_after_each_chunk(monkeypatch, name):
     monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
     model, flux, ivar, mask = two_bins(1e2)
     calls = []
-    pixelwise(
-        model,
-        flux[:5],
-        ivar[:5],
-        mask[:5],
-        nguard=2,
-        progress=lambda *args: calls.append(args),
+    FUNCTIONS[name](
+        model, flux[:5], ivar[:5], mask[:5], progress=lambda *args: calls.append(args)
     )
-    assert calls == [("pixelwise", 2, 5), ("pixelwise", 4, 5), ("pixelwise", 5, 5)]
+    assert calls == [(name, 2, 5), (name, 4, 5), (name, 5, 5)]
 
 
-def test_a_call_on_a_new_model_logs_its_timings_at_debug(caplog):
+# P, the guard weights of pixelwise and the call.
+@pytest.mark.parametrize(("name", "count"), [("pixelwise", 3), ("infill", 2)])
+def test_a_call_on_a_new_model_logs_its_timings_at_debug(caplog, name, count):
     caplog.set_level(logging.DEBUG, logger="gspice")
     model, flux, ivar, mask = two_bins(1e2)
     one_bin = Model(MEANS[:1], model.cov[:1], (100,))
-    pixelwise(one_bin, flux, ivar, mask, nguard=2)
-    # P, the guard weights and the call.
+    FUNCTIONS[name](one_bin, flux, ivar, mask)
     records = [(record.name, record.levelno) for record in caplog.records]
-    assert records == [("gspice", logging.DEBUG)] * 3
+    assert records == [("gspice", logging.DEBUG)] * count
     handlers = logging.getLogger("gspice").handlers
     assert any(isinstance(handler, logging.NullHandler) for handler in handlers)
 
 
-def test_zero_spectra_give_empty_arrays_without_a_precision_matrix():
+@pytest.mark.parametrize(
+    ("function", "expected"),
+    [
+        (partial(pixelwise, nguard=0), [((0, 3), np.float64)] * 3),
+        (
+            infill,
+            [((0, 3), np.float64)] * 2
+            + [((0, 3), np.bool_)] * 2
+            + [((0,), np.float64), ((0,), np.int64)],
+        ),
+    ],
+    ids=["pixelwise", "infill"],
+)
+def test_zero_spectra_give_empty_arrays_without_a_precision_matrix(function, expected):
     singular = Model(np.zeros((1, 3)), (np.ones((3, 3)),), (5,))
     empty = np.zeros((0, 3))
     calls = []
-    result = pixelwise(
-        singular, empty, empty, nguard=0, progress=lambda *args: calls.append(args)
-    )
-    assert [(a.shape, a.dtype) for a in arrays(result)] == [((0, 3), np.float64)] * 3
+    result = function(singular, empty, empty, progress=lambda *args: calls.append(args))
+    assert [(a.shape, a.dtype) for a in arrays(result)] == expected
     assert calls == []
+
+
+@pytest.mark.filterwarnings("error")
+@pytest.mark.parametrize("given", [False, True], ids=["default", "given"])
+@pytest.mark.parametrize("kappa", [1e2, 1e8])
+@pytest.mark.parametrize("center", [None, 0.9])
+def test_infill_matches_the_60_digit_reference(center, kappa, given):
+    model, flux, ivar, mask = two_bins(kappa, center)
+    sets = {"replace": REPLACE, "ignore": IGNORE} if given else {}
+    result = infill(model, flux, ivar, mask, **sets, covariance=True)
+    bad = mask | (ivar == 0)
+    M = REPLACE if given else bad
+    G = M | bad | (IGNORE if given else False)
+    T = M & ~bad
+    np.testing.assert_array_equal(result.replaced, M)
+    np.testing.assert_array_equal(result.ignored, G & ~M)
+    np.testing.assert_array_equal(result.dof, np.count_nonzero(T, axis=1))
+    # Outside M, the input flux, and 1/ivar at good pixels and inf at bad ones.
+    var = np.divide(1.0, ivar, out=np.full(ivar.shape, np.inf), where=~bad)
+    assert same(result.flux[~M], flux[~M])
+    assert same(result.var[~M], var[~M])
+    c = 0.0 if center is None else center
+    for s, b in enumerate(BINS):
+        pixels, cov = result.covariance(s)
+        np.testing.assert_array_equal(pixels, np.flatnonzero(M[s]))
+        assert same(np.diagonal(cov), result.var[s, pixels])
+        if not pixels.size:
+            assert result.chi2[s] == 0
+            continue
+        X, a, _ = scale(flux[[s]], ivar[[s]], mask[[s]], center=c, refmean=MEANS[b])
+        g, t = np.flatnonzero(G[s]), np.flatnonzero(T[s])
+        mean, reference, chi2 = conditional(model.cov[b], g, X, t)
+        at = np.flatnonzero(M[s, g])
+        reference = reference[np.ix_(at, at)]
+        f, v = unscale(
+            mean[:, at], a, MEANS[b, pixels], center=c, var=np.diagonal(reference)
+        )
+        # Design section 11: |dmu| <= tol sigma, |dvar| <= tol var and
+        # |dchi2| <= tol (chi2 + |T|), with tol = 10 kappa eps. The mean reads only x_O,
+        # a draw from N(0, cov[b]), so the Mahalanobis factor is 1. An entry of the
+        # covariance errs by at most sigma_i sigma_j times the normwise error of the
+        # correlation matrix, within tol as test_linalg checks for the pattern solve.
+        # The two evaluations of (mu + m)/a + c round three times each, by at most
+        # eps (3|f| + 2|c|) in all to first order; those of var/a^2 and cov/a^2 round
+        # once each, with the same a^2, and |cov_ij| <= sigma_i sigma_j.
+        tol = 10 * condition(model.cov[b]) * EPS
+        sigma = np.sqrt(v[0])
+        rounding = 4 * EPS * (np.abs(f[0]) + abs(c))
+        assert np.all(np.abs(result.flux[s, pixels] - f[0]) <= tol * sigma + rounding)
+        assert np.all(np.abs(result.var[s, pixels] - v[0]) <= (tol + EPS) * v[0])
+        error = np.abs(cov - reference / a[0] ** 2)
+        assert np.all(error <= (tol + EPS) * np.outer(sigma, sigma))
+        assert abs(result.chi2[s] - chi2[0]) <= tol * (chi2[0] + t.size)
+
+
+def test_slices_and_chunks_of_infill_agree_with_one_call_to_rounding(monkeypatch):
+    model, flux, ivar, mask = two_bins(1e2, center=0.9)
+
+    def repaired(rows):
+        spectra = (array[rows] for array in (flux, ivar, mask))
+        sets = {"replace": REPLACE[rows], "ignore": IGNORE[rows]}
+        return infill(model, *spectra, **sets, covariance=True)
+
+    whole = repaired(slice(None))
+    # The pattern of rows 0 and 6 spans slices and chunks, and each row alone is a
+    # grouping of its own (design section 11).
+    singles = [slice(s, s + 1) for s in range(len(flux))]
+    spans = (slice(0, 3), slice(3, 4), slice(4, None), *singles)
+    results = [(rows, repaired(rows)) for rows in spans]
+    monkeypatch.setattr(_spectra, "CHUNK", 3 * NPIX)
+    results.append((slice(None), repaired(slice(None))))
+    # Every grouping factorizes the same P_GG, which gives the variances and
+    # covariances, and then divides them by the same a^2. The means and chi2 also come
+    # from products and solves with other numbers of spectra, whose rounding can
+    # differ; each lies within the tolerance of the reference test, tol = 10 kappa eps,
+    # so two lie within 2 tol, and flux rounds as there.
+    tol = 10 * max(map(condition, model.cov)) * EPS
+    sigma = np.sqrt(whole.var)
+    dflux = 2 * tol * sigma + 4 * EPS * (np.abs(whole.flux) + 0.9)
+    dchi2 = 2 * tol * (whole.chi2 + whole.dof)
+    for rows, result in results:
+        for name in ("var", "replaced", "ignored", "dof"):
+            assert same(getattr(result, name), getattr(whole, name)[rows])
+        M = whole.replaced[rows]
+        assert same(result.flux[~M], whole.flux[rows][~M])
+        assert np.all(np.abs(result.flux[M] - whole.flux[rows][M]) <= dflux[rows][M])
+        assert np.all(np.abs(result.chi2 - whole.chi2[rows]) <= dchi2[rows])
+        for s, row in enumerate(range(len(flux))[rows]):
+            assert same(result.covariance(s), whole.covariance(row))
+
+
+@pytest.mark.parametrize("nguard", [0, 2])
+def test_infill_of_a_pixel_with_its_guard_window_ignored_equals_pixelwise(nguard):
+    # Design section 11, on rows 5 and 7, which have no bad pixels.
+    model, flux, ivar, mask = two_bins(1e8, center=0.9)
+    spectra = flux[[5, 7]], ivar[[5, 7]], mask[[5, 7]]
+    predicted = pixelwise(model, *spectra, nguard=nguard)
+    # Each result lies within the tolerances of its reference test, 10 kappa eps in
+    # |dmu|/sigma, |dvar|/var and |dchi2|/(chi2 + 1), so the two lie within twice them
+    # of each other, plus the rounding of flux and var there.
+    tol = 2 * 10 * max(map(condition, model.cov)) * EPS
+    sigma = np.sqrt(predicted.var)
+    rounding = 8 * EPS * (np.abs(predicted.flux) + 0.9)
+    for i in range(NPIX):
+        replace = PIXELS == i
+        ignore = (np.abs(PIXELS - i) <= nguard) & ~replace
+        result = infill(model, *spectra, replace=replace, ignore=ignore)
+        error = np.abs(result.flux[:, i] - predicted.flux[:, i])
+        assert np.all(error <= tol * sigma[:, i] + rounding[:, i])
+        var = predicted.var[:, i]
+        assert np.all(np.abs(result.var[:, i] - var) <= (tol + 2 * EPS) * var)
+        z2 = predicted.z[:, i] ** 2
+        assert np.all(np.abs(result.chi2 - z2) <= tol * (z2 + 1))
+
+
+def test_an_npix_mask_gives_the_result_of_that_mask_in_every_row():
+    model, flux, ivar, mask = two_bins(1e2)
+    replace, ignore = REPLACE[4], IGNORE[4]
+    rows = (len(flux), 1)
+    expected = infill(
+        model,
+        flux,
+        ivar,
+        mask,
+        replace=np.tile(replace, rows),
+        ignore=np.tile(ignore, rows),
+    )
+    result = infill(model, flux, ivar, mask, replace=replace, ignore=ignore)
+    assert same(arrays(result), arrays(expected))
+
+
+def test_infill_where_g_covers_all_pixels_needs_no_precision_matrix():
+    _, flux, ivar, mask = two_bins(1e2, center=0.9)
+    bad = mask | (ivar == 0)
+    prior = Model(MEANS[:1], (SINGULAR,), (100,), center=0.9)
+    # Each spectrum replaces its bad pixels and pixel 2, which is good in all, and
+    # ignores the other pixels: G covers all pixels, and T is pixel 2.
+    replace = bad | (PIXELS == 2)
+    result = infill(
+        prior, flux, ivar, mask, replace=replace, ignore=~replace, covariance=True
+    )
+    X, a, _ = scale(flux, ivar, mask, center=0.9, refmean=MEANS[0])
+    a2 = np.square(a)[:, np.newaxis]
+    assert same(result.flux[replace], (MEANS[0] / a[:, np.newaxis] + 0.9)[replace])
+    assert same(result.var[replace], (np.diagonal(SINGULAR) / a2)[replace])
+    assert same(result.chi2, (X[:, 2] / ROOT[2]) ** 2)
+    for s in range(len(flux)):
+        pixels, cov = result.covariance(s)
+        assert same(cov, SINGULAR[np.ix_(pixels, pixels)] / a2[s])
+    # Pixels 2 and 4 of row 6: C at T is singular.
+    replace[6, 4] = True
+    error = r"^model: cov\[0\] is not positive definite on the pixels T, for the pattern of row 6$"
+    with pytest.raises(LinAlgError, match=error):
+        infill(prior, flux, ivar, mask, replace=replace, ignore=~replace)
+    # Without a pixel to replace, no spectrum needs P.
+    infill(prior, flux, ivar, mask, replace=np.zeros(flux.shape, bool))
+
+
+def test_a_pattern_whose_factorization_fails_names_the_bin_and_its_first_row(
+    monkeypatch,
+):
+    # A precision matrix that passed its check, but is not positive definite at pixel
+    # 8, as rounding can make it near the rcond limit.
+    P = np.eye(NPIX)
+    P[8, 8] = -1.0
+    monkeypatch.setattr(_model, "precision", lambda S: P)
+    # Rows 4 to 7 form the second chunk, and rows 5 and 7 hold the only pattern with
+    # pixel 8 in G and a pixel to replace.
+    monkeypatch.setattr(_spectra, "CHUNK", 4 * NPIX)
+    model, flux, ivar, mask = two_bins(1e2)
+    replace = np.zeros(flux.shape, bool)
+    replace[[5, 7], 8] = True
+    error = (
+        r"^model: cov\[0\] is not positive definite in its precision matrix on the "
+        r"pixels G, for the pattern of row 5$"
+    )
+    with pytest.raises(LinAlgError, match=error):
+        infill(
+            Model(MEANS[:1], model.cov[:1], (100,)), flux, ivar, mask, replace=replace
+        )
+
+
+def test_covariance_needs_a_result_computed_with_covariance_true():
+    model, flux, ivar, mask = two_bins(1e2)
+    result = infill(model, flux, ivar, mask)
+    with pytest.raises(ValueError, match="covariance=True"):
+        result.covariance(0)

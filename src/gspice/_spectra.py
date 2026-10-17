@@ -25,7 +25,7 @@ def validate(
     flux = numeric(flux, "flux")
     ivar = numeric(ivar, "ivar")
     if mask is not None:
-        mask = np.asarray(mask)
+        mask = as_array(mask, "mask")
         if mask.dtype.kind not in "biuf":
             raise TypeError(
                 f"mask: expected a bool, integer or floating dtype, got {mask.dtype}"
@@ -330,12 +330,16 @@ def snr(
     return out
 
 
-def numeric(value: ArrayLike, name: str) -> NDArray[Any]:
+def as_array(value: ArrayLike, name: str) -> NDArray[Any]:
     try:
-        array = np.asarray(value)
+        return np.asarray(value)
     except ValueError as error:
         # A ragged nested sequence.
         raise ValueError(f"{name}: {error}") from None
+
+
+def numeric(value: ArrayLike, name: str) -> NDArray[Any]:
+    array = as_array(value, name)
     if array.dtype.kind not in "iuf":
         raise TypeError(
             f"{name}: expected an integer or floating dtype, got {array.dtype}"
@@ -408,3 +412,10 @@ def boolean(value: object, name: str) -> bool:
     if not isinstance(value, bool | np.bool_):
         raise TypeError(f"{name}: expected a bool, got {type(value).__name__}")
     return bool(value)
+
+
+def check_progress(progress: object) -> None:
+    if progress is not None and not callable(progress):
+        raise TypeError(
+            f"progress: expected a callable or None, got {type(progress).__name__}"
+        )

@@ -11,11 +11,12 @@
 - Type checks with mypy in strict mode for the code outside `gspice.legacy`.
 - A test coverage floor of 90% for the code outside `gspice.legacy`.
 - pre-commit hooks that run ruff.
-- `benchmarks/run.py`, which times `pixelwise`, the conditioning primitives of infill and the 2022 `gp_interp`, and prints the timings and the setup as JSON.
+- `benchmarks/run.py`, which times `pixelwise`, `infill` and the 2022 `gp_interp`, and prints the timings and the setup as JSON.
 - `gspice.scale`, `gspice.unscale` and `gspice.snr`. `scale` interpolates each spectrum over its bad pixels and scales it to unit mean noise, `unscale` returns scaled values and variances to flux units, and `snr` gives the median signal-to-noise ratio of each spectrum.
 - `gspice.Model`, which holds the mean, the covariance and the training count of each S/N bin, and `gspice.save` and `gspice.load`, which write and read a model as one .npz file.
 - `gspice.pixelwise`, which predicts each pixel of each spectrum from the pixels farther than `nguard` from it, and its result `gspice.Prediction`. A model keeps the precision matrix and the guard weights of each bin after their first use.
 - `gspice.simulate`, which draws synthetic continuum-normalized spectra for tests and examples, and its result `gspice.Simulation`. The spectra have absorption lines whose depths follow two latent parameters in two populations, Gaussian noise, and optional cosmic rays, bad columns and shifted blocks. With `gaussian=True` and no artifacts they are exactly Gaussian.
+- `gspice.infill`, which replaces chosen pixels of each spectrum by their Gaussian conditional mean given the other pixels, and its result `gspice.Repaired`. It reports the replaced and ignored pixels and χ², and with `covariance=True` the conditional covariance of the replaced pixels of each spectrum.
 
 ### Removed
 
@@ -44,3 +45,4 @@
 - `scale` checks and computes a long double flux or ivar as float64. It raises ValueError for a long double beyond the float64 range at a good pixel, and an ivar that rounds to 0 in float64 marks a bad pixel. The 2022 `standard_scale` computed in long double and returned a finite result for such values.
 - `scale` and `snr` raise ValueError for a spectrum without a good pixel, and name its row. For such a spectrum, the 2022 `standard_scale` returned NaN in every value of Dvec and refmean.
 - `pixelwise` computes the conditional variances through the precision matrix, where the 2022 `gp_interp` used the Schur updates of a precomputed inverse. On the golden data set D3, whose covariance has the condition number 8.6e4, the 2022 predvar differs from a 60-digit reference by up to 7.6e-10 at nguard 5 and 2.7e-10 at nguard 20, relative. `pixelwise` differs by at most 1.7e-13 and 8.7e-14.
+- `infill` computes the conditional covariance through the precision matrix, where the 2022 `gaussian_estimate` used the Schur updates of a precomputed inverse. On D3, the 2022 predcovar differs from a 60-digit reference by up to 3.0e-10 relative on the diagonal, and `infill` by at most 8.8e-14.

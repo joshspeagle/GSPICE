@@ -25,11 +25,7 @@ def precision(S: NDArray[np.float64]) -> NDArray[np.float64]:
         raise LinAlgError(
             f"not positive definite: dpotrf failed at its leading minor of order {info}"
         )
-    # With D = diag(S)^-1/2, D S D = (D L)(D L)^T, and D L is lower triangular with a
-    # positive diagonal: it is the Cholesky factor of S scaled to unit diagonal.
-    d = 1 / np.sqrt(np.diagonal(S))
-    anorm = np.max(d * (np.abs(S) @ d))
-    rcond, _ = lapack.dpocon(L * d[:, np.newaxis], anorm, uplo="L")
+    rcond = _rcond(S, L)
     # not >= also rejects a NaN rcond.
     if not rcond >= MIN_RCOND:
         raise LinAlgError(
@@ -99,7 +95,9 @@ def solve_pattern(
     t = index.size - np.count_nonzero(T)
     R, info = lapack.dpotrf(P[np.ix_(index, index)], lower=1)
     if info:
-        raise LinAlgError("P is not positive definite on G")
+        raise LinAlgError(
+            "not positive definite in its precision matrix on the pixels G"
+        )
     # x0 is x with its entries in G set to 0, so that no value in G enters the mean
     # and an outlier there cannot cancel.
     X0 = X.copy()
@@ -131,6 +129,37 @@ def solve_pattern(
     return Conditional(mean.T[:, order], var[order], chi2, cov, draws)
 
 
+def solve_prior(
+    C: NDArray[np.float64],
+    M: NDArray[np.bool_],
+    T: NDArray[np.bool_],
+    X: NDArray[np.float64],
+    covariance: bool = False,
+) -> Conditional:
+    # Where G covers all pixels, the conditional is the prior N(0, C): exact from C, and
+    # without P, which a singular C does not have (design section 4.2).
+    nspec = X.shape[0]
+    pixels = np.flatnonzero(M)
+    chi2 = np.zeros(nspec)
+    if T.any():
+        CTT = C[np.ix_(T, T)]
+        L, info = lapack.dpotrf(CTT, lower=1)
+        if info:
+            raise LinAlgError("not positive definite on the pixels T")
+        # The check of precision (decision A26), on C at T.
+        rcond = _rcond(CTT, L)
+        if not rcond >= MIN_RCOND:
+            raise LinAlgError(
+                f"numerically singular on the pixels T: rcond = {rcond:.2g}"
+            )
+        # chi2 = ||L^-1 x_T||^2, with C_TT = L L^T and the prior mean 0.
+        r, _ = lapack.dtrtrs(L, X[:, T].T, lower=1)
+        chi2 = np.sum(r**2, axis=0)
+    cov = C[np.ix_(pixels, pixels)] if covariance else None
+    mean = np.zeros((nspec, pixels.size))
+    return Conditional(mean, np.diagonal(C)[pixels], chi2, cov, None)
+
+
 def group_rows(keys: NDArray[np.bool_]) -> list[NDArray[np.intp]]:
     # Each packed row is one void scalar, which np.unique sorts faster than rows with
     # axis=0 (design decision A17). The view needs C order, which packbits copies from
@@ -142,6 +171,16 @@ def group_rows(keys: NDArray[np.bool_]) -> list[NDArray[np.intp]]:
     order = np.argsort(inverse, kind="stable")
     starts = np.cumsum(counts) - counts
     return [order[s : s + n] for s, n in zip(starts.tolist(), counts.tolist())]
+
+
+def _rcond(S: NDArray[np.float64], L: NDArray[np.float64]) -> float:
+    # The reciprocal condition number of S scaled to unit diagonal, from its Cholesky
+    # factor L. With D = diag(S)^-1/2, D S D = (D L)(D L)^T, and D L is lower triangular
+    # with a positive diagonal: it is the Cholesky factor of S scaled to unit diagonal.
+    d = 1 / np.sqrt(np.diagonal(S))
+    anorm = np.max(d * (np.abs(S) @ d))
+    rcond, _ = lapack.dpocon(L * d[:, np.newaxis], anorm, uplo="L")
+    return float(rcond)
 
 
 def _mirror(A: NDArray[np.float64]) -> None:

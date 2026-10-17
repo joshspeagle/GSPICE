@@ -4,7 +4,7 @@ import logging
 
 from ._datasets import Simulation, simulate
 from ._model import Model, load, save
-from ._predict import Prediction, pixelwise
+from ._predict import Prediction, Repaired, infill, pixelwise
 from ._spectra import scale, snr, unscale
 from .legacy import (
     cholesky_inv,
@@ -29,6 +29,7 @@ __version__ = "2.0.0.dev0"
 __all__ = [
     "Model",
     "Prediction",
+    "Repaired",
     "Simulation",
     "cholesky_inv",
     "covar",
@@ -36,6 +37,7 @@ __all__ = [
     "gaussian_estimate",
     "get_chimask",
     "gp_interp",
+    "infill",
     "legacy",
     "load",
     "maskinterp",
