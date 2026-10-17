@@ -365,8 +365,10 @@ def noise_audit(model: Model, flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike 
     e_i holds the astrophysical error, the noise propagated from the conditioning pixels
     and the estimation error, so E[rho_i^2] >= k_i, and e_i grows with S/N and next to
     long bad runs. Use spectra not used for training, with noise uncorrelated beyond
-    nguard and ivar independent of the noise. For noise=False models whose training
-    spectra share k_i, Z is blind to k_i; rho is not.
+    nguard and mask and ivar independent of the noise. The expectation can fail where a
+    bad pixel beyond nguard is interpolated from one within nguard of i, and fails next to
+    a bad run longer than nguard. For noise=False models whose training spectra share
+    k_i, Z is blind to k_i; rho is not.
     Returns rho (npix,), unit-free, NaN where no spectrum is good. Cost: that of pixelwise.
     """
 
@@ -638,7 +640,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 
 - Held-out ⟨Z²⟩/N_* = f_s within 3σ, with `simulate(gaussian=True)`, at (N_s, N_k, N_*) = (30, 10, 2), (200, 40, 10) and (200, 40, 1) pixelwise, also with ignored pixels (3.7). It averages over training sets, each with `fit(nsigma=())` and its own held-out spectra, and σ is the standard error across sets (section 5.3).
 - Two-population mixture: each population's ⟨Z²⟩ matches tr(Ĉ⁻¹ E_p[r rᵀ]) from its own mean and covariance within 3σ, and the average matches f_s for N_s ≥ 50 N_k (measured 1.130 at N_s 200 and 1.004 at 2000, N_k 40) (4.4).
-- `noise_audit`: with the reported σ 1/1.2 of the true σ on 200 pixels of the training and test spectra, ρ_i² − e_i equals k_i within 3σ, e_i from the noise-free flux (4.5).
+- `noise_audit`: with the reported σ 1/1.2 of the true σ on 200 pixels of the training and test spectra, the means of ρ_i² − e_i over these pixels and over the others equal those of k_i within 3σ, e_i from the noise-free flux (4.5).
 - The noise-free estimator before the eigenvalue floor is unbiased with per-pixel masks, weights and per-spectrum ivar: every element within 4σ (5.3).
 
 **End to end** (4.3, `slow`). `simulate(artifacts=0.4)`, then `fit`, `fit_blocks` and `repair`: completeness ≥ 98% for peaks above 25σ, false replacements per clean spectrum, repaired-pixel Z dispersion near f_s^½, and a larger one with `runlength=None`, with thresholds from the Monte Carlo error. As a check, not an assertion, since `simulate` is not the PHOENIX mock of the paper, the report lists each statistic next to the paper value: 2.8 replaced pixels per clean spectrum, 1.7% of clean spectra affected, Z dispersion 1.02 (f_s^½ = 1.04) and 1.29 with `runlength=None` (paper l.512-514); rms (repaired − truth)/σ 0.65, calibration 0.993 to 1.004 for 1 to 1024 pixels, and 50% completeness at 12σ for cosmic rays and at a 1.9-pixel shift (kickoff specification). A fast version checks that one strong cosmic ray and one bad column are replaced.

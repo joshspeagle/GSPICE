@@ -20,6 +20,7 @@
 - `gspice.fit`, which fits a model to training spectra with the iterative outlier clipping of paper Alg. 4, and returns the model and the final training mask.
 - `gspice.finite_sample_factor`, which gives f_s(N_s, N_k, N_*), the mean χ² per predicted pixel of a held-out Gaussian spectrum when a model fitted to N_s spectra predicts N_* pixels from N_k others.
 - The option `inflate` of `gspice.pixelwise` and `gspice.infill`, which multiplies the variances and covariances of a mean-centred, unweighted model by f_s(N_s, N_k, 1). The field `Repaired.fs` holds the factor of each spectrum by which `chi2 / dof` is divided, so that `chi2 / (dof * fs)` has the mean 1 for held-out Gaussian spectra of such a model, with or without `inflate`.
+- `gspice.noise_audit`, which compares the residuals of `gspice.pixelwise` with the reported noise at each pixel. It returns rho, the root mean of (f − f̂)² ivar over the spectra that are good at the pixel. For spectra not used in the fit, the expectation of rho² is the ratio of the true to the reported noise variance plus the expectation of the mean of (t − f̂)² ivar, with t the noise-free flux, so it exceeds 1 even where ivar is right.
 - `gspice/py.typed`, the PEP 561 marker, so that type checkers read the annotations of an installed `gspice`. The functions of `gspice.legacy` keep their 2022 signatures without annotations.
 
 ### Deprecated
