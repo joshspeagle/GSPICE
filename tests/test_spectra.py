@@ -11,6 +11,9 @@ from gspice import _spectra, scale, snr, unscale
 from gspice._spectra import interpolate
 
 EPS = np.finfo(float).eps
+# Beyond the float64 range and below its smallest value, where long double is wider
+# than float64, as on Linux x86-64. Elsewhere they parse to inf and 0.
+BEYOND, BELOW = np.longdouble("1e400"), np.longdouble("1e-400")
 
 
 def magnitudes(high):
@@ -140,6 +143,36 @@ def test_other_float_dtypes_and_f_order_give_the_result_of_a_float64_c_copy(case
     for function in (scale, snr):
         expected = function(flux, ivar, mask)
         assert same(function(*map(fortran, (flux, ivar, mask))), expected)
+
+
+@pytest.mark.filterwarnings("error")
+def test_a_long_double_gives_the_result_of_its_float64_cast_without_a_warning():
+    flux = np.ones((2, 3), np.longdouble)
+    ivar = np.ones((2, 3), np.longdouble)
+    mask = np.zeros((2, 3), bool)
+    # Never read at a pixel in mask; and an ivar that is 0 in float64 makes a bad pixel.
+    mask[0, 1] = True
+    flux[0, 1] = ivar[0, 1] = BEYOND
+    flux[1, 0] = ivar[1, 2] = BELOW
+    x, var = np.ones((2, 3), np.longdouble), np.ones(3, np.longdouble)
+    x[0, 0] = var[1] = BEYOND
+    with np.errstate(over="ignore"):
+        cast = [array.astype(np.float64) for array in (flux, ivar, x, var)]
+    a, m = np.ones(2), np.zeros(3)
+    outputs = (
+        scale(flux, ivar, mask),
+        snr(flux, ivar, mask),
+        unscale(x, a, m, var=var),
+    )
+    expected = (
+        scale(*cast[:2], mask),
+        snr(*cast[:2], mask),
+        unscale(cast[2], a, m, var=cast[3]),
+    )
+    assert same(outputs, expected)
+    # Also where long double has the size of float64, which compares equal to it.
+    flat = [*outputs[0], outputs[1], *outputs[2]]
+    assert all(output.dtype.type is np.float64 for output in flat)
 
 
 @given(spectra())

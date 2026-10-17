@@ -6,6 +6,10 @@ from gspice import legacy, scale, snr, unscale
 SPECTRA = {"flux": np.ones((2, 3)), "ivar": np.ones((2, 3)), "mask": np.zeros((2, 3))}
 UNSCALE = {"x": np.zeros((2, 3)), "refscale": np.ones(2), "refmean": np.zeros(3)}
 FLUX_IVAR_MASK = pytest.mark.parametrize("function", [scale, snr])
+# Finite only where long double is wider than float64, as on Linux x86-64; where long
+# double is float64, it parses to inf.
+BEYOND = np.longdouble("1e400")
+WIDE = np.isfinite(BEYOND)
 
 
 @FLUX_IVAR_MASK
@@ -49,15 +53,19 @@ def test_a_wrong_dtype_is_rejected(function, name, dtype):
     [
         ("flux", np.nan),
         ("flux", np.inf),
+        ("flux", BEYOND),
         ("ivar", np.nan),
         ("ivar", np.inf),
         ("ivar", -1.0),
+        ("ivar", BEYOND),
     ],
 )
+@pytest.mark.filterwarnings("error")
 def test_a_non_finite_or_negative_value_at_a_good_pixel_is_rejected(
     function, mask, name, value
 ):
     arrays = {"flux": np.ones((2, 3)), "ivar": np.ones((2, 3))}
+    arrays[name] = np.ones((2, 3), np.asarray(value).dtype)
     arrays[name][1, 2] = value
     with pytest.raises(ValueError, match=f"^{name}: "):
         function(**arrays, mask=mask)
@@ -112,12 +120,11 @@ def test_a_center_that_is_not_a_finite_real_number_is_rejected(call, center, err
         ("refscale", np.ones(2, complex), TypeError),
         ("refmean", np.zeros(2), ValueError),
         ("refmean", np.array([0.0, np.nan, 0.0]), ValueError),
-        # Finite only as a long double, where it is wider than float64.
         pytest.param(
             "refmean",
-            np.array([0.0, np.longdouble("1e400"), 0.0]),
+            np.array([0.0, BEYOND, 0.0]),
             ValueError,
-            marks=pytest.mark.filterwarnings("ignore:overflow encountered in cast"),
+            marks=pytest.mark.filterwarnings("error"),
         ),
         ("refmean", np.zeros(3, complex), TypeError),
         ("var", np.ones(2), ValueError),
@@ -144,10 +151,18 @@ def test_an_invalid_refmean_of_scale_is_rejected(refmean):
         ("ivar", np.nan, lambda Dvec, refscale, refmean: np.isnan(refscale).all()),
         # The mean ivar of each row is (1 - 0.5 + 1) / 3.
         ("ivar", -0.5, lambda Dvec, refscale, refmean: np.all(refscale == 0.5**0.5)),
+        # 2022 computed in long double, where the value is finite.
+        pytest.param(
+            "flux",
+            BEYOND,
+            lambda Dvec, refscale, refmean: np.isfinite(Dvec).all(),
+            marks=pytest.mark.skipif(not WIDE, reason="long double is float64"),
+        ),
     ],
 )
 def test_scale_rejects_a_value_for_which_2022_returned_a_result(name, value, old):
     arrays = {"flux": np.ones((2, 3)), "ivar": np.ones((2, 3))}
+    arrays[name] = np.ones((2, 3), np.asarray(value).dtype)
     arrays[name][:, 1] = value
     assert old(*legacy.standard_scale(arrays["flux"], arrays["ivar"]))
     with pytest.raises(ValueError, match=f"^{name}: "):
