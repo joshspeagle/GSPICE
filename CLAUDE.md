@@ -61,7 +61,14 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 1. Make the first commit, push it, and open a draft that closes its issue.
 2. Record each decision under "Decisions". A decision is a choice that another competent developer could make differently and that affects behaviour, the public API, a number, a tolerance, a dependency or the process.
 3. Adversarial review, only for a significant decision that departs from the plan (the design document, once it exists); normal implementation needs none. One independent subagent tries to refute each departure. It gets the diff, the decisions and the plan, not the session's reasoning. A refuted decision is changed, or the objection is answered in the record. A departure that is a behaviour change gets three reviewers and stands if at least two uphold it; otherwise revise it and review it again, or drop it. A finding that only corrects wording or a number is fixed without another review; a decision that changes is reviewed again.
-4. Run `/simplify`, then `/code-review high`; a pull request that changes only prose runs `/code-review high` alone. Fix each valid finding and answer the rest in the pull request. A departure from the plan that they add or change gets its own adversarial review.
+4. Run `/simplify`, then `/code-review`; a pull request that changes only prose runs `/code-review` alone. Their effort follows the size of the diff, the lines added plus removed, as the table below states. A change to numerics or the public API takes the next size. Below the largest size, reviewers report findings without runs of deliberate bugs or timings. Fix each valid finding and answer the rest in the pull request. A departure from the plan that they add or change gets its own adversarial review.
+
+   | Size | `/simplify` | `/code-review` |
+   |---|---|---|
+   | Under 100 lines | one reviewer for all four angles | `low` |
+   | 100 to 500 lines | two reviewers: reuse with simplification, efficiency with altitude | `medium` |
+   | Over 500 lines | four reviewers, one per angle | `high` |
+
 5. Run `git fetch origin`. If every commit in `origin/main..origin/<branch>` is by Claude, fold each fix into the commit it corrects: `git commit --fixup=<commit>`, then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash --keep-base --exec '<commands>' origin/main`, then `git push --force-with-lease --force-if-includes`. Otherwise fixes are new commits.
 6. Mark it ready when every item under "Checklist" in its description is done. After that, fixes are new commits.
 7. Merge it with a merge commit when CI passes, no review thread is unresolved, each request to Claude has an answer, and every approval this file requires is given. Until CI exists, the local commands take its place and the pull request says so. Then add its decisions to the phase's decision log.

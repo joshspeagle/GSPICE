@@ -19,7 +19,7 @@ Closes #
 ## Checklist
 
 - [ ] Each departure from the plan has the result of its adversarial review, or there is none.
-- [ ] `/simplify` and `/code-review high` ran, and each finding is fixed or answered.
+- [ ] `/simplify` and `/code-review` ran at the effort that CLAUDE.md sets, and each finding is fixed or answered.
 - [ ] Before ready, each fix was folded into the commit it corrects, or the branch has a human's commits. Every commit passes the commands under Commands.
 - [ ] The `slow` tests of the changed modules pass locally, or there are none.
 - [ ] `README.md`, `CLAUDE.md`, `CHANGELOG.md` and any docs are current.
