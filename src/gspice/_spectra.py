@@ -408,3 +408,10 @@ def boolean(value: object, name: str) -> bool:
     if not isinstance(value, bool | np.bool_):
         raise TypeError(f"{name}: expected a bool, got {type(value).__name__}")
     return bool(value)
+
+
+def check_progress(progress: object) -> None:
+    if progress is not None and not callable(progress):
+        raise TypeError(
+            f"progress: expected a callable or None, got {type(progress).__name__}"
+        )

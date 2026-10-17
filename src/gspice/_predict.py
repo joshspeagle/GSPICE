@@ -1,6 +1,7 @@
 import logging
 import time
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -8,10 +9,10 @@ from numpy.typing import ArrayLike, NDArray
 from ._model import Model
 from ._spectra import (
     Progress,
+    check_progress,
     chunks,
     integer,
     interpolate,
-    median_snr,
     require_good_pixel,
     root_mean_ivar,
     to_flux,
@@ -106,40 +107,21 @@ def pixelwise(
     spectrum. The model keeps P and the guard weights (see `Model`).
     """
     start = time.perf_counter()
-    if not isinstance(model, Model):
-        raise TypeError(f"model: expected a Model, got {type(model).__name__}")
     nguard = integer(nguard, "nguard", 0)
-    if progress is not None and not callable(progress):
-        raise TypeError(
-            f"progress: expected a callable or None, got {type(progress).__name__}"
-        )
-    flux, ivar, bad = validate(flux, ivar, mask)
+    check_progress(progress)
+    flux, ivar, bad = _validated(model, flux, ivar, mask)
     nspec, npix = flux.shape
-    if npix != model.mean.shape[1]:
-        raise ValueError(
-            f"flux: expected {model.mean.shape[1]} pixels like model, got shape "
-            f"{flux.shape}"
-        )
-    require_good_pixel(bad)
-    # A model with one bin skips the S/N, which sorts every row.
-    bins = None
-    occupied = [0] if nspec else []
-    if len(model.cov) > 1:
-        bins = np.empty(nspec, dtype=np.intp)
-        for rows in chunks(nspec, npix):
-            snr = median_snr(flux[rows], ivar[rows], bad[rows])
-            bins[rows] = np.searchsorted(model.edges, snr, side="right")
-        occupied = np.unique(bins).tolist()
+    bins = model._bins(flux, ivar, bad)
     # The weights of the bins with spectra, before any spectrum, so that a covariance
     # that fails its check raises at once. A bin without spectra computes no P.
-    for b in occupied:
+    for b in np.unique(bins).tolist():
         model._guard_weights(b, nguard)
     predicted, variance, z = (np.empty((nspec, npix)) for _ in range(3))
     for rows in chunks(nspec, npix):
         ftilde = interpolate(flux[rows], bad[rows])
         a = root_mean_ivar(ivar[rows], bad[rows])
         out = predicted[rows], variance[rows], z[rows]
-        if bins is None:
+        if len(model.cov) == 1:
             _predict(model, 0, nguard, ftilde, a, *out)
         else:
             _predict_bins(model, nguard, ftilde, a, bins[rows], out)
@@ -150,6 +132,21 @@ def pixelwise(
         array.flags.writeable = False
     _logger.debug("pixelwise: %d spectra in %.3f s", nspec, time.perf_counter() - start)
     return Prediction(predicted, variance, z)
+
+
+def _validated(
+    model: Model, flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | None
+) -> tuple[NDArray[Any], NDArray[Any], NDArray[np.bool_]]:
+    if not isinstance(model, Model):
+        raise TypeError(f"model: expected a Model, got {type(model).__name__}")
+    flux, ivar, bad = validate(flux, ivar, mask)
+    if flux.shape[1] != model.mean.shape[1]:
+        raise ValueError(
+            f"flux: expected {model.mean.shape[1]} pixels like model, got shape "
+            f"{flux.shape}"
+        )
+    require_good_pixel(bad)
+    return flux, ivar, bad
 
 
 def _predict_bins(
