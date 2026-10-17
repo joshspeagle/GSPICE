@@ -11,7 +11,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.linalg import issymmetric
 
-from ._spectra import finite_array, integer, numeric, real
+from ._spectra import finite_array, integer, numeric, real, require
 
 # The arrays that load reads. save also writes gspice_version and cov0, cov1, ...
 _REQUIRED = ("schema", "mean", "n_train", "edges", "center", "weighted")
@@ -40,7 +40,7 @@ class Model:
         give x. npix >= 1 is the number of pixels. Finite.
     cov : tuple of ndarray, each shape (npix, npix)
         The covariance of x in each bin (scaled^2): nbin finite, exactly symmetric
-        matrices.
+        matrices with a positive diagonal.
     n_train : tuple of int
         The number N_s >= 1 of training spectra in each bin (nbin integers).
     edges : tuple of float
@@ -262,6 +262,10 @@ def _covariance(value: ArrayLike, name: str, npix: int) -> NDArray[np.float64]:
             f"{name}: expected an exactly symmetric matrix, "
             f"got max |C - C.T| = {gap:.3g}"
         )
+    # The prior of a window that covers every pixel takes its variances from the
+    # diagonal, without the factorization that would reject it (design section 4.2).
+    diagonal = np.diagonal(C)
+    require(diagonal > 0, diagonal, name, "a positive diagonal", ("pixel",))
     return C
 
 
