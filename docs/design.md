@@ -20,7 +20,7 @@ GSPICE models spectra on a common pixel grid as a multivariate Gaussian with an 
 src/gspice/
   __init__.py       public names, __version__, deprecated 2022 names (module __getattr__)
   _linalg.py        precision, Woodbury precision, guard weights, pattern solves, grouping
-  _spectra.py       validation, interpolation, dilation, runs, scale, unscale, snr
+  _spectra.py       validation, interpolation, dilation, scale, unscale, snr
   _model.py         Model, LowRank, Blocks; fit, save, load; covariance estimators
   _blocks.py        fit_blocks, block chi-square
   _predict.py       Prediction, Repaired; pixelwise, infill
