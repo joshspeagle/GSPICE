@@ -15,6 +15,7 @@ FLUX_IVAR_MASK = pytest.mark.parametrize("function", [scale, snr])
         ("flux", np.ones(3)),
         ("flux", np.ones((2, 3, 1))),
         ("flux", np.ones((2, 0))),
+        ("flux", [[1.0, 1.0, 1.0], [1.0]]),
         ("ivar", np.ones((2, 2))),
         ("mask", np.zeros((3, 3))),
     ],
@@ -111,6 +112,13 @@ def test_a_center_that_is_not_a_finite_real_number_is_rejected(call, center, err
         ("refscale", np.ones(2, complex), TypeError),
         ("refmean", np.zeros(2), ValueError),
         ("refmean", np.array([0.0, np.nan, 0.0]), ValueError),
+        # Finite only as a long double, where it is wider than float64.
+        pytest.param(
+            "refmean",
+            np.array([0.0, np.longdouble("1e400"), 0.0]),
+            ValueError,
+            marks=pytest.mark.filterwarnings("ignore:overflow encountered in cast"),
+        ),
         ("refmean", np.zeros(3, complex), TypeError),
         ("var", np.ones(2), ValueError),
         ("var", -np.ones(3), ValueError),

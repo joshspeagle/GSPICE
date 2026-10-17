@@ -19,8 +19,8 @@ def chunks(nspec: int, npix: int) -> Iterator[slice]:
 def validate(
     flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | None
 ) -> tuple[NDArray[Any], NDArray[Any], NDArray[np.bool_]]:
-    flux = _numeric(flux, "flux")
-    ivar = _numeric(ivar, "ivar")
+    flux = numeric(flux, "flux")
+    ivar = numeric(ivar, "ivar")
     if mask is not None:
         mask = np.asarray(mask)
         if mask.dtype.kind not in "biuf":
@@ -40,7 +40,7 @@ def validate(
     for rows in chunks(*flux.shape):
         iv = ivar[rows]
         in_mask = False if mask is None else mask[rows] != 0
-        _require(
+        require(
             in_mask | (np.isfinite(iv) & (iv >= 0)),
             iv,
             "ivar",
@@ -49,7 +49,7 @@ def validate(
         )
         bad[rows] = in_mask | (iv == 0)
         f = flux[rows]
-        _require(
+        require(
             bad[rows] | np.isfinite(f),
             f,
             "flux",
@@ -163,7 +163,7 @@ def scale(
     """
     flux, ivar, bad = validate(flux, ivar, mask)
     require_good_pixel(bad)
-    center = _real(center, "center")
+    center = real(center, "center")
     nspec, npix = flux.shape
     if refmean is not None:
         refmean = _vector(refmean, "refmean", npix, "pixel")
@@ -224,21 +224,21 @@ def unscale(
     ValueError
         If an argument has a shape or a value that is not allowed above.
     """
-    x = _numeric(x, "x")
+    x = numeric(x, "x")
     if x.ndim != 2:
         raise ValueError(f"x: expected a 2-D array, got shape {x.shape}")
     nspec, n = x.shape
     refscale = _vector(refscale, "refscale", nspec, "row")
-    _require(refscale > 0, refscale, "refscale", "values > 0", ("row",))
+    require(refscale > 0, refscale, "refscale", "values > 0", ("row",))
     refmean = _vector(refmean, "refmean", n, "pixel")
-    center = _real(center, "center")
+    center = real(center, "center")
     if var is not None:
-        var = _numeric(var, "var")
+        var = numeric(var, "var")
         if var.shape not in ((n,), x.shape):
             raise ValueError(
                 f"var: expected shape ({n},) or {x.shape} like x, got {var.shape}"
             )
-        _require(var >= 0, var, "var", "values >= 0", ("row", "pixel")[-var.ndim :])
+        require(var >= 0, var, "var", "values >= 0", ("row", "pixel")[-var.ndim :])
     # dtype=np.float64 keeps a long double x or var from making long double results.
     f = np.add(x, refmean, dtype=np.float64)
     f /= refscale[:, np.newaxis]
@@ -294,8 +294,12 @@ def snr(
     return out
 
 
-def _numeric(value: ArrayLike, name: str) -> NDArray[Any]:
-    array = np.asarray(value)
+def numeric(value: ArrayLike, name: str) -> NDArray[Any]:
+    try:
+        array = np.asarray(value)
+    except ValueError as error:
+        # A ragged nested sequence.
+        raise ValueError(f"{name}: {error}") from None
     if array.dtype.kind not in "iuf":
         raise TypeError(
             f"{name}: expected an integer or floating dtype, got {array.dtype}"
@@ -303,15 +307,24 @@ def _numeric(value: ArrayLike, name: str) -> NDArray[Any]:
     return array
 
 
+def finite_array(
+    value: NDArray[Any], name: str, axes: tuple[str, ...]
+) -> NDArray[np.float64]:
+    # A new C-contiguous float64 array (the default order keeps the input layout). The
+    # check runs after the cast, so a long double beyond the float64 range fails it.
+    array = np.array(value, dtype=np.float64, order="C")
+    require(np.isfinite(array), array, name, "finite values", axes)
+    return array
+
+
 def _vector(value: ArrayLike, name: str, size: int, axis: str) -> NDArray[np.float64]:
-    vector = _numeric(value, name)
+    vector = numeric(value, name)
     if vector.shape != (size,):
         raise ValueError(f"{name}: expected shape ({size},), got {vector.shape}")
-    _require(np.isfinite(vector), vector, name, "finite values", (axis,))
-    return vector.astype(np.float64)
+    return finite_array(vector, name, (axis,))
 
 
-def _require(
+def require(
     ok: NDArray[np.bool_],
     values: NDArray[Any],
     name: str,
@@ -328,7 +341,7 @@ def _require(
         )
 
 
-def _real(value: object, name: str) -> float:
+def real(value: object, name: str) -> float:
     if not isinstance(value, numbers.Real) or isinstance(value, bool):
         raise TypeError(f"{name}: expected a real number, got {type(value).__name__}")
     try:
@@ -338,3 +351,11 @@ def _real(value: object, name: str) -> float:
     if not math.isfinite(number):
         raise ValueError(f"{name}: expected a finite number, got {number}")
     return number
+
+
+def integer(value: object, name: str, minimum: int) -> int:
+    if not isinstance(value, numbers.Integral) or isinstance(value, bool):
+        raise TypeError(f"{name}: expected an integer, got {type(value).__name__}")
+    if value < minimum:
+        raise ValueError(f"{name}: expected an integer >= {minimum}, got {value}")
+    return int(value)
