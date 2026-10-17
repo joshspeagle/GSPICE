@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from ._model import sample_factor
-from ._spectra import Integer, as_array, located, require
+from ._spectra import Integer, integers, located, require
 
 
 @overload
@@ -90,9 +90,7 @@ def finite_sample_factor(
 
 
 def _counts(value: ArrayLike, name: str, minimum: int) -> NDArray[np.integer[Any]]:
-    array = as_array(value, name)
-    if array.dtype.kind not in "iu":
-        raise TypeError(f"{name}: expected an integer dtype, got {array.dtype}")
+    array = integers(value, name)
     # Below 2^53, float64 holds every integer, so sample_factor tests the sign of
     # n_train - n_cond - n_pred - 2 exactly.
     ok = (array >= minimum) & (array < 2**53)

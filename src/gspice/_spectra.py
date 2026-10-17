@@ -352,6 +352,13 @@ def as_array(value: object, name: str) -> NDArray[Any]:
         raise ValueError(f"{name}: {error}") from None
 
 
+def integers(value: object, name: str) -> NDArray[np.integer[Any]]:
+    array = as_array(value, name)
+    if array.dtype.kind not in "iu":
+        raise TypeError(f"{name}: expected an integer dtype, got {array.dtype}")
+    return array
+
+
 def numeric(value: object, name: str) -> NDArray[Any]:
     array = as_array(value, name)
     if array.dtype.kind not in "iuf":
@@ -431,12 +438,15 @@ def real(value: object, name: str) -> float:
     return number
 
 
-def integer(value: object, name: str, minimum: int) -> int:
+def integer(value: object, name: str, minimum: int, maximum: int | None = None) -> int:
     if not isinstance(value, numbers.Integral) or isinstance(value, bool):
         raise TypeError(f"{name}: expected an integer, got {type(value).__name__}")
-    if value < minimum:
-        raise ValueError(f"{name}: expected an integer >= {minimum}, got {value}")
-    return int(value)
+    number = int(value)
+    if number < minimum:
+        raise ValueError(f"{name}: expected an integer >= {minimum}, got {number}")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"{name}: expected an integer <= {maximum}, got {number}")
+    return number
 
 
 def boolean(value: object, name: str) -> bool:
