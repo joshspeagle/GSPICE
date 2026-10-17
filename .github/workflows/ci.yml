@@ -70,6 +70,7 @@ jobs:
       - run: ruff check src tests benchmarks
       - run: ruff format --check src tests benchmarks
       - run: mypy
+      - run: mypy --python-version 3.11
 
   slow:
     # Runs only when started by hand, with every test: -m "" lifts the -m "not slow" of

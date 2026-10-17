@@ -395,7 +395,7 @@ def fit(
             "fit: the final fit of %d spectra is weighted, with V1^2/V2 = %.4g "
             "effective spectra",
             n_train,
-            w.sum() ** 2 / (w @ w),
+            w.sum() ** 2 / np.vdot(w, w),
         )
     model._precision(0, subject=subject)
     training = np.ones((nspec, npix), dtype=bool)
@@ -494,7 +494,7 @@ def _fitted(
     if center is None:
         mean = w @ X / V1
         X -= mean
-        divisor = V1 - w @ w / V1
+        divisor = V1 - np.vdot(w, w) / V1
     else:
         mean = np.zeros(npix)
         divisor = V1

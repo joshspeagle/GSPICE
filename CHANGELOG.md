@@ -18,6 +18,7 @@
 - `gspice.simulate`, which draws synthetic continuum-normalized spectra for tests and examples, and its result `gspice.Simulation`. The spectra have absorption lines whose depths follow two latent parameters in two populations, Gaussian noise, and optional cosmic rays, bad columns and shifted blocks. With `gaussian=True` and no artifacts they are exactly Gaussian.
 - `gspice.infill`, which replaces chosen pixels of each spectrum by their Gaussian conditional mean given the other pixels, and its result `gspice.Repaired`. It reports the replaced and ignored pixels and χ², and with `covariance=True` the conditional covariance of the replaced pixels of each spectrum.
 - `gspice.fit`, which fits a model to training spectra with the iterative outlier clipping of paper Alg. 4, and returns the model and the final training mask.
+- `gspice/py.typed`, the PEP 561 marker, so that type checkers read the annotations of an installed `gspice`. The functions of `gspice.legacy` keep their 2022 signatures without annotations.
 
 ### Deprecated
 

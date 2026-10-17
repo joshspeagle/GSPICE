@@ -1,0 +1,107 @@
+import os
+from importlib import resources
+from pathlib import Path
+from typing import assert_type
+
+import numpy as np
+from numpy.typing import NDArray
+
+import gspice
+from gspice import (
+    Model,
+    Prediction,
+    Repaired,
+    Simulation,
+    fit,
+    infill,
+    load,
+    pixelwise,
+    save,
+    scale,
+    simulate,
+    snr,
+    unscale,
+)
+
+# The calls pass the widest inputs that the docstrings allow: float32 and integer
+# arrays, lists, a numpy scalar for each scalar, bytes and Path. The test runs them
+# too, so that none of these calls fails.
+
+
+def progress(stage: str, done: int, total: int) -> int:
+    # The functions ignore the value, as that of a progress bar's update.
+    return done
+
+
+def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
+    rng = np.random.default_rng(0)
+    flux = rng.normal(1.0, 0.1, (6, 4)).astype(np.float32)
+    ivar = np.full((6, 4), 100, np.int16)
+    mask = np.zeros((6, 4), np.uint8)
+    # As an argument, a numpy call gets the static type NDArray[Any]; a local keeps
+    # the dtype.
+    eye = np.eye(4, dtype=np.float32)
+    refscale = np.ones(6, np.float32)
+    model = Model(
+        [[0.0] * 4] * 2,
+        [eye, 2 * np.eye(4)],
+        [np.int32(5), 7],
+        edges=[np.float32(50.0)],
+        center=np.float32(1.0),
+        weighted=np.True_,
+    )
+    fitted = fit(
+        flux,
+        ivar,
+        mask,
+        nsigma=[np.float32(20.0), 8],
+        maxbadpix=np.int64(1),
+        nguard=np.int64(1),
+        cumulative=np.False_,
+        center=np.int64(1),
+        weights=[1, 2, 1, 2, 1, 2],
+        progress=progress,
+    )
+    assert_type(fitted, tuple[Model, NDArray[np.bool_]])
+    save(model, tmp_path / "model.npz")
+    assert_type(load(os.fsencode(tmp_path / "model.npz")), Model)
+    scaled = scale(flux, ivar, mask, center=np.float32(1.0), refmean=[0.0] * 4)
+    assert_type(
+        scaled, tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]
+    )
+    flux_var = unscale(
+        [[0.0] * 4] * 6, refscale, [0.0] * 4, center=np.int64(1), var=[1.0] * 4
+    )
+    assert_type(flux_var, tuple[NDArray[np.float64], NDArray[np.float64] | None])
+    assert_type(snr(flux, ivar, mask), NDArray[np.float64])
+    prediction = pixelwise(
+        model, flux, ivar, mask, nguard=np.int64(1), progress=progress
+    )
+    assert_type(prediction, Prediction)
+    repaired = infill(
+        model,
+        flux,
+        ivar,
+        mask,
+        replace=[False, True, False, False],
+        ignore=np.array([True, False, False, False]),
+        covariance=np.True_,
+        progress=progress,
+    )
+    assert_type(repaired, Repaired)
+    assert_type(
+        repaired.covariance(np.int64(0)), tuple[NDArray[np.int64], NDArray[np.float64]]
+    )
+    simulation = simulate(
+        np.int64(5), np.int64(30), rng=rng, artifacts=np.float32(0.2), gaussian=np.True_
+    )
+    assert_type(simulation, Simulation)
+
+
+def test_the_calls_cover_every_public_name() -> None:
+    # ruff rejects an unused import, so each name imported above has a call or a check.
+    assert set(gspice.__all__) - {"legacy"} <= globals().keys()
+
+
+def test_the_package_ships_the_py_typed_marker() -> None:
+    assert resources.files("gspice").joinpath("py.typed").is_file()
