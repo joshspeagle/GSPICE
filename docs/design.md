@@ -167,7 +167,7 @@ Every new-API algorithm uses this identity. Schur updates of a precomputed inver
 | `precision(S)` | P = S⁻¹ by `dpotrf` and `dpotri`, lower triangle mirrored in place; P is then exactly symmetric, so its transpose is a C-contiguous view; `LinAlgError` if `dpotrf` fails or the reciprocal condition number of S scaled to unit diagonal, which `dpocon` estimates in the 1-norm, is below 1e-13 (A26) | npix³ |
 | `woodbury(V, values, d)` | P = D⁻¹ − L Lᵀ, L = D⁻¹ V R_K⁻ᵀ, R_K R_Kᵀ = Λ⁻¹ + Vᵀ D⁻¹ V; never forms C; `LinAlgError` if κ_W > 1e13 (A28), with c_ii = d_i + Σ_k λ_k V_ik² the model variances, d̃ = d/c, Ṽ = diag(c)^−½ V and κ_W = (max d̃ + λ_max(Λ^½ ṼᵀṼ Λ^½))/min d̃, a bound on the condition number of C scaled to unit diagonal and on max c_ii/d_i | npix² K |
 | `guard_weights(P, c, nguard)` | for each pixel i, with g = `slice(max(0, i−nguard), min(npix, i+nguard+1))`: v = P_gg⁻¹ e_i by Cholesky; W[:, i] = −P[g, :]ᵀ v, then W[g, i] = 0 exactly; var_i = v[i − g.start]. A window that covers all pixels gives W[:, i] = 0 and var_i = c_i, the exact prior, from c = diag(C) and without a factorization. `LinAlgError` if `dpotrf` fails | npix (w³/3 + 2 npix w) |
-| `solve_pattern(P, G, M, T, X, normals=None, covariance=False)` | G, M and T are boolean masks with T ⊆ M ⊆ G, and the results follow the pixel order of M; G ordered as (G \ M, M \ T, T), with T the pixels whose χ² is wanted; R = lower Cholesky factor of P_GG; μ_G = −R⁻ᵀR⁻¹ (P_{G,:} X0ᵀ), where X0 is X with its G columns set to 0; C_MM = (R_MM R_MMᵀ)⁻¹, so var_M = column sums of (R_MM⁻¹)²; χ² = ‖R_TTᵀ r_T‖², because C_TT⁻¹ is the Schur complement R_TT R_TTᵀ; draws μ_M + R_MM⁻ᵀ z_M, the M rows of μ_G + R⁻ᵀ z, with z = `normals` (nspec × npix); `covariance=True` adds C_MM, with var_M as its diagonal; `LinAlgError` if `dpotrf` fails. Empty blocks skip LAPACK, and an empty T gives χ² = 0; callers give the exact prior where G covers all pixels (below) | per pattern \|G\|³/3 + \|M\|³/3, and \|M\|³/3 more for C_MM; per spectrum 2\|G\| (npix + \|G\|) |
+| `solve_pattern(P, G, M, T, X, normals=None, covariance=False)` | G, M and T are boolean masks with T ⊆ M ⊆ G, and the results follow the pixel order of M; G ordered as (G \ M, M \ T, T), with T the pixels whose χ² is wanted; R = lower Cholesky factor of P_GG; μ_G = −R⁻ᵀR⁻¹ (P_{G,:} X0ᵀ), where X0 is X with its G columns set to 0; C_MM = (R_MM R_MMᵀ)⁻¹, so var_M = column sums of (R_MM⁻¹)²; χ² = ‖R_TTᵀ r_T‖², because C_TT⁻¹ is the Schur complement R_TT R_TTᵀ; draws μ_M + R_MM⁻ᵀ z_M, the M rows of μ_G + R⁻ᵀ z, with z_M = `normals` (nspec × \|M\|, in the pixel order of M); `covariance=True` adds C_MM, with var_M as its diagonal; `LinAlgError` if `dpotrf` fails. Empty blocks skip LAPACK, and an empty T gives χ² = 0; callers give the exact prior where G covers all pixels (below) | per pattern \|G\|³/3 + \|M\|³/3, and \|M\|³/3 more for C_MM; per spectrum 2\|G\| (npix + \|G\|) |
 | `group_rows(keys)` | rows with identical boolean key rows: `np.unique` of a void view of `np.packbits(keys, axis=1)`; the infill key packs G, M and T, and grouping runs per S/N bin | O(nspec log nspec) |
 
 Guard windows are contiguous, so slices replace gathers; this is the IDL "contiguous" fast path (D-47) and needs no separate code. The trailing-block identities of `solve_pattern` give the variances, covariance and χ² from the one factorization (verified to 1.8e-15 at κ 1e2 to 1e8).
@@ -180,7 +180,7 @@ Guard windows are contiguous, so slices replace gathers; this is the IDL "contig
 | Infill | replace ∪ ignore ∪ bad | never conditioned on | P (cached) | per pattern as above |
 | Block scan | {j : dist(j, A) ≤ nguard}, block A ordered last | infilled before the scan | R per block; χ²_A = ‖R_AAᵀ r_A‖²/\|A\| | 2\|G\| (npix + \|G\|) per block |
 
-A pattern is the triple (G, M, T). Spectra of one S/N bin with equal patterns share one factorization, except in noise-aware models, where each spectrum has its own P_s. Where G covers all pixels, every operation returns the exact prior from C (μ_G = 0, C_MM = C[M, M], var = diag(C)) without P; diag(P⁻¹) would err by 0.23κε to 0.29κε.
+A pattern is the triple (G, M, T). Spectra of one S/N bin with equal patterns share one factorization, except in noise-aware models, where each spectrum has its own P_s. Where G covers all pixels, every operation returns the exact prior from C (μ_G = 0, C_MM = C[M, M], var = diag(C)) without P; diag(P⁻¹) would err by 0.23κε to 0.29κε. Its draws are L z_M, with L the lower Cholesky factor of C_MM.
 
 **Noise-aware models.** C_s differs per spectrum, so P_s is formed per spectrum by `precision` or `woodbury`, once per call, and every operation of the call reuses it. This is the exception that CLAUDE.md (Numerics) states. Section 12 gives the cost and the gated optimizations.
 
@@ -448,7 +448,7 @@ All are frozen dataclasses with `eq=False`. Arrays are read-only.
 | `Simulation` | `flux`, `ivar`, `truth`, `artifacts` | (nspec, npix) | flux, flux⁻², noise-free flux, injected-artifact mask |
 | | `snr`, `labels` | (nspec,) | S/N, population label |
 
-- **Draws.** Normals come from `rng.standard_normal((n, npix))` per chunk of n rows, in row order, and nothing else draws from rng in that call. Spectrum s uses its entries at G_s. The normals therefore do not depend on the chunk size or the grouping, and the draws agree to rounding.
+- **Draws.** Normals come from `rng.standard_normal((n, npix))` per chunk of n rows, in row order, and nothing else draws from rng in that call. Spectrum s uses its entries at M_s. The normals therefore do not depend on the chunk size or the grouping, and the draws agree to rounding.
 - **Covariance storage.** `Repaired` keeps each pattern's C_MM in working units and divides by a_s² (and multiplies by f_s(N_s, N_k, 1) with `inflate=True`) on access. At one 30-pixel pattern per spectrum this takes 7.2 KB per spectrum (720 MB per 1e5), so it is opt-in.
 - **Calibration from any result.** `Calibration(z2=r.chi2[:, None], n=r.dof[:, None], fs=r.fs[:, None])` calibrates a held-out infill whose replace and ignore masks do not depend on the data. `Calibration(z2=p.z**2, n=1, fs=1)` calibrates a pixelwise result computed with `inflate=True`.
 
@@ -628,7 +628,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 - Grouped infill equals one-spectrum-at-a-time infill to 10κε in |Δμ|/σ.
 - `infill(replace={i}, ignore=window \ {i})` equals `pixelwise` at pixel i of a spectrum without bad pixels.
 - `unscale(scale(f))` returns f at good pixels to 8ε·max(|f|, |refmean/a_s|, |center|); unreplaced pixels are bit-identical; inputs are unchanged; float32 equals its float64 cast; non-contiguous inputs work.
-- The normals do not depend on the chunk size, bit for bit; the draws agree to 1e-12 relative.
+- The normals do not depend on the chunk size, bit for bit; the draws agree to rounding, as the means do.
 - `save` then `load` gives bit-identical arrays and equal scalars, also in `LowRank` and `Blocks`.
 - Edge cases: masks at the edges, one good pixel, nguard = 0, empty masks, masks over half the spectrum, G = all pixels, empty G, M or T.
 

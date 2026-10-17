@@ -131,6 +131,16 @@ PATTERNS = {
 }
 
 
+def draw_covariance(solve, M, X):
+    # With a unit normal at the j-th pixel of M in row j, the rows of D = draws - mean
+    # are the columns of the map from normals to draws, so D^T D is the covariance of
+    # the draws.
+    m = np.count_nonzero(M)
+    unit = solve(X[[0] * m], np.eye(m))
+    D = unit.draws - unit.mean
+    return D.T @ D
+
+
 @pytest.mark.parametrize("pattern", PATTERNS)
 @pytest.mark.parametrize("name", MATRICES)
 def test_pattern_solve_matches_the_reference(name, pattern):
@@ -148,19 +158,14 @@ def test_pattern_solve_matches_the_reference(name, pattern):
     np.testing.assert_array_equal(solution.cov, solution.cov.T)
     np.testing.assert_array_equal(np.diagonal(solution.cov), solution.var)
     assert np.max(np.abs(solution.chi2 - chi2) / (chi2 + np.count_nonzero(T))) <= tol
-    # With a unit normal at pixel j of M in row j, the rows of D = draws - mean are
-    # the columns of the map from normals to draws, so D^T D is the covariance of the
-    # draws.
-    m = np.count_nonzero(M)
-    unit = solve_pattern(P, G, M, T, X[[0] * m], normals=np.eye(NPIX)[M])
-    D = unit.draws - unit.mean
-    assert np.max(np.abs(D.T @ D - cov) / scale) <= tol
+    draws = draw_covariance(functools.partial(solve_pattern, P, G, M, T), M, X)
+    assert np.max(np.abs(draws - cov) / scale) <= tol
 
 
 def test_pattern_solve_never_reads_the_data_in_G_outside_T():
     _, P, X, *_ = case("spd1e5")
     G, M, T = (mask(pixels) for pixels in PATTERNS["run"])
-    normals = np.random.default_rng(2).standard_normal(X.shape)
+    normals = np.random.default_rng(2).standard_normal((len(X), np.sum(M)))
     expected = solve_pattern(P, G, M, T, X, normals, covariance=True)
     X = X.copy()
     X[:, G & ~T] = np.nan
@@ -175,7 +180,9 @@ def test_a_pattern_without_pixels_to_predict_skips_lapack(monkeypatch, G):
     _, P, X, *_ = case("spd1e5")
     monkeypatch.setattr(_linalg, "lapack", None)
     empty = mask([])
-    solution = solve_pattern(P, mask(G), empty, empty, X, normals=X, covariance=True)
+    solution = solve_pattern(
+        P, mask(G), empty, empty, X, normals=X[:, :0], covariance=True
+    )
     assert solution.mean.shape == solution.draws.shape == (NSPEC, 0)
     assert (solution.var.shape, solution.cov.shape) == ((0,), (0, 0))
     np.testing.assert_array_equal(solution.chi2, np.zeros(NSPEC))
@@ -204,6 +211,9 @@ def test_the_prior_is_exact_and_its_chi2_matches_the_reference(name):
     np.testing.assert_array_equal(solution.var, np.diagonal(C)[M])
     np.testing.assert_array_equal(solution.cov, C[np.ix_(M, M)])
     assert np.max(np.abs(solution.chi2 - chi2) / (chi2 + np.sum(T))) <= tol
+    draws = draw_covariance(functools.partial(solve_prior, C, M, T), M, X)
+    scale = np.sqrt(np.outer(solution.var, solution.var))
+    assert np.max(np.abs(draws - solution.cov) / scale) <= tol
 
 
 def test_the_prior_rejects_a_covariance_that_is_numerically_singular_at_t():

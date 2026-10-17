@@ -2,6 +2,7 @@ from decimal import Context, Decimal, localcontext
 from operator import mul
 
 import numpy as np
+from scipy import stats
 
 # The reference of design section 11. Every operation rounds to 60 significant digits,
 # so the float64 results are correctly rounded for the condition numbers of the tests,
@@ -78,3 +79,21 @@ def condition(C):
     # Of C scaled to unit diagonal: the kappa of the tolerances of design section 11.
     d = 1 / np.sqrt(np.diagonal(C))
     return np.linalg.cond(d[:, np.newaxis] * C * d)
+
+
+def assert_gaussian(samples, mean, cov):
+    # If the n rows of samples are iid N(mean, cov), with cov = L L^T, then
+    # y = L^-1 (sample - mean) is iid N(0, I). Each entry of sqrt(n) mean(y) is then
+    # N(0, 1); and (n - 1) cov(y) is Wishart, so the diagonal of cov(y) has the standard
+    # deviation sqrt(2 / (n - 1)) about 1 and the other entries sqrt(1 / (n - 1)) about
+    # 0, close to normal for large n. Over the m = k + k (k + 1) / 2 entries tested,
+    # z = Phi^-1(1 - 0.001 / (2 m)) standard deviations each bound the probability of
+    # a failure by 0.001 (Bonferroni).
+    n, k = samples.shape
+    y = np.linalg.solve(np.linalg.cholesky(cov), (samples - mean).T).T
+    upper = np.triu_indices(k)
+    z = stats.norm.isf(0.001 / (2 * (k + upper[0].size)))
+    assert np.all(np.abs(y.mean(axis=0)) <= z / np.sqrt(n))
+    deviation = (np.cov(y, rowvar=False) - np.eye(k))[upper]
+    sd = np.where(upper[0] == upper[1], np.sqrt(2 / (n - 1)), np.sqrt(1 / (n - 1)))
+    assert np.all(np.abs(deviation) <= z * sd)

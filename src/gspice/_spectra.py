@@ -439,3 +439,10 @@ def check_progress(progress: object) -> None:
         raise TypeError(
             f"progress: expected a callable or None, got {type(progress).__name__}"
         )
+
+
+def check_rng(rng: object) -> None:
+    if not isinstance(rng, np.random.Generator):
+        raise TypeError(
+            f"rng: expected a numpy.random.Generator, got {type(rng).__name__}"
+        )

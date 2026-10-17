@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.special import expit, logit
 
-from ._spectra import Boolean, Integer, Real, boolean, integer, real
+from ._spectra import Boolean, Integer, Real, boolean, check_rng, integer, real
 
 MAX_DEPTH = 0.95
 
@@ -113,10 +113,7 @@ def simulate(
     """
     nspec = integer(nspec, "nspec", 0)
     npix = integer(npix, "npix", 1)
-    if not isinstance(rng, np.random.Generator):
-        raise TypeError(
-            f"rng: expected a numpy.random.Generator, got {type(rng).__name__}"
-        )
+    check_rng(rng)
     artifacts = real(artifacts, "artifacts")
     if not 0 <= artifacts <= 1:
         raise ValueError(f"artifacts: expected a number from 0 to 1, got {artifacts}")

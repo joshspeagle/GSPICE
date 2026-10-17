@@ -16,6 +16,7 @@ from ._spectra import (
     as_array,
     boolean,
     check_progress,
+    check_rng,
     chunks,
     integer,
     interpolate,
@@ -83,6 +84,9 @@ class Repaired:
         covariance; 0 where dof is 0 (unit-free).
     dof : ndarray of int64, shape (nspec,)
         The number |T| of replaced pixels that are good in the input.
+    draws : ndarray, shape (nspec, npix), or None
+        A draw from the conditional distribution at the replaced pixels, and the
+        input flux elsewhere (flux); None if infill ran without rng.
     """
 
     flux: NDArray[np.float64]
@@ -91,6 +95,7 @@ class Repaired:
     ignored: NDArray[np.bool_]
     chi2: NDArray[np.float64]
     dof: NDArray[np.int64]
+    draws: NDArray[np.float64] | None
     _covariances: _Covariances | None = field(default=None, repr=False)
 
     def covariance(self, s: Integer) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
@@ -230,6 +235,7 @@ def infill(
     replace: ArrayLike | None = None,
     ignore: ArrayLike | None = None,
     covariance: Boolean = False,
+    rng: np.random.Generator | None = None,
     progress: Progress | None = None,
 ) -> Repaired:
     """Replace pixels by their Gaussian conditional mean given the trusted pixels.
@@ -247,10 +253,12 @@ def infill(
     it. chi2 compares the input values at T = M & ~bad, the replaced pixels that are
     good in the input, with their conditional distribution. Where G covers all pixels,
     the result is the prior N(0, cov[b]), which infill computes from cov[b] without P.
-    Spectra of one S/N bin with equal G, M and T form a pattern, whose spectra in one
-    chunk of max(1, 2**24 // npix) rows share one factorization of P_GG. To infill
-    with another model the pixels that a result r replaced and ignored, pass
-    replace=r.replaced and ignore=r.ignored.
+    With rng, Repaired.draws holds the draw mu_M + F z_M of x_M, in flux units like the
+    mean, with mu_M the mean at M, F F^T = (P_GG^-1)_MM and z_M the normals of the
+    spectrum at M. Spectra of one S/N bin with equal G, M and T form a pattern, whose
+    spectra in one chunk of max(1, 2**24 // npix) rows share one factorization of
+    P_GG. To infill with another model the pixels that a result r replaced and
+    ignored, pass replace=r.replaced and ignore=r.ignored.
 
     Parameters
     ----------
@@ -267,6 +275,14 @@ def infill(
     covariance : bool, optional
         If True, keep the conditional covariance of each pattern for
         `Repaired.covariance`.
+    rng : numpy.random.Generator, optional
+        If given, the source of Repaired.draws: infill draws
+        rng.standard_normal((n, npix)) for each chunk of n rows, in row order, and
+        nothing else, and each spectrum uses its row of these normals. Calls on
+        consecutive slices with one generator give the draws of one call, to
+        rounding. Draws widen the errors of measurements made on them (paper l.550);
+        var and covariance give the uncertainty of the replaced pixels. None: no
+        draws.
     progress : callable, optional
         progress(stage, done, total), called after each chunk of spectra with the
         stage "infill", the number of spectra done and their total.
@@ -279,9 +295,10 @@ def infill(
     Raises
     ------
     TypeError
-        If model is not a Model, covariance is not a bool, progress is not callable or
-        None, flux, ivar or mask has a dtype that `scale` does not allow, or replace
-        or ignore is not of a bool dtype.
+        If model is not a Model, covariance is not a bool, rng is neither None nor a
+        numpy.random.Generator, progress is not callable or None, flux, ivar or mask
+        has a dtype that `scale` does not allow, or replace or ignore is not of a bool
+        dtype.
     ValueError
         If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
         has another npix than model, a spectrum has no good pixel, or replace or
@@ -289,9 +306,10 @@ def infill(
     numpy.linalg.LinAlgError
         If the covariance of a bin fails the check of its precision matrix, as in
         `pixelwise`, where a spectrum of the bin has a pixel to replace and G does not
-        cover all its pixels; or if P_GG of a pattern, or cov[b] at T for a pattern
-        whose G covers all pixels, is not positive definite. The message names the
-        bin, and for a pattern its first spectrum.
+        cover all its pixels; if P_GG of a pattern is not positive definite; or, for a
+        pattern whose G covers all pixels, if cov[b] at T fails that check, or if rng
+        is given and cov[b] at M is not positive definite. The message names the bin,
+        and for a pattern its first spectrum.
 
     Notes
     -----
@@ -300,10 +318,15 @@ def infill(
     2 |G| (npix + |G|) flops. An (npix,) mask on spectra with their own bad pixels
     makes one pattern per spectrum, with G the mask and those bad pixels, so a large
     mask then costs |G|^3/3 flops per spectrum. The model keeps P (see `Model`). With
-    covariance=True, the result keeps |M|^2 x 8 bytes per pattern and chunk.
+    covariance=True, the result keeps |M|^2 x 8 bytes per pattern and chunk. With rng,
+    each spectrum costs npix normals and |M|^2 flops more. Where G covers all pixels,
+    it costs 2 |M|^2 flops more instead, and each pattern and chunk |M|^3/3 flops for
+    the factor of cov[b] at M.
     """
     start = time.perf_counter()
     covariance = boolean(covariance, "covariance")
+    if rng is not None:
+        check_rng(rng)
     check_progress(progress)
     flux, ivar, bad = _validated(model, flux, ivar, mask)
     nspec, npix = flux.shape
@@ -324,6 +347,7 @@ def infill(
         model._precision(b)
     center = 0.0 if model.center is None else model.center
     result = np.empty((nspec, npix))
+    draws = None if rng is None else np.array(flux, dtype=np.float64, order="C")
     var = np.full((nspec, npix), np.inf)
     chi2 = np.zeros(nspec)
     dof = np.empty(nspec, dtype=np.int64)
@@ -340,6 +364,9 @@ def infill(
         # x holds the interpolated flux, which becomes the working vector of each
         # pattern, X of scale bit for bit; the input flux at bad pixels is never read.
         x = interpolate(flux[rows], bad[rows])
+        # Design decision A16: a row of normals for every spectrum, also one without a
+        # pixel to replace.
+        normals = None if rng is None else rng.standard_normal(x.shape)
         a = root_mean_ivar(ivar[rows], bad[rows])
         refscale[rows] = a
         M = replaced[rows]
@@ -357,10 +384,13 @@ def infill(
                 X = x[group]
                 to_working(X, a[group], center, model.mean[b])
                 key = G[first], M[first], T[first]
-                solution = _solve(model, b, *key, X, covariance, spectra[0])
+                z = None if normals is None else normals[np.ix_(group, pixels)]
+                solution = _solve(model, b, *key, X, z, covariance, spectra[0])
                 at = np.ix_(spectra, pixels)
                 mean = model.mean[b, pixels]
                 result[at] = to_flux(solution.mean, a[group], mean, center)
+                if draws is not None and solution.draws is not None:
+                    draws[at] = to_flux(solution.draws, a[group], mean, center)
                 var[at] = solution.var / np.square(a[group])[:, np.newaxis]
                 chi2[spectra] = solution.chi2
                 cov = solution.cov
@@ -371,6 +401,8 @@ def infill(
             progress("infill", rows.stop, nspec)
     for array in (result, var, replaced, ignored, chi2, dof):
         array.flags.writeable = False
+    if draws is not None:
+        draws.flags.writeable = False
     _logger.debug(
         "infill: %d spectra, %d patterns in %.3f s",
         nspec,
@@ -380,7 +412,9 @@ def infill(
     covariances = (
         _Covariances(tuple(patterns), pattern, refscale) if covariance else None
     )
-    return Repaired(result, var, replaced, ignored, chi2, dof, _covariances=covariances)
+    return Repaired(
+        result, var, replaced, ignored, chi2, dof, draws, _covariances=covariances
+    )
 
 
 def _validated(
@@ -422,14 +456,15 @@ def _solve(
     M: NDArray[np.bool_],
     T: NDArray[np.bool_],
     X: NDArray[np.float64],
+    normals: NDArray[np.float64] | None,
     covariance: bool,
     row: int,
 ) -> Conditional:
     # infill computed P before the first chunk, so only a solve can raise here.
     try:
         if G.all():
-            return solve_prior(model.cov[b], M, T, X, covariance=covariance)
-        return solve_pattern(model._precision(b), G, M, T, X, covariance=covariance)
+            return solve_prior(model.cov[b], M, T, X, normals, covariance)
+        return solve_pattern(model._precision(b), G, M, T, X, normals, covariance)
     except LinAlgError as error:
         raise LinAlgError(
             f"model: cov[{b}] is {error}, for the pattern of row {row}"

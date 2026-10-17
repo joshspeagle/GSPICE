@@ -86,6 +86,7 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
         replace=[False, True, False, False],
         ignore=np.array([True, False, False, False]),
         covariance=np.True_,
+        rng=rng,
         progress=progress,
     )
     assert_type(repaired, Repaired)
