@@ -36,3 +36,6 @@
 - `standard_scale` and `get_chimask` raise `_LegacyError` for a spectrum without a good pixel, and name its row. `covar_iter_mask` raises it for a kept spectrum that its mask or the clipping masks completely, and names its row in `flux`. The 2022 code returned NaN or raised another error.
 - `covar_iter_mask` accepts `mask=None`, which marks the pixels where ivar == 0, also for `maxbadpix`. The 2022 code raised numpy's AxisError.
 - `scale` raises ValueError for a non-finite flux at a good pixel, a non-finite or negative ivar at a pixel not in `mask`, and zero spectra without `refmean`. For such inputs, the 2022 `standard_scale` returned NaN or a wrong refscale.
+- `scale` counts a pixel with ivar = 0 as bad also where `mask` is given. It interpolates the flux of such a pixel and leaves the pixel out of refscale. The 2022 `standard_scale` with a mask used that flux and counted the 0 in the mean ivar.
+- `scale` casts flux to float64 before it interpolates. The 2022 `standard_scale` interpolated in the dtype of the flux, so it truncated the interpolated values of integer flux and rounded those of float32 flux to float32.
+- `scale` and `snr` raise ValueError for a spectrum without a good pixel, and name its row. For such a spectrum, the 2022 `standard_scale` returned NaN in every value of Dvec and refmean.
