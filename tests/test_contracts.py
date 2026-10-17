@@ -3,15 +3,15 @@ from functools import partial
 import numpy as np
 import pytest
 
-from gspice import Model, legacy, pixelwise, scale, simulate, snr, unscale
+from gspice import Model, infill, legacy, pixelwise, scale, simulate, snr, unscale
 
 SPECTRA = {"flux": np.ones((2, 3)), "ivar": np.ones((2, 3)), "mask": np.zeros((2, 3))}
 UNSCALE = {"x": np.zeros((2, 3)), "refscale": np.ones(2), "refmean": np.zeros(3)}
 MODEL = Model(np.zeros((1, 3)), (np.eye(3),), (10,))
 FLUX_IVAR_MASK = pytest.mark.parametrize(
     "function",
-    [scale, snr, partial(pixelwise, MODEL)],
-    ids=["scale", "snr", "pixelwise"],
+    [scale, snr, partial(pixelwise, MODEL), partial(infill, MODEL)],
+    ids=["scale", "snr", "pixelwise", "infill"],
 )
 # Finite only where long double is wider than float64, as on Linux x86-64; where long
 # double is float64, it parses to inf.
@@ -27,6 +27,7 @@ WIDE = np.isfinite(BEYOND)
         ("flux", np.ones((2, 3, 1))),
         ("flux", np.ones((2, 0))),
         ("flux", [[1.0, 1.0, 1.0], [1.0]]),
+        ("mask", [[0, 0, 0], [0]]),
         ("ivar", np.ones((2, 2))),
         ("mask", np.zeros((3, 3))),
     ],
@@ -94,16 +95,20 @@ def test_spectra_without_a_good_pixel_are_counted_and_the_first_10_named(functio
 
 # Four pixels, one more than MODEL has.
 WIDER = {"flux": np.ones((2, 4)), "ivar": np.ones((2, 4)), "mask": np.zeros((2, 4))}
+# The checks that pixelwise and infill share.
+MODEL_ARGUMENTS = [
+    pytest.param({"model": 5}, TypeError, "model", id="model=5"),
+    pytest.param(WIDER, ValueError, "flux", id="npix=4"),
+    pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
+]
 
 
 @pytest.mark.parametrize(
     ("changes", "error", "name"),
     [
-        pytest.param({"model": 5}, TypeError, "model", id="model=5"),
-        pytest.param(WIDER, ValueError, "flux", id="npix=4"),
+        *MODEL_ARGUMENTS,
         pytest.param({"nguard": -1}, ValueError, "nguard", id="nguard=-1"),
         pytest.param({"nguard": 2.0}, TypeError, "nguard", id="nguard=2.0"),
-        pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
     ],
 )
 def test_an_invalid_argument_of_pixelwise_is_rejected(changes, error, name):
@@ -131,6 +136,53 @@ def test_an_invalid_argument_of_simulate_is_rejected(changes, error, name):
     arguments = {"nspec": 2, "npix": 3, "rng": np.random.default_rng(0)}
     with pytest.raises(error, match=f"^{name}: "):
         simulate(**(arguments | changes))
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "name"),
+    [
+        *MODEL_ARGUMENTS,
+        # An integer array would read as pixel indices (D-70).
+        pytest.param(
+            {"replace": np.ones((2, 3), int)}, TypeError, "replace", id="replace=int"
+        ),
+        pytest.param(
+            {"replace": [[True, False, True], [True]]},
+            ValueError,
+            "replace",
+            id="replace=ragged",
+        ),
+        pytest.param(
+            {"replace": np.ones((2, 2), bool)},
+            ValueError,
+            "replace",
+            id="replace=(2, 2)",
+        ),
+        pytest.param(
+            {"replace": np.ones(4, bool)}, ValueError, "replace", id="replace=(4,)"
+        ),
+        pytest.param(
+            {"ignore": np.ones((2, 2), bool)}, ValueError, "ignore", id="ignore=(2, 2)"
+        ),
+        pytest.param(
+            {"ignore": np.ones(4, bool)}, ValueError, "ignore", id="ignore=(4,)"
+        ),
+        pytest.param({"covariance": 1}, TypeError, "covariance", id="covariance=1"),
+    ],
+)
+def test_an_invalid_argument_of_infill_is_rejected(changes, error, name):
+    with pytest.raises(error, match=f"^{name}: "):
+        infill(**({"model": MODEL} | SPECTRA | changes))
+
+
+@pytest.mark.parametrize(
+    ("s", "error"),
+    [(1.5, TypeError), (True, TypeError), (-1, ValueError), (2, ValueError)],
+)
+def test_an_invalid_spectrum_of_repaired_covariance_is_rejected(s, error):
+    result = infill(MODEL, **SPECTRA, covariance=True)
+    with pytest.raises(error, match="^s: "):
+        result.covariance(s)
 
 
 CENTER = {
