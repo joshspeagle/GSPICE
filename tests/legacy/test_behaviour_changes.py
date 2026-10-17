@@ -1,6 +1,7 @@
 import ast
 import importlib
 import pickle
+import re
 import subprocess
 import sys
 from fractions import Fraction
@@ -26,20 +27,23 @@ from gspice.legacy import (
     submatrix_inv_mult,
 )
 
-# The names that the 2022 gspice/__init__.py imported.
-NAMES_2022 = [
-    "cholesky_inv",
-    "submatrix_inv",
-    "submatrix_inv_mult",
-    "standard_scale",
-    "covar",
-    "get_chimask",
-    "covar_iter_mask",
-    "gaussian_estimate",
-    "gp_interp",
-    "maskinterp1",
-    "maskinterp",
-]
+# The functions that the 2022 gspice/__init__.py imported, each with the replacement
+# that its warning names (design section 7.2).
+REPLACEMENT = {
+    "standard_scale": "gspice.scale",
+    "covar": "gspice.fit",
+    "covar_iter_mask": "gspice.fit",
+    "get_chimask": "gspice.pixelwise",
+    "gp_interp": "gspice.pixelwise",
+    "gaussian_estimate": "gspice.infill",
+    "cholesky_inv": "gspice.legacy.cholesky_inv",
+    "submatrix_inv": "gspice.legacy.submatrix_inv",
+    "submatrix_inv_mult": "gspice.legacy.submatrix_inv_mult",
+    "maskinterp1": "gspice.legacy.maskinterp1",
+    "maskinterp": "gspice.legacy.maskinterp",
+}
+# The modules that it imported, which `from gspice import *` bound with the functions.
+MODULES_2022 = ["specUtils", "matrixUtils", "djs_maskinterp"]
 
 # pickle.dumps(gspice.standard_scale, protocol=4) with the package of 1fbab9f.
 PICKLE_2022 = (
@@ -79,9 +83,7 @@ ASSERTS = [
 ]
 
 
-@pytest.mark.parametrize(
-    "module", ["specUtils", "matrixUtils", "djs_maskinterp", "gspiceMain"]
-)
+@pytest.mark.parametrize("module", [*MODULES_2022, "gspiceMain"])
 def test_2022_module_paths_no_longer_import(module):
     # In 1fbab9f both worked, except gspice.gspiceMain before an import of the module.
     # Without the attribute, `from gspice import <module>` and the star import fail.
@@ -91,9 +93,37 @@ def test_2022_module_paths_no_longer_import(module):
     assert not hasattr(gspice, module)
 
 
-@pytest.mark.parametrize("name", NAMES_2022)
-def test_top_level_2022_name_is_the_legacy_function(name):
-    assert getattr(gspice, name) is getattr(gspice.legacy, name)
+@pytest.mark.parametrize(("name", "replacement"), REPLACEMENT.items())
+def test_top_level_2022_name_warns_and_is_the_legacy_function(name, replacement):
+    # 1fbab9f returned the function without a warning. The module __getattr__ can run
+    # twice for one access, so the test does not count the warnings.
+    start = rf"^gspice\.{name} is deprecated and will be removed in 3\.0\.0\. Use "
+    with pytest.warns(DeprecationWarning, match=start) as record:
+        function = getattr(gspice, name)
+    assert function is getattr(gspice.legacy, name)
+    # stacklevel 2 attributes the warning to this file, not to gspice.
+    assert {Path(warning.filename).name for warning in record} == {Path(__file__).name}
+    # The message names the replacement and gspice.legacy.<name>, and no other function.
+    named = set(re.findall(r"gspice(?:\.legacy)?\.\w+", str(record[0].message)))
+    assert named == {f"gspice.{name}", replacement, f"gspice.legacy.{name}"}
+
+
+def star_import(module):
+    # `from module import *` binds each name of __all__ to getattr(module, name).
+    return {name: getattr(module, name) for name in module.__all__}
+
+
+@pytest.mark.filterwarnings("error")
+def test_star_import_binds_the_public_names_and_no_2022_name_without_a_warning():
+    # 1fbab9f bound the 11 functions of REPLACEMENT and the 3 modules of MODULES_2022.
+    names = star_import(gspice).keys()
+    assert "legacy" in names
+    assert names.isdisjoint({*REPLACEMENT, *MODULES_2022})
+
+
+@pytest.mark.filterwarnings("error")
+def test_star_import_of_legacy_binds_the_2022_names_without_a_warning():
+    assert star_import(gspice.legacy).keys() == {*REPLACEMENT, *MODULES_2022}
 
 
 def test_2022_pickle_of_standard_scale_no_longer_loads():
