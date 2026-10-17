@@ -5,9 +5,10 @@ import warnings
 from typing import TYPE_CHECKING, Any
 
 from . import legacy
+from ._blocks import fit_blocks
 from ._datasets import Simulation, simulate
 from ._diagnostics import finite_sample_factor
-from ._model import Model, fit, load, save
+from ._model import Blocks, Model, fit, load, save
 from ._predict import Prediction, Repaired, infill, pixelwise
 from ._spectra import scale, snr, unscale
 
@@ -18,12 +19,14 @@ logging.getLogger("gspice").addHandler(logging.NullHandler())
 __version__ = "2.0.0.dev0"
 
 __all__ = [
+    "Blocks",
     "Model",
     "Prediction",
     "Repaired",
     "Simulation",
     "finite_sample_factor",
     "fit",
+    "fit_blocks",
     "infill",
     "legacy",
     "load",

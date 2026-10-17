@@ -12,7 +12,7 @@ from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 
 from _golden import same
-from gspice import Model, __version__, load, save
+from gspice import Blocks, Model, __version__, load, save
 
 NBIN, NPIX = 3, 4
 
@@ -26,16 +26,27 @@ def arguments():
     }
 
 
+def block_arguments():
+    # Two blocks of 2 pixels, the second of which ends at the last pixel.
+    return {"starts": [0, 2], "width": 2, "nguard": 1, "thresholds": np.ones((NBIN, 2))}
+
+
 def with_cov(matrix):
     cov = list(arguments()["cov"])
     cov[1] = matrix
     return cov
 
 
-def same_fields(a, b):
-    return all(
-        same(getattr(a, f.name), getattr(b, f.name)) for f in fields(Model) if f.init
+def contents(instance):
+    # The fields of a Model or a Blocks, with the fields of a Blocks in its place.
+    return tuple(
+        contents(value) if isinstance(value, Blocks) else value
+        for value in (getattr(instance, f.name) for f in fields(instance) if f.init)
     )
+
+
+def same_fields(a, b):
+    return same(contents(a), contents(b))
 
 
 # The entry [2, 0] is one ulp above its mirror entry [0, 2].
@@ -78,6 +89,20 @@ NAN_MATRIX[0, 3] = NAN_MATRIX[3, 0] = np.nan
         ("center", True, TypeError, r"^center: "),
         ("weighted", 1, TypeError, r"^weighted: "),
         ("weighted", "yes", TypeError, r"^weighted: "),
+        ("blocks", block_arguments(), TypeError, r"^blocks: "),
+        (
+            "blocks",
+            Blocks(**(block_arguments() | {"thresholds": np.ones((NBIN - 1, 2))})),
+            ValueError,
+            r"^blocks: ",
+        ),
+        # The second block ends one pixel beyond the last.
+        (
+            "blocks",
+            Blocks(**(block_arguments() | {"starts": [0, 3]})),
+            ValueError,
+            r"^blocks: .* starts\[-1\] \+ width = 5$",
+        ),
     ],
 )
 def test_an_invalid_field_is_rejected_with_a_message_that_starts_with_its_name(
@@ -85,6 +110,77 @@ def test_an_invalid_field_is_rejected_with_a_message_that_starts_with_its_name(
 ):
     with pytest.raises(error, match=message):
         Model(**(arguments() | {field: value}))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error", "message"),
+    [
+        ("starts", [0.0, 2.0], TypeError, r"^starts: "),
+        ("starts", [False, True], TypeError, r"^starts: "),
+        ("starts", [[0, 2]], ValueError, r"^starts: "),
+        ("starts", np.zeros(0, int), ValueError, r"^starts: "),
+        ("starts", [-1, 2], ValueError, r"^starts: "),
+        (
+            "starts",
+            [2, 2],
+            ValueError,
+            r"^starts: .* starts\[0\] = 2 and starts\[1\] = 2$",
+        ),
+        (
+            "starts",
+            [0, 2, 1],
+            ValueError,
+            r"^starts: .* starts\[1\] = 2 and starts\[2\] = 1$",
+        ),
+        # Beyond the int64 range, where a cast would wrap it around to a negative value.
+        (
+            "starts",
+            np.array([0, 2**63], np.uint64),
+            ValueError,
+            r"^starts: .*, got 9223372036854775808 at block 1$",
+        ),
+        ("width", 0, ValueError, r"^width: "),
+        ("width", 2.0, TypeError, r"^width: "),
+        ("nguard", -1, ValueError, r"^nguard: "),
+        # save writes nguard as int64.
+        ("nguard", 2**63, ValueError, r"^nguard: "),
+        ("nguard", np.True_, TypeError, r"^nguard: "),
+        ("thresholds", np.ones(2), ValueError, r"^thresholds: "),
+        ("thresholds", np.ones((NBIN, 3)), ValueError, r"^thresholds: "),
+        (
+            "thresholds",
+            [[1.0, np.nan]] * NBIN,
+            ValueError,
+            r"^thresholds: expected finite",
+        ),
+        (
+            "thresholds",
+            [[1.0, 0.0]] * NBIN,
+            ValueError,
+            r"^thresholds: expected values > 0",
+        ),
+        ("thresholds", np.ones((NBIN, 2), complex), TypeError, r"^thresholds: "),
+    ],
+)
+def test_an_invalid_field_of_blocks_is_rejected_with_a_message_that_starts_with_its_name(
+    field, value, error, message
+):
+    with pytest.raises(error, match=message):
+        Blocks(**(block_arguments() | {field: value}))
+
+
+def test_blocks_hold_read_only_copies_and_python_scalars_and_equal_only_themselves():
+    starts, thresholds = np.array([0, 2], np.int32), np.ones((NBIN, 2), np.float32)
+    blocks = Blocks(starts, np.int64(2), np.uint8(1), thresholds)
+    assert same(blocks.starts, starts.astype(np.int64))
+    assert same(blocks.thresholds, thresholds.astype(np.float64))
+    for array, original in ((blocks.starts, starts), (blocks.thresholds, thresholds)):
+        assert not array.flags.writeable
+        assert not np.shares_memory(array, original)
+    assert (type(blocks.width), type(blocks.nguard)) == (int, int)
+    with pytest.raises(FrozenInstanceError):
+        blocks.width = 3
+    assert blocks != Blocks(starts, 2, 1, thresholds)
 
 
 def test_a_type_error_raised_inside_an_iterable_keeps_its_own_message():
@@ -151,16 +247,26 @@ DUPLICATES = {
 
 @pytest.mark.parametrize("duplicate", DUPLICATES.values(), ids=list(DUPLICATES))
 def test_pickle_and_copy_rebuild_a_model_through_its_checks(duplicate):
-    model = Model(**arguments(), center=0.95, weighted=True)
+    blocks = Blocks(**block_arguments())
+    model = Model(**arguments(), center=0.95, weighted=True, blocks=blocks)
     model._precision(0)
     copy = duplicate(model)
     assert same_fields(copy, model)
     # Without the cache of the original.
     assert copy._cache == {}
-    # A model damaged behind its frozen fields fails the checks when it is rebuilt.
+    # A model damaged behind its frozen fields fails the checks when it is rebuilt,
+    # also in its blocks.
+    object.__setattr__(model.blocks, "width", 0)
+    with pytest.raises(ValueError, match=r"^width: "):
+        duplicate(model)
+    object.__setattr__(model.blocks, "width", 2)
     object.__setattr__(model, "n_train", (10, 0, 30))
     with pytest.raises(ValueError, match=r"^n_train\[1\]: "):
         duplicate(model)
+    # Blocks too: damaged blocks fail the checks.
+    object.__setattr__(blocks, "width", 0)
+    with pytest.raises(ValueError, match=r"^width: "):
+        duplicate(blocks)
 
 
 @st.composite
@@ -180,6 +286,13 @@ def models(draw):
     n_train = draw(st.lists(st.integers(1, 10**6), min_size=nbin, max_size=nbin))
     edges = st.sets(st.floats(-1e6, 1e6), min_size=nbin - 1, max_size=nbin - 1)
     center = draw(st.none() | values)
+    blocks = None
+    if draw(st.booleans()):
+        width = draw(st.integers(1, npix))
+        starts = sorted(draw(st.sets(st.integers(0, npix - width), min_size=1)))
+        shape = (nbin, len(starts))
+        thresholds = draw(hnp.arrays(np.float64, shape, elements=positive))
+        blocks = Blocks(starts, width, draw(st.integers(0, 10**6)), thresholds)
     return Model(
         mean,
         cov,
@@ -187,6 +300,7 @@ def models(draw):
         edges=sorted(draw(edges)),
         center=center,
         weighted=draw(st.booleans()),
+        blocks=blocks,
     )
 
 
@@ -206,13 +320,17 @@ def test_save_writes_exactly_the_given_path_for_a_str_bytes_or_a_path(tmp_path, 
     assert same_fields(load(path), model)
 
 
-def test_save_writes_the_keys_and_dtypes_of_the_format(tmp_path):
-    save(Model(np.zeros((1, 2)), (np.eye(2),), (5,)), tmp_path / "model.npz")
+@pytest.mark.parametrize("with_blocks", [False, True], ids=["without", "blocks"])
+def test_save_writes_the_keys_and_dtypes_of_the_format(tmp_path, with_blocks):
+    # Without blocks, none of their arrays (design section 9).
+    blocks = Blocks([0, 1], 1, 0, np.ones((1, 2))) if with_blocks else None
+    model = Model(np.zeros((1, 2)), (np.eye(2),), (5,), blocks=blocks)
+    save(model, tmp_path / "model.npz")
     with np.load(tmp_path / "model.npz") as archive:
         stored = dict(archive)
     version = stored.pop("gspice_version")
     assert (version.item(), version.shape) == (__version__, ())
-    assert {key: (value.dtype, value.shape) for key, value in stored.items()} == {
+    expected = {
         "schema": (np.int64, ()),
         "mean": (np.float64, (1, 2)),
         "n_train": (np.int64, (1,)),
@@ -221,6 +339,16 @@ def test_save_writes_the_keys_and_dtypes_of_the_format(tmp_path):
         "weighted": (np.bool_, ()),
         "cov0": (np.float64, (2, 2)),
     }
+    if with_blocks:
+        expected |= {
+            "block_starts": (np.int64, (2,)),
+            "block_width": (np.int64, ()),
+            "block_nguard": (np.int64, ()),
+            "block_thresholds": (np.float64, (1, 2)),
+        }
+    assert {
+        key: (value.dtype, value.shape) for key, value in stored.items()
+    } == expected
     assert stored["schema"] == 1
     assert np.isnan(stored["center"])
 
@@ -255,6 +383,12 @@ def test_load_rejects_an_archive_whose_schema_is_not_the_integer_1(tmp_path, sch
         ),
         ({}, ("center",), r"^path: .* got no center in "),
         ({"cov3": np.eye(NPIX)}, (), r"^cov: "),
+        # Some of the block arrays, but not all.
+        (
+            {"block_starts": np.array([0]), "block_width": np.int64(1)},
+            (),
+            r"^path: .* got no block_nguard, block_thresholds in ",
+        ),
     ],
 )
 def test_load_rejects_a_file_whose_arrays_differ_from_those_of_save(

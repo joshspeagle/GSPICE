@@ -8,12 +8,14 @@ from numpy.typing import NDArray
 
 import gspice
 from gspice import (
+    Blocks,
     Model,
     Prediction,
     Repaired,
     Simulation,
     finite_sample_factor,
     fit,
+    fit_blocks,
     infill,
     load,
     pixelwise,
@@ -43,6 +45,9 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
     # the dtype.
     eye = np.eye(4, dtype=np.float32)
     refscale = np.ones(6, np.float32)
+    starts = np.array([0, 2], np.uint8)
+    thresholds = np.ones((2, 2), np.float32)
+    blocks = Blocks(starts, np.int64(2), np.int64(1), thresholds)
     model = Model(
         [[0.0] * 4] * 2,
         [eye, 2 * np.eye(4)],
@@ -50,6 +55,7 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
         edges=[np.float32(50.0)],
         center=np.float32(1.0),
         weighted=np.True_,
+        blocks=blocks,
     )
     fitted = fit(
         flux,
@@ -103,6 +109,20 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
     assert_type(
         repaired.covariance(np.int64(0)), tuple[NDArray[np.int64], NDArray[np.float64]]
     )
+    # Two spectra suffice at the percentile 50.
+    blocked = fit_blocks(
+        centred,
+        flux,
+        ivar,
+        mask,
+        width=np.int64(2),
+        stride=np.int64(1),
+        nguard=np.int64(1),
+        percentile=np.float32(50.0),
+        progress=progress,
+    )
+    assert_type(blocked, Model)
+    assert_type(blocked.blocks, Blocks | None)
     assert_type(finite_sample_factor(np.int64(200), 40), float)
     factor = finite_sample_factor(np.int64(200), [40, 41], np.ones(2, np.uint8))
     assert_type(factor, float | NDArray[np.float64])

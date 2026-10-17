@@ -227,7 +227,7 @@ def pixelwise(
     nguard = integer(nguard, "nguard", 0)
     inflate = boolean(inflate, "inflate")
     check_progress(progress)
-    flux, ivar, bad = _validated(model, flux, ivar, mask, inflate)
+    flux, ivar, bad = validated(model, flux, ivar, mask, inflate)
     nspec, npix = flux.shape
     bins = model._bins(flux, ivar, bad)
     # f_s(N_s, N_k, 1) of each bin and pixel with inflate, and 1 without.
@@ -377,7 +377,7 @@ def infill(
     if rng is not None:
         check_rng(rng)
     check_progress(progress)
-    flux, ivar, bad = _validated(model, flux, ivar, mask, inflate)
+    flux, ivar, bad = validated(model, flux, ivar, mask, inflate)
     nspec, npix = flux.shape
     replace = _pixels(replace, "replace", bad)
     ignore = _pixels(ignore, "ignore", np.broadcast_to(False, bad.shape))
@@ -486,7 +486,7 @@ def infill(
     )
 
 
-def _validated(
+def validated(
     model: Model,
     flux: ArrayLike,
     ivar: ArrayLike,
