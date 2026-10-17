@@ -10,6 +10,7 @@ from gspice import (
     fit,
     infill,
     legacy,
+    noise_audit,
     pixelwise,
     scale,
     simulate,
@@ -25,6 +26,7 @@ REJECT_EMPTY = {
     "snr": snr,
     "pixelwise": partial(pixelwise, MODEL),
     "infill": partial(infill, MODEL),
+    "noise_audit": partial(noise_audit, MODEL),
 }
 # fit drops a spectrum without a good pixel, which the others reject.
 FLUX_IVAR_MASK = pytest.mark.parametrize(
@@ -114,11 +116,14 @@ def test_spectra_without_a_good_pixel_are_counted_and_the_first_10_named(functio
 
 # Four pixels, one more than MODEL has.
 WIDER = {"flux": np.ones((2, 4)), "ivar": np.ones((2, 4)), "mask": np.zeros((2, 4))}
-# The checks that pixelwise and infill share.
+# The checks that pixelwise, infill and noise_audit share.
 MODEL_ARGUMENTS = [
     pytest.param({"model": 5}, TypeError, "model", id="model=5"),
     pytest.param(WIDER, ValueError, "flux", id="npix=4"),
     pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
+]
+# The checks of inflate, which pixelwise and infill share.
+INFLATE_ARGUMENTS = [
     pytest.param({"inflate": 1}, TypeError, "inflate", id="inflate=1"),
     # Design section 4.3: f_s is derived only for mean-centred, unweighted models.
     *(
@@ -134,19 +139,28 @@ MODEL_ARGUMENTS = [
         )
     ),
 ]
+# The checks of nguard, which pixelwise and noise_audit share.
+NGUARD_ARGUMENTS = [
+    pytest.param({"nguard": -1}, ValueError, "nguard", id="nguard=-1"),
+    pytest.param({"nguard": 2.0}, TypeError, "nguard", id="nguard=2.0"),
+]
 
 
 @pytest.mark.parametrize(
     ("changes", "error", "name"),
-    [
-        *MODEL_ARGUMENTS,
-        pytest.param({"nguard": -1}, ValueError, "nguard", id="nguard=-1"),
-        pytest.param({"nguard": 2.0}, TypeError, "nguard", id="nguard=2.0"),
-    ],
+    [*MODEL_ARGUMENTS, *INFLATE_ARGUMENTS, *NGUARD_ARGUMENTS],
 )
 def test_an_invalid_argument_of_pixelwise_is_rejected(changes, error, name):
     with pytest.raises(error, match=f"^{name}: "):
         pixelwise(**({"model": MODEL} | SPECTRA | changes))
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "name"), [*MODEL_ARGUMENTS, *NGUARD_ARGUMENTS]
+)
+def test_an_invalid_argument_of_noise_audit_is_rejected(changes, error, name):
+    with pytest.raises(error, match=f"^{name}: "):
+        noise_audit(**({"model": MODEL} | SPECTRA | changes))
 
 
 @pytest.mark.parametrize(
@@ -175,6 +189,7 @@ def test_an_invalid_argument_of_simulate_is_rejected(changes, error, name):
     ("changes", "error", "name"),
     [
         *MODEL_ARGUMENTS,
+        *INFLATE_ARGUMENTS,
         # An integer array would read as pixel indices (D-70).
         pytest.param(
             {"replace": np.ones((2, 3), int)}, TypeError, "replace", id="replace=int"

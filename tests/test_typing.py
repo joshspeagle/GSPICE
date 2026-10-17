@@ -16,6 +16,7 @@ from gspice import (
     fit,
     infill,
     load,
+    noise_audit,
     pixelwise,
     save,
     scale,
@@ -106,6 +107,8 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
     assert_type(finite_sample_factor(np.int64(200), 40), float)
     factor = finite_sample_factor(np.int64(200), [40, 41], np.ones(2, np.uint8))
     assert_type(factor, float | NDArray[np.float64])
+    rho = noise_audit(model, flux, ivar, mask, nguard=np.int64(1), progress=progress)
+    assert_type(rho, NDArray[np.float64])
     simulation = simulate(
         np.int64(5), np.int64(30), rng=rng, artifacts=np.float32(0.2), gaussian=np.True_
     )
