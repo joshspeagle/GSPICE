@@ -22,6 +22,7 @@
 - The option `inflate` of `gspice.pixelwise` and `gspice.infill`, which multiplies the variances and covariances of a mean-centred, unweighted model by f_s(N_s, N_k, 1). The field `Repaired.fs` holds the factor of each spectrum by which `chi2 / dof` is divided, so that `chi2 / (dof * fs)` has the mean 1 for held-out Gaussian spectra of such a model, with or without `inflate`.
 - `gspice/py.typed`, the PEP 561 marker, so that type checkers read the annotations of an installed `gspice`. The functions of `gspice.legacy` keep their 2022 signatures without annotations.
 - `gspice.fit_blocks`, which computes from spectra without artifacts a χ² threshold for each block of consecutive pixels and each S/N bin (paper section 3.2), and returns the model with them. `gspice.Blocks` holds the blocks and their thresholds in the new field `Model.blocks`, which `save` and `load` keep.
+- `gspice.noise_audit`, which compares the residuals of `gspice.pixelwise` with the reported noise at each pixel. It returns rho, the root mean of (f − f̂)² ivar over the spectra that are good at the pixel; on spectra not used in the fit and away from bad runs longer than nguard, rho² has a mean above 1 even where ivar is right.
 
 ### Deprecated
 

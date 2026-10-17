@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from . import legacy
 from ._blocks import fit_blocks
 from ._datasets import Simulation, simulate
-from ._diagnostics import finite_sample_factor
+from ._diagnostics import finite_sample_factor, noise_audit
 from ._model import Blocks, Model, fit, load, save
 from ._predict import Prediction, Repaired, infill, pixelwise
 from ._spectra import scale, snr, unscale
@@ -30,6 +30,7 @@ __all__ = [
     "infill",
     "legacy",
     "load",
+    "noise_audit",
     "pixelwise",
     "save",
     "scale",
