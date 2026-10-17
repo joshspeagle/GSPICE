@@ -19,6 +19,15 @@
 - `gspice.infill`, which replaces chosen pixels of each spectrum by their Gaussian conditional mean given the other pixels, and its result `gspice.Repaired`. It reports the replaced and ignored pixels and χ², and with `covariance=True` the conditional covariance of the replaced pixels of each spectrum.
 - `gspice.fit`, which fits a model to training spectra with the iterative outlier clipping of paper Alg. 4, and returns the model and the final training mask.
 
+### Deprecated
+
+- An access to one of the 11 functions of the 2022 package through `gspice`, as `gspice.<name>` or `from gspice import <name>`, emits a `DeprecationWarning`. It names the replacement and the removal of the name in 3.0.0. The access returns `gspice.legacy.<name>`, which keeps the 2022 results, except for the behaviour changes below, and does not warn. Type checkers report `gspice.<name>` as an unknown attribute.
+- `gspice.standard_scale`: use `gspice.scale`.
+- `gspice.covar` and `gspice.covar_iter_mask`: use `gspice.fit`.
+- `gspice.get_chimask` and `gspice.gp_interp`: use `gspice.pixelwise`.
+- `gspice.gaussian_estimate`: use `gspice.infill`.
+- `gspice.cholesky_inv`, `gspice.submatrix_inv`, `gspice.submatrix_inv_mult`, `gspice.maskinterp1` and `gspice.maskinterp`: use `gspice.legacy.<name>`.
+
 ### Removed
 
 - `setup.py`, which `pyproject.toml` replaces.
@@ -30,7 +39,8 @@
 ### Behaviour changes
 
 - The golden tests compare 11 outputs at a relative tolerance looser than 1e-10: 1e-9 for 7 outputs and 1e-8 for 4. These outputs come from ill-conditioned inputs, on which the 2022 results differ from a direct Cholesky solve by up to 7.6e-10.
-- The 2022 modules `gspice.specUtils`, `gspice.matrixUtils` and `gspice.djs_maskinterp` moved to `gspice.legacy.specUtils`, `gspice.legacy.matrixUtils` and `gspice.legacy.djs_maskinterp`, and the unused `gspice.gspiceMain` is deleted. Imports of the old module paths fail, `from gspice import *` binds `legacy` instead of the three modules, and pickles that name the old paths no longer load. To migrate, insert `legacy.` into the module path, for example `from gspice.legacy.specUtils import standard_scale`. The top-level names, such as `gspice.standard_scale`, still work.
+- The 2022 modules `gspice.specUtils`, `gspice.matrixUtils` and `gspice.djs_maskinterp` moved to `gspice.legacy.specUtils`, `gspice.legacy.matrixUtils` and `gspice.legacy.djs_maskinterp`, and the unused `gspice.gspiceMain` is deleted. Imports of the old module paths fail, and pickles that name the old paths no longer load. To migrate, insert `legacy.` into the module path, for example `from gspice.legacy.specUtils import standard_scale`.
+- `gspice.__all__` holds the new public names and `legacy`, so `from gspice import *` binds them. It no longer binds the 11 functions and the 3 modules of the 2022 package. It can shadow names such as `load` and `save` of an earlier `from numpy import *`. To migrate, use `from gspice.legacy import *`, which binds the same 14 names as the 2022 star import, without a warning.
 - The 2022 asserts of `gspice.legacy` raise `_LegacyError`, a subclass of `AssertionError` and `ValueError`, with a message that names the argument. An `except ValueError` clause now catches them, and the checks also run under `python -O`.
 - `gp_interp` accepts `irange` as a list, a tuple or an array of at least two integers of any integer type, and raises unless 0 <= `irange[0]` <= `irange[1]` <= npix - 1. The 2022 code rejected a 2-element `irange` and a uint64 array, and for a negative start with `irange[1]` = npix - 1 it returned leading columns of zeros. A numpy bool in `irange[0]` or `irange[1]` raises `TypeError`, and spectra without pixels raise.
 - `gp_interp` raises for a negative `nguard`, where the 2022 code predicted each pixel from itself. Under numpy 2, fixed-width numpy integers now work for `nguard`, where the 2022 code gave wrong windows or raised OverflowError or TypeError. A numpy bool or an array of one or more dimensions raises `TypeError` for `nguard`.
