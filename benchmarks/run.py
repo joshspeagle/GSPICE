@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from collections import defaultdict
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -16,10 +17,9 @@ import scipy
 
 import gspice
 
-# Cases 1 and 2 run on the primitives until pixelwise and infill exist (design
-# section 14, items 3.3 and 3.5).
+# Case 2 runs on the primitives until infill exists (design section 14, item 3.5).
 from gspice import _spectra
-from gspice._linalg import group_rows, guard_weights, precision, solve_pattern
+from gspice._linalg import group_rows, precision, solve_pattern
 from gspice.legacy import gp_interp
 
 NPIX = 2400
@@ -63,34 +63,23 @@ def _entry(case, name, parameters, times):
     return {"case": case, "name": name, "parameters": parameters, "stages": stages}
 
 
-def _product(X, W, nspec):
-    # A real call allocates its output, and the first write to it costs page faults.
-    pred = np.empty((nspec, W.shape[0]))
-    for start in range(0, nspec, len(X)):
-        stop = min(start + len(X), nspec)
-        np.matmul(X[: stop - start], W, out=pred[start:stop])
-    return pred
-
-
 def _pixelwise(C, repeats):
-    sizes = (4000, 20_000, 100_000)
-    c = np.diagonal(C)
-    # One chunk of spectra serves every chunk of the product and bounds the memory.
-    X = np.random.default_rng(1).standard_normal((CHUNK, NPIX))
-    times = defaultdict(list)
-    for _ in range(repeats + 1):
-        P = _timed(times, "precision", precision, C)
-        W, _var = _timed(times, "guard_weights", guard_weights, P, c, NGUARD)
-        for nspec in sizes:
-            _timed(times, nspec, _product, X, W, nspec)
-    for nspec in sizes:
-        stages = {
-            "precision": times["precision"],
-            "guard_weights": times["guard_weights"],
-            "product": times[nspec],
-        }
-        stages["total"] = [sum(seconds) for seconds in zip(*stages.values())]
-        yield {"nspec": nspec, "npix": NPIX, "nguard": NGUARD}, stages
+    rng = np.random.default_rng(1)
+    pixelwise = partial(gspice.pixelwise, nguard=NGUARD)
+    # 1e5 spectra peak at about 8.5 GB (design section 8).
+    for nspec in (4000, 20_000, 100_000):
+        flux = rng.standard_normal((nspec, NPIX), dtype=np.float32)
+        ivar = np.ones((nspec, NPIX), dtype=np.float32)
+        ivar[rng.random((nspec, NPIX), dtype=np.float32) < 0.02] = 0.0
+        times = defaultdict(list)
+        for _ in range(repeats + 1):
+            # A new model, whose cache the first two stages fill.
+            model = gspice.Model(np.zeros((1, NPIX)), (C,), (nspec,))
+            _timed(times, "precision", model._precision, 0)
+            _timed(times, "guard_weights", model._guard_weights, 0, NGUARD)
+            _timed(times, "pixelwise", pixelwise, model, flux, ivar)
+        times["total"] = [sum(seconds) for seconds in zip(*times.values())]
+        yield {"nspec": nspec, "npix": NPIX, "nguard": NGUARD}, times
 
 
 def _solve_groups(P, keys, X):
@@ -149,7 +138,7 @@ def _legacy(C, repeats):
 
 
 CASES = {
-    1: ("pixelwise primitives", _pixelwise),
+    1: ("pixelwise", _pixelwise),
     2: ("infill primitives", _infill),
     7: ("legacy gp_interp", _legacy),
 }
