@@ -5,7 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.special import expit, logit
 
-from ._spectra import boolean, integer, real
+from ._spectra import Boolean, Integer, Real, boolean, integer, real
 
 MAX_DEPTH = 0.95
 
@@ -42,12 +42,12 @@ class Simulation:
 
 
 def simulate(
-    nspec: int,
-    npix: int = 500,
+    nspec: Integer,
+    npix: Integer = 500,
     *,
     rng: np.random.Generator,
-    artifacts: float = 0.0,
-    gaussian: bool = False,
+    artifacts: Real = 0.0,
+    gaussian: Boolean = False,
 ) -> Simulation:
     """Synthetic continuum-normalized spectra for tests and examples (no network).
 

@@ -16,7 +16,10 @@ from scipy.linalg import issymmetric
 
 from ._linalg import guard_weights, precision
 from ._spectra import (
+    Boolean,
+    Integer,
     Progress,
+    Real,
     boolean,
     check_progress,
     chunks,
@@ -39,6 +42,9 @@ _REQUIRED = ("schema", "mean", "n_train", "edges", "center", "weighted")
 
 _logger = logging.getLogger("gspice")
 
+# The path-like objects of the Python glossary, which os.fsdecode accepts.
+FilePath = str | bytes | os.PathLike[str] | os.PathLike[bytes]
+
 
 @dataclass(frozen=True, eq=False)
 class Model:
@@ -50,11 +56,11 @@ class Model:
     x = a (ftilde - center) - mean[b] for a constant centre, and
     x = a ftilde - mean[b] otherwise.
 
-    The constructor takes the attributes below as array_like values or sequences, and
-    stores them as the types given here, with read-only float64 copies of the arrays.
-    The attributes after n_train are keyword-only. The constructor does not check that
-    a covariance is positive definite, which costs npix^3. Two models are equal only if
-    they are the same object.
+    The constructor takes the attributes below as array_like values, iterables and
+    numpy scalars, and stores them as the types given here, with read-only float64
+    copies of the arrays. The attributes after n_train are keyword-only. The
+    constructor does not check that a covariance is positive definite, which costs
+    npix^3. Two models are equal only if they are the same object.
 
     A model computes the precision matrix of a bin at its first use and keeps it, with
     the guard weights of the latest nguard of each bin (see `pixelwise`). Each matrix
@@ -94,15 +100,27 @@ class Model:
     cov: tuple[NDArray[np.float64], ...]
     n_train: tuple[int, ...]
     _: KW_ONLY
-    edges: tuple[float, ...] = ()
-    center: float | None = None
-    weighted: bool = False
-    _cache: dict[tuple[str, int], Any] = field(
-        init=False, repr=False, default_factory=dict
-    )
+    edges: tuple[float, ...]
+    center: float | None
+    weighted: bool
+    _cache: dict[tuple[str, int], Any] = field(init=False, repr=False)
 
-    def __post_init__(self) -> None:
-        mean = numeric(self.mean, "mean")
+    # Written by hand because the parameters take more than the fields store: any
+    # iterable, array_like values and numpy scalars. The fields have no defaults, so
+    # a field that __init__ does not set raises AttributeError instead of reading a
+    # class default. _: KW_ONLY keeps the fields after n_train out of __match_args__.
+    # A dataclass subclass would generate an __init__ without these checks.
+    def __init__(
+        self,
+        mean: ArrayLike,
+        cov: Iterable[ArrayLike],
+        n_train: Iterable[Integer],
+        *,
+        edges: Iterable[Real] = (),
+        center: Real | None = None,
+        weighted: Boolean = False,
+    ) -> None:
+        mean = numeric(mean, "mean")
         if mean.ndim != 2 or 0 in mean.shape:
             raise ValueError(
                 f"mean: expected a 2-D array of shape (nbin, npix) with nbin >= 1 and "
@@ -110,17 +128,17 @@ class Model:
             )
         mean = finite_array(mean, "mean", ("bin", "pixel"))
         nbin, npix = mean.shape
-        cov = _items(self.cov, "cov", nbin, partial(_covariance, npix=npix))
-        n_train = _items(self.n_train, "n_train", nbin, partial(integer, minimum=1))
-        edges = _items(self.edges, "edges", nbin - 1, real)
+        cov = _items(cov, "cov", nbin, partial(_covariance, npix=npix))
+        n_train = _items(n_train, "n_train", nbin, partial(integer, minimum=1))
+        edges = _items(edges, "edges", nbin - 1, real)
         for i, (low, high) in enumerate(pairwise(edges)):
             if low >= high:
                 raise ValueError(
                     f"edges: expected strictly increasing values, "
                     f"got edges[{i}] = {low} and edges[{i + 1}] = {high}"
                 )
-        center = None if self.center is None else real(self.center, "center")
-        weighted = boolean(self.weighted, "weighted")
+        center = None if center is None else real(center, "center")
+        weighted = boolean(weighted, "weighted")
         # After the checks, because issymmetric of scipy 1.11 rejects read-only arrays.
         for array in (mean, *cov):
             array.flags.writeable = False
@@ -131,6 +149,7 @@ class Model:
             ("edges", edges),
             ("center", center),
             ("weighted", weighted),
+            ("_cache", {}),
         ):
             object.__setattr__(self, name, value)
 
@@ -206,15 +225,15 @@ def fit(
     ivar: ArrayLike,
     mask: ArrayLike | None = None,
     *,
-    nsigma: Sequence[float] | NDArray[np.integer[Any] | np.floating[Any]] = (
+    nsigma: Sequence[Real] | NDArray[np.integer[Any] | np.floating[Any]] = (
         20.0,
         8.0,
         6.0,
     ),
-    maxbadpix: int = 64,
-    nguard: int = 20,
-    cumulative: bool = True,
-    center: float | None = None,
+    maxbadpix: Integer = 64,
+    nguard: Integer = 20,
+    cumulative: Boolean = True,
+    center: Real | None = None,
     weights: ArrayLike | None = None,
     progress: Progress | None = None,
 ) -> tuple[Model, NDArray[np.bool_]]:
@@ -385,7 +404,7 @@ def fit(
     return model, training
 
 
-def _thresholds(value: ArrayLike) -> tuple[float, ...]:
+def _thresholds(value: object) -> tuple[float, ...]:
     nsigma = numeric(value, "nsigma")
     if nsigma.ndim == 0:
         raise TypeError(f"nsigma: expected a 1-D sequence or array, got {nsigma}")
@@ -497,12 +516,12 @@ def _fitted(
             f"{subject} is not positive definite: its variance at pixel {constant[0]} "
             "is 0"
         )
-    weighted = bool(np.any(w != 1))
+    weighted = np.any(w != 1)
     model = Model(mean[np.newaxis], (S,), (nspec,), center=center, weighted=weighted)
     return X, model
 
 
-def save(model: Model, path: str | os.PathLike[str]) -> None:
+def save(model: Model, path: FilePath) -> None:
     """Write model to the .npz file path.
 
     The archive is not compressed. It holds the arrays schema (the integer 1),
@@ -527,12 +546,12 @@ def save(model: Model, path: str | os.PathLike[str]) -> None:
     if not isinstance(model, Model):
         raise TypeError(f"model: expected a Model, got {type(model).__name__}")
     arrays = _arrays(model)
-    # fspath rejects an integer, which open would take as a file descriptor.
-    with open(os.fspath(path), "wb") as file:
+    # fsdecode rejects an integer, which open would take as a file descriptor.
+    with open(os.fsdecode(path), "wb") as file:
         np.savez(file, **arrays)
 
 
-def load(path: str | os.PathLike[str]) -> Model:
+def load(path: FilePath) -> Model:
     """Read a model written by `save`.
 
     Parameters
@@ -558,7 +577,10 @@ def load(path: str | os.PathLike[str]) -> Model:
     OSError
         If the file cannot be read, and for some damaged archives.
     """
-    with open(os.fspath(path), "rb") as file:
+    # fsdecode rejects an integer, as in save, and makes a bytes path text for the
+    # messages.
+    path = os.fsdecode(path)
+    with open(path, "rb") as file:
         # The prefixes by which np.load recognizes a zip archive. It returns an array
         # for an .npy file and tries pickle for other files.
         if file.read(4) not in (b"PK\x03\x04", b"PK\x05\x06"):
@@ -579,7 +601,7 @@ def load(path: str | os.PathLike[str]) -> Model:
             ) from None
 
 
-def _from_archive(archive: Any, path: str | os.PathLike[str]) -> Model:
+def _from_archive(archive: Any, path: str) -> Model:
     schema = archive.get("schema")
     if (
         not isinstance(schema, np.ndarray)
@@ -614,7 +636,7 @@ def _from_archive(archive: Any, path: str | os.PathLike[str]) -> Model:
     center = archive["center"][()]
     return Model(
         archive["mean"],
-        tuple(cov),
+        cov,
         archive["n_train"],
         edges=archive["edges"],
         center=None if isinstance(center, float) and math.isnan(center) else center,
@@ -661,14 +683,14 @@ def _covariance(value: ArrayLike, name: str, npix: int) -> NDArray[np.float64]:
 def _items(
     value: Iterable[Any], name: str, count: int, check: Callable[[Any, str], Any]
 ) -> tuple[Any, ...]:
+    # Outside the try, a TypeError raised by a generator keeps its own message.
     try:
-        items = tuple(value)
+        iterator = iter(value)
     except TypeError:
         raise TypeError(
-            f"{name}: expected a sequence, got {type(value).__name__}"
+            f"{name}: expected an iterable, got {type(value).__name__}"
         ) from None
+    items = tuple(iterator)
     if len(items) != count:
-        raise ValueError(
-            f"{name}: expected a sequence of length {count}, got length {len(items)}"
-        )
+        raise ValueError(f"{name}: expected {count} values, got {len(items)}")
     return tuple(check(item, f"{name}[{i}]") for i, item in enumerate(items))

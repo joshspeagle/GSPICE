@@ -94,15 +94,15 @@ class Model:
     mean: NDArray[np.float64]                 # (nbin, npix) working units: m_b, or mu; zeros if center is set
     cov: tuple[NDArray[np.float64] | LowRank, ...]  # nbin covariances, working units squared
     n_train: tuple[int, ...]                  # (nbin,) N_s; inflate and fs assume an N_s - 1 sample covariance
-    _: KW_ONLY                                # the fields with defaults are keyword-only
-    edges: tuple[float, ...] = ()             # (nbin - 1,) strictly increasing interior S/N edges
-    center: float | None = None               # None: mean-centred; c: constant centre, flux
-    noise: bool = False                       # cov[0] is noise-free; nbin must be 1
-    weighted: bool = False                    # fitted with positive weights not all equal (A23)
-    blocks: Blocks | None = None              # block-scan thresholds (fit_blocks)
+    _: KW_ONLY                                # keyword-only; __init__ holds the defaults
+    edges: tuple[float, ...]                  # (nbin - 1,) strictly increasing interior S/N edges; default ()
+    center: float | None                      # None (default): mean-centred; c: constant centre, flux
+    noise: bool                               # cov[0] is noise-free; nbin must be 1; default False
+    weighted: bool                            # fitted with positive weights not all equal (A23); default False
+    blocks: Blocks | None                     # block-scan thresholds (fit_blocks); default None
 ```
 
-`__post_init__` checks shapes, finiteness, exact symmetry and, unless `noise` is set, a positive diagonal of dense covariances (the prior of section 4.2 reads its variances from the diagonal), n_train ≥ 1, strictly increasing edges, `noise` implies nbin = 1 and `center is None`, a `LowRank` covariance has diag > 0 unless `noise` is set, and `blocks.thresholds` has nbin rows. It stores read-only float64 copies. `LowRank`, `Blocks` and `Calibration` also validate their fields (`LowRank`: shapes, values > 0, diag ≥ 0), store read-only copies and rebuild through `__init__` like `Model`. A private `_cache` dict (`field(init=False, repr=False, default_factory=dict)`) holds the precision P_b per bin and the guard weights for the latest nguard per bin, so there is no global state. Each cached matrix takes npix² × 8 bytes (46 MB at npix 2400). `__reduce__` rebuilds through `__init__`, so pickle, copy and deepcopy validate again, make the arrays read-only and start with an empty cache.
+Its `__init__`, written by hand so that its parameters accept array_like values, any iterable and numpy scalars, checks shapes, finiteness, exact symmetry and, unless `noise` is set, a positive diagonal of dense covariances (the prior of section 4.2 reads its variances from the diagonal), n_train ≥ 1, strictly increasing edges, `noise` implies nbin = 1 and `center is None`, a `LowRank` covariance has diag > 0 unless `noise` is set, and `blocks.thresholds` has nbin rows. It stores read-only float64 copies. `LowRank`, `Blocks` and `Calibration` also validate their fields (`LowRank`: shapes, values > 0, diag ≥ 0), store read-only copies and rebuild through `__init__` like `Model`. A private `_cache` dict (`field(init=False, repr=False)`, set by `__init__`) holds the precision P_b per bin and the guard weights for the latest nguard per bin, so there is no global state. Each cached matrix takes npix² × 8 bytes (46 MB at npix 2400). `__reduce__` rebuilds through `__init__`, so pickle, copy and deepcopy validate again, make the arrays read-only and start with an empty cache.
 
 ```python
 @dataclass(frozen=True, eq=False)
@@ -198,7 +198,7 @@ f_s is derived only for dense full-rank, unweighted, mean-centred models, binned
 
 ## 5. Public API
 
-Common conventions for every function: `ArrayLike` and `NDArray` are from `numpy.typing`; `flux`, `ivar` and `mask` are as in section 3.1; outputs are float64; inputs are never modified. `Progress` abbreviates `Callable[[str, int, int], None]` and is not public. `progress(stage, done, total)` is optional and called once per chunk with the function name as stage; done and total count spectra over the call, once per pass of `fit` and per step of `repair`.
+Common conventions for every function: `ArrayLike` and `NDArray` are from `numpy.typing`; `flux`, `ivar` and `mask` are as in section 3.1; outputs are float64; inputs are never modified. A parameter shown as `int` also takes numpy integers, one shown as `float` also numpy floats and integers, and one shown as `bool` also `np.bool_`. `Progress` abbreviates `Callable[[str, int, int], object]` and is not public. `progress(stage, done, total)` is optional and called once per chunk with the function name as stage; done and total count spectra over the call, once per pass of `fit` and per step of `repair`.
 
 ### 5.1 Fitting
 
@@ -258,10 +258,10 @@ def fit_blocks(model: Model, flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike |
     Cost: per block |G|^3/3; per spectrum about 2 sum|G| (npix + |G|) flops.
     """
 
-def save(model: Model, path: str | os.PathLike) -> None:
+def save(model: Model, path: str | bytes | os.PathLike) -> None:
     """Write model to the .npz file path, adding no suffix (section 9)."""
 
-def load(path: str | os.PathLike) -> Model:
+def load(path: str | bytes | os.PathLike) -> Model:
     """Read a model written by save. Raises ValueError unless its schema is the integer 1."""
 ```
 
@@ -521,7 +521,7 @@ Messages name the argument and what was expected, for example `"ivar: expected s
   - per bin b: `cov{b}`, or `vectors{b}`, `values{b}` and `diag{b}`;
   - with blocks: `block_starts`, `block_width`, `block_nguard`, `block_thresholds`.
 - **Not stored.** P and W: they are recomputed on first use (0.39 + 0.10 s at npix 2400).
-- **Load.** It raises ValueError, naming the path, for a file that is not a zip archive or is a damaged one, for a schema other than the integer 1, for a missing array and for an array that `save` does not write. Other errors, such as that of a missing file, pass through, and `Model.__post_init__` validates the fields.
+- **Load.** It raises ValueError, naming the path, for a file that is not a zip archive or is a damaged one, for a schema other than the integer 1, for a missing array and for an array that `save` does not write. Other errors, such as that of a missing file, pass through, and `Model.__init__` validates the fields.
 - **Compatibility.** A later version keeps writing and reading every array of schema 1, writes a new array only where its value differs from the default, and changes the meaning of an existing array only with a new schema. An older version then reads every later file whose new fields hold their defaults, and rejects every other.
 - **Size.** 46 MB per dense bin at npix 2400.
 

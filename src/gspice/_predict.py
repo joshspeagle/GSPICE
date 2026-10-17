@@ -10,6 +10,8 @@ from numpy.typing import ArrayLike, NDArray
 from ._linalg import Conditional, group_rows, solve_pattern, solve_prior
 from ._model import Model
 from ._spectra import (
+    Boolean,
+    Integer,
     Progress,
     as_array,
     boolean,
@@ -91,7 +93,7 @@ class Repaired:
     dof: NDArray[np.int64]
     _covariances: _Covariances | None = field(default=None, repr=False)
 
-    def covariance(self, s: int) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    def covariance(self, s: Integer) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
         """Return the conditional covariance of the replaced pixels of spectrum s.
 
         Parameters
@@ -136,7 +138,7 @@ def pixelwise(
     ivar: ArrayLike,
     mask: ArrayLike | None = None,
     *,
-    nguard: int = 20,
+    nguard: Integer = 20,
     progress: Progress | None = None,
 ) -> Prediction:
     """Predict each pixel from all pixels farther than nguard from it (paper Alg. 3).
@@ -227,7 +229,7 @@ def infill(
     *,
     replace: ArrayLike | None = None,
     ignore: ArrayLike | None = None,
-    covariance: bool = False,
+    covariance: Boolean = False,
     progress: Progress | None = None,
 ) -> Repaired:
     """Replace pixels by their Gaussian conditional mean given the trusted pixels.
