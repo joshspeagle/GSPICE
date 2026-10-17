@@ -42,9 +42,11 @@ markers = [
 
 [tool.mypy]
 strict = true
-# The oldest supported Python, so that mypy rejects newer standard-library names.
-python_version = "3.11"
-files = ["src/gspice"]
+# Under the rules of Python 3.11 the numpy stubs type ArrayLike as Any. The commands
+# also run mypy --python-version 3.11, which rejects newer standard-library names.
+python_version = "3.12"
+# tests/test_typing.py calls the public API as code outside the package.
+files = ["src/gspice", "tests/test_typing.py"]
 # The 2022 code keeps its untyped signatures (design section 7.1).
 exclude = ["^src/gspice/legacy/"]
 

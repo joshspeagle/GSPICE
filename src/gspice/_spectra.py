@@ -11,7 +11,11 @@ from scipy.ndimage import maximum_filter1d
 CHUNK = 2**24
 
 # progress(stage, done, total), with done and total counting spectra (design section 5).
-Progress = Callable[[str, int, int], None]
+Progress = Callable[[str, int, int], object]
+# The scalars that integer, real and boolean accept, for the public annotations.
+Integer = int | np.integer[Any]
+Real = float | np.floating[Any] | np.integer[Any]
+Boolean = bool | np.bool_
 
 
 def chunks(nspec: int, npix: int) -> Iterator[slice]:
@@ -176,7 +180,7 @@ def scale(
     ivar: ArrayLike,
     mask: ArrayLike | None = None,
     *,
-    center: float = 0.0,
+    center: Real = 0.0,
     refmean: ArrayLike | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """Scale spectra to unit mean noise:  X_s = a_s (ftilde_s - center) - refmean.
@@ -251,7 +255,7 @@ def unscale(
     refscale: ArrayLike,
     refmean: ArrayLike,
     *,
-    center: float = 0.0,
+    center: Real = 0.0,
     var: ArrayLike | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64] | None]:
     """Invert scale:  f = (x + refmean)/refscale + center,  var_f = var/refscale^2.
@@ -340,7 +344,7 @@ def snr(
     return out
 
 
-def as_array(value: ArrayLike, name: str) -> NDArray[Any]:
+def as_array(value: object, name: str) -> NDArray[Any]:
     try:
         return np.asarray(value)
     except ValueError as error:
@@ -348,7 +352,7 @@ def as_array(value: ArrayLike, name: str) -> NDArray[Any]:
         raise ValueError(f"{name}: {error}") from None
 
 
-def numeric(value: ArrayLike, name: str) -> NDArray[Any]:
+def numeric(value: object, name: str) -> NDArray[Any]:
     array = as_array(value, name)
     if array.dtype.kind not in "iuf":
         raise TypeError(

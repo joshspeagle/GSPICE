@@ -1,4 +1,5 @@
 import copy
+import os
 import pickle
 import re
 from dataclasses import FrozenInstanceError, fields
@@ -84,6 +85,15 @@ def test_an_invalid_field_is_rejected_with_a_message_that_starts_with_its_name(
 ):
     with pytest.raises(error, match=message):
         Model(**(arguments() | {field: value}))
+
+
+def test_a_type_error_raised_inside_an_iterable_keeps_its_own_message():
+    def covariances():
+        yield from arguments()["cov"][:2]
+        raise TypeError("a bad covariance")
+
+    with pytest.raises(TypeError, match="^a bad covariance$"):
+        Model(**(arguments() | {"cov": covariances()}))
 
 
 @pytest.mark.parametrize("container", [list, np.stack])
@@ -187,8 +197,8 @@ def test_load_of_save_gives_bit_identical_arrays_and_equal_scalars(tmp_path, mod
     assert same_fields(load(tmp_path / "model.npz"), model)
 
 
-@pytest.mark.parametrize("kind", [str, Path])
-def test_save_writes_exactly_the_given_path_for_a_str_and_a_path(tmp_path, kind):
+@pytest.mark.parametrize("kind", [str, os.fsencode, Path])
+def test_save_writes_exactly_the_given_path_for_a_str_bytes_or_a_path(tmp_path, kind):
     model = Model(**arguments())
     path = kind(tmp_path / "model.dat")
     save(model, path)
