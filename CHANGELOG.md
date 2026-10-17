@@ -13,6 +13,7 @@
 - pre-commit hooks that run ruff.
 - `benchmarks/run.py`, which times the conditioning primitives of pixelwise prediction and infill and the 2022 `gp_interp`, and prints the timings and the setup as JSON.
 - `gspice.scale`, `gspice.unscale` and `gspice.snr`. `scale` interpolates each spectrum over its bad pixels and scales it to unit mean noise, `unscale` returns scaled values and variances to flux units, and `snr` gives the median signal-to-noise ratio of each spectrum.
+- `gspice.Model`, which holds the mean, the covariance and the training count of each S/N bin, and `gspice.save` and `gspice.load`, which write and read a model as one .npz file.
 
 ### Removed
 

@@ -94,14 +94,15 @@ class Model:
     mean: NDArray[np.float64]                 # (nbin, npix) working units: m_b, or mu; zeros if center is set
     cov: tuple[NDArray[np.float64] | LowRank, ...]  # nbin covariances, working units squared
     n_train: tuple[int, ...]                  # (nbin,) N_s; inflate and fs assume an N_s - 1 sample covariance
-    edges: tuple[float, ...] = ()             # (nbin - 1,) increasing interior S/N edges
+    _: KW_ONLY                                # the fields with defaults are keyword-only
+    edges: tuple[float, ...] = ()             # (nbin - 1,) strictly increasing interior S/N edges
     center: float | None = None               # None: mean-centred; c: constant centre, flux
     noise: bool = False                       # cov[0] is noise-free; nbin must be 1
     weighted: bool = False                    # fitted with positive weights not all equal (A23)
     blocks: Blocks | None = None              # block-scan thresholds (fit_blocks)
 ```
 
-`__post_init__` checks shapes, finiteness, exact symmetry of dense covariances, n_train ≥ 1, increasing edges, `noise` implies nbin = 1 and `center is None`, a `LowRank` covariance has diag > 0 unless `noise` is set, and `blocks.thresholds` has nbin rows. It stores read-only float64 copies. `LowRank`, `Blocks` and `Calibration` also validate their fields (`LowRank`: shapes, values > 0, diag ≥ 0) and store read-only copies. A private `_cache` dict (`field(init=False, repr=False, compare=False)`) holds the precision P_b per bin and the guard weights for the latest nguard per bin, so there is no global state. Each cached matrix takes npix² × 8 bytes (46 MB at npix 2400). `__reduce__` rebuilds through `__init__`, so pickle, copy and deepcopy validate again, make the arrays read-only and start with an empty cache.
+`__post_init__` checks shapes, finiteness, exact symmetry of dense covariances, n_train ≥ 1, strictly increasing edges, `noise` implies nbin = 1 and `center is None`, a `LowRank` covariance has diag > 0 unless `noise` is set, and `blocks.thresholds` has nbin rows. It stores read-only float64 copies. `LowRank`, `Blocks` and `Calibration` also validate their fields (`LowRank`: shapes, values > 0, diag ≥ 0), store read-only copies and rebuild through `__init__` like `Model`. A private `_cache` dict (`field(init=False, repr=False, default_factory=dict)`) holds the precision P_b per bin and the guard weights for the latest nguard per bin, so there is no global state. Each cached matrix takes npix² × 8 bytes (46 MB at npix 2400). `__reduce__` rebuilds through `__init__`, so pickle, copy and deepcopy validate again, make the arrays read-only and start with an empty cache.
 
 ```python
 @dataclass(frozen=True, eq=False)
@@ -498,7 +499,7 @@ The rule: legacy keeps every behaviour of the 2022 code run with its asserts ena
 | no spectrum without a good pixel (names the count and the first 10 rows; `fit` drops such spectra instead, section 4.1) | ValueError |
 | integers are `numbers.Integral`, not bool; 1 ≤ `width` ≤ npix; `stride`, `runlength`, sizes ≥ 1; `nguard`, `halfwidth`, `dilate`, `maxbadpix` ≥ 0; 1 ≤ `rank` < npix | TypeError or ValueError |
 | `nsigma` a 1-D sequence or array of positive finite numbers; thresholds positive; 0 ≤ `minfrac` ≤ 1; 0 < `percentile` < 100; 0 < `q` < 1 | TypeError or ValueError |
-| `weights` (nspec,), finite, ≥ 0; `snr_bins` an integer ≥ 1 or an increasing finite sequence; `center` finite; `count_on`, `layout` one of their literals; 0 ≤ `artifacts` ≤ 1; `where` (nspec,) bool | TypeError or ValueError |
+| `weights` (nspec,), finite, ≥ 0; `snr_bins` an integer ≥ 1 or a strictly increasing finite sequence; `center` finite; `count_on`, `layout` one of their literals; 0 ≤ `artifacts` ≤ 1; `where` (nspec,) bool | TypeError or ValueError |
 | `replace`, `ignore` of shape (nspec, npix) or (npix,) | ValueError |
 | `rng` a `numpy.random.Generator` | TypeError |
 | incompatible options: `noise` with `snr_bins` or `center`; `inflate` without a derived f_s, or where it is NaN (section 4.3; `repair` checks the model kind at entry, and the NaN case before its final infill, when G is known) | ValueError |
@@ -516,11 +517,12 @@ Messages name the argument and what was expected, for example `"ivar: expected s
 - **Format.** One `.npz` file that `save` writes with `np.savez` through an open file, so the file is exactly `path`; `load` reads it with `np.load(allow_pickle=False)`. No extra dependency.
 - **Keys.**
   - `schema` (int, 1) and `gspice_version` (str);
-  - `mean`, `n_train`, `edges`, `center` (NaN for None), `noise`, `weighted`;
+  - `mean`, `n_train`, `edges`, `center` (NaN for None), `noise` (only if True), `weighted`;
   - per bin b: `cov{b}`, or `vectors{b}`, `values{b}` and `diag{b}`;
   - with blocks: `block_starts`, `block_width`, `block_nguard`, `block_thresholds`.
 - **Not stored.** P and W: they are recomputed on first use (0.39 + 0.10 s at npix 2400).
-- **Load.** It raises ValueError unless `schema` is the integer 1, and validates through `Model.__post_init__`.
+- **Load.** It raises ValueError, naming the path, for a file that is not a zip archive or is a damaged one, for a schema other than the integer 1, for a missing array and for an array that `save` does not write. Other errors, such as that of a missing file, pass through, and `Model.__post_init__` validates the fields.
+- **Compatibility.** A later version keeps writing and reading every array of schema 1, writes a new array only where its value differs from the default, and changes the meaning of an existing array only with a new schema. An older version then reads every later file whose new fields hold their defaults, and rejects every other.
 - **Size.** 46 MB per dense bin at npix 2400.
 
 ## 10. Decisions
