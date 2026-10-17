@@ -16,10 +16,7 @@ import numpy as np
 import scipy
 
 import gspice
-
-# Case 2 runs on the primitives until infill exists (design section 14, item 3.5).
 from gspice import _spectra
-from gspice._linalg import group_rows, precision, solve_pattern
 from gspice.legacy import gp_interp
 
 NPIX = 2400
@@ -82,12 +79,6 @@ def _pixelwise(C, repeats):
         yield {"nspec": nspec, "npix": NPIX, "nguard": NGUARD}, times
 
 
-def _solve_groups(P, keys, X):
-    for rows in group_rows(keys):
-        G = keys[rows[0]]
-        solve_pattern(P, G, G, G, X[rows])
-
-
 def _infill(C, repeats):
     # |G|, the patterns and the number of spectra. A unique pattern at |G| 1200 costs
     # tens of milliseconds, so there are fewer spectra.
@@ -102,21 +93,24 @@ def _infill(C, repeats):
         (1200, "shared", CHUNK),
     ]
     # A model caches P, so it is not part of the time.
-    P = precision(C)
+    model = gspice.Model(np.zeros((1, NPIX)), (C,), (1,))
+    model._precision(0)
     rng = np.random.default_rng(2)
     pixels = np.arange(NPIX)
     for size, patterns, nspec in entries:
+        # The inputs exist before the clock starts: a run of size pixels per spectrum,
+        # or one (npix,) mask for all, and ivar = 1, so that G = M = T = replace.
         if patterns == "unique":
-            starts = rng.choice(NPIX - size + 1, nspec, replace=False)
+            first = rng.choice(NPIX - size + 1, nspec, replace=False)[:, np.newaxis]
         else:
-            starts = np.full(nspec, rng.integers(NPIX - size + 1))
-        # The masks are the input of infill, so they exist before the clock starts.
-        first = starts[:, np.newaxis]
-        keys = (pixels >= first) & (pixels < first + size)
-        X = rng.standard_normal((nspec, NPIX))
+            first = rng.integers(NPIX - size + 1)
+        replace = (pixels >= first) & (pixels < first + size)
+        flux = rng.standard_normal((nspec, NPIX), dtype=np.float32)
+        ivar = np.ones((nspec, NPIX), dtype=np.float32)
+        infill = partial(gspice.infill, model, replace=replace)
         times = defaultdict(list)
         for _ in range(repeats + 1):
-            _timed(times, "total", _solve_groups, P, keys, X)
+            _timed(times, "infill", infill, flux, ivar)
         parameters = {
             "nspec": nspec,
             "npix": NPIX,
@@ -139,7 +133,7 @@ def _legacy(C, repeats):
 
 CASES = {
     1: ("pixelwise", _pixelwise),
-    2: ("infill primitives", _infill),
+    2: ("infill", _infill),
     7: ("legacy gp_interp", _legacy),
 }
 
