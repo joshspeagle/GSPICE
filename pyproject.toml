@@ -17,7 +17,7 @@ authors = [
 ]
 
 [dependency-groups]
-test = ["pytest>=8", "pytest-cov>=5"]
+test = ["pytest>=8", "pytest-cov>=5", "hypothesis>=6"]
 dev = [
     { include-group = "test" },
     "ruff==0.17.1",

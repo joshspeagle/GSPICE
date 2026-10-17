@@ -18,13 +18,14 @@ import gspice
 
 # Cases 1 and 2 run on the primitives until pixelwise and infill exist (design
 # section 14, items 3.3 and 3.5).
+from gspice import _spectra
 from gspice._linalg import group_rows, guard_weights, precision, solve_pattern
 from gspice.legacy import gp_interp
 
 NPIX = 2400
 NGUARD = 20
 # The chunk size of design section 8.
-CHUNK = 2**24 // NPIX
+CHUNK = _spectra.CHUNK // NPIX
 ENVIRONMENT = (
     "OPENBLAS_NUM_THREADS",
     "OMP_NUM_THREADS",

@@ -90,6 +90,8 @@ def select(value, spec):
 
 
 def same(a, b):
+    if isinstance(a, tuple):
+        return isinstance(b, tuple) and len(a) == len(b) and all(map(same, a, b))
     if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
         a, b = np.asarray(a), np.asarray(b)
         return a.dtype == b.dtype and a.shape == b.shape and a.tobytes() == b.tobytes()
