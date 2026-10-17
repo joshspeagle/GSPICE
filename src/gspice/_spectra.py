@@ -390,16 +390,27 @@ def require(
     values: NDArray[Any],
     name: str,
     expected: str,
-    axes: tuple[str, ...] = ("row", "pixel"),
+    axes: tuple[str, ...] | None = ("row", "pixel"),
     start: int = 0,
 ) -> None:
     if not ok.all():
         index = np.unravel_index(np.argmin(ok), ok.shape)
-        where = (start + index[0], *index[1:])
-        located = ", ".join(f"{axis} {i}" for axis, i in zip(axes, where, strict=True))
+        where = (start + index[0], *index[1:]) if index else index
         raise ValueError(
-            f"{name}: expected {expected}, got {values[index]} at {located}"
+            f"{name}: expected {expected}, got {values[index]}{located(where, axes)}"
         )
+
+
+def located(index: tuple[Any, ...], axes: tuple[str, ...] | None = None) -> str:
+    # Where the first failing entry is (design section 8): " at row 1, pixel 2" with
+    # named axes, " at index (1, 2)" without, and nothing for a 0-d array.
+    if not index:
+        return ""
+    if axes is None:
+        return f" at index {tuple(map(int, index))}"
+    return " at " + ", ".join(
+        f"{axis} {i}" for axis, i in zip(axes, index, strict=True)
+    )
 
 
 def listing(indices: NDArray[np.intp], noun: str) -> str:

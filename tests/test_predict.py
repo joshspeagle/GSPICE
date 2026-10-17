@@ -7,7 +7,17 @@ import pytest
 from numpy.linalg import LinAlgError
 
 from _golden import checked, same
-from gspice import Model, _model, _spectra, infill, pixelwise, scale, snr, unscale
+from gspice import (
+    Model,
+    _model,
+    _spectra,
+    fit,
+    infill,
+    pixelwise,
+    scale,
+    snr,
+    unscale,
+)
 from gspice._linalg import precision
 from oracle import (
     assert_gaussian,
@@ -609,3 +619,38 @@ def test_covariance_needs_a_result_computed_with_covariance_true():
     result = infill(model, flux, ivar, mask)
     with pytest.raises(ValueError, match="covariance=True"):
         result.covariance(0)
+
+
+def heavy_tailed(nspec, rng):
+    # Spectra without bad pixels whose signal and noise follow Student's t with 3
+    # degrees of freedom, which has no fourth moment.
+    basis = np.array([np.ones(NPIX), np.cos(PIXELS / 2), np.sin(PIXELS / 3)])
+    ivar = np.outer(rng.uniform(100, 400, nspec), 1 + 0.5 * np.sin(PIXELS))
+    flux = 1 + 0.05 * rng.standard_t(3, (nspec, 3)) @ basis
+    flux += rng.standard_t(3, (nspec, NPIX)) / np.sqrt(ivar)
+    return flux, ivar
+
+
+@pytest.mark.parametrize("weighted", [False, True])
+@pytest.mark.parametrize("center", [None, 0.9])
+def test_the_in_sample_mean_of_z2_is_exact_for_any_data(center, weighted):
+    # Over the N_s spectra of a fit without clipping, the w-weighted mean of Z^2 / N_*
+    # is 1 - V2 / V1^2 for a mean-centred model, which is (N_s - 1) / N_s for unit
+    # weights, and 1 for a constant centre, whatever the distribution of the data
+    # (paper l.249, design section 11): at each pixel of pixelwise, and over the
+    # spectra of one infill pattern.
+    rng = np.random.default_rng(11)
+    nspec = 40
+    flux, ivar = heavy_tailed(nspec, rng)
+    weights = rng.uniform(0.5, 2, nspec) if weighted else None
+    model, _ = fit(flux, ivar, nsigma=(), center=center, weights=weights)
+    w = np.ones(nspec) if weights is None else weights
+    expected = 1 - w @ w / w.sum() ** 2 if center is None else 1.0
+    # The identity is exact in exact arithmetic, and its rounding error grows with
+    # kappa: 8.9e-9 at kappa 1.3e10 (design section 11), which scales to
+    # 8.9e-9 x 1e4 / 1.3e10 = 6.8e-15 at kappa 1e4.
+    assert condition(model.cov[0]) < 1e4
+    z = pixelwise(model, flux, ivar, nguard=2).z
+    assert np.all(np.abs(w @ z**2 / w.sum() - expected) <= 1e-12)
+    result = infill(model, flux, ivar, replace=PIXELS % 4 == 1, ignore=PIXELS % 4 == 2)
+    assert abs(w @ (result.chi2 / result.dof) / w.sum() - expected) <= 1e-12

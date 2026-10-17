@@ -220,6 +220,23 @@ class Model:
         return W, var
 
 
+def sample_factor(
+    n_train: ArrayLike, n_cond: ArrayLike, n_pred: ArrayLike
+) -> NDArray[np.float64]:
+    # f_s of design section 4.3, NaN where n_pred < 1 or n_train - n_cond - n_pred - 2
+    # <= 0 (then n_train > 3 for n_cond >= 0, so every denominator is positive). The
+    # counts become float64, which holds every integer below 2^53, so an unsigned dtype
+    # cannot wrap around.
+    N, k, m = np.broadcast_arrays(
+        *(np.asarray(count, dtype=np.float64) for count in (n_train, n_cond, n_pred))
+    )
+    defined = (m >= 1) & (N - k - m - 2 > 0)
+    factor = np.full(N.shape, np.nan)
+    N, k, m = N[defined], k[defined], m[defined]
+    factor[defined] = (1 + 1 / N) * (N - 2) / (N - k - 2) * (N - 1) / (N - k - m - 2)
+    return factor
+
+
 def fit(
     flux: ArrayLike,
     ivar: ArrayLike,

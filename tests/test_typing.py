@@ -12,6 +12,7 @@ from gspice import (
     Prediction,
     Repaired,
     Simulation,
+    finite_sample_factor,
     fit,
     infill,
     load,
@@ -93,6 +94,9 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
     assert_type(
         repaired.covariance(np.int64(0)), tuple[NDArray[np.int64], NDArray[np.float64]]
     )
+    assert_type(finite_sample_factor(np.int64(200), 40), float)
+    factor = finite_sample_factor(np.int64(200), [40, 41], np.ones(2, np.uint8))
+    assert_type(factor, float | NDArray[np.float64])
     simulation = simulate(
         np.int64(5), np.int64(30), rng=rng, artifacts=np.float32(0.2), gaussian=np.True_
     )

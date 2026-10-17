@@ -5,6 +5,7 @@ import pytest
 
 from gspice import (
     Model,
+    finite_sample_factor,
     fit,
     infill,
     legacy,
@@ -331,3 +332,63 @@ def test_scale_of_zero_spectra_raises_where_2022_returned_a_nan_mean():
         assert np.isnan(legacy.standard_scale(empty, empty)[2]).all()
     with pytest.raises(ValueError, match="^flux: "):
         scale(empty, empty)
+
+
+def test_finite_sample_factor_has_its_contract_value():
+    # Design section 11.
+    value = finite_sample_factor(60000, 2400, 1)
+    assert abs(value - 1.0851274682919) <= 1e-12
+    assert finite_sample_factor(60000, 2400) == value
+
+
+@pytest.mark.parametrize(
+    ("arguments", "error", "message"),
+    [
+        ((30.0, 10), TypeError, "n_train: expected an integer dtype, got float64"),
+        ((30, True), TypeError, "n_cond: expected an integer dtype, got bool"),
+        ((30, 10, "2"), TypeError, "n_pred: expected an integer dtype, got <U1"),
+        ((0, 0), ValueError, r"n_train: expected integers from 1 to 2\^53 - 1, got 0"),
+        (
+            ([30, 30], [[10, 10], [10, -1]]),
+            ValueError,
+            r"n_cond: expected integers from 0 to 2\^53 - 1, got -1 at index \(1, 1\)",
+        ),
+        (
+            (30, 10, 0),
+            ValueError,
+            r"n_pred: expected integers from 1 to 2\^53 - 1, got 0",
+        ),
+        (
+            (2**53, 10),
+            ValueError,
+            r"n_train: expected integers from 1 to 2\^53 - 1, got 9007199254740992",
+        ),
+        (
+            ([30, 31], [10, 10, 10]),
+            ValueError,
+            (
+                r"n_train, n_cond, n_pred: expected shapes that broadcast together, "
+                r"got \(2,\), \(3,\) and \(\)"
+            ),
+        ),
+        (
+            ([200, 30], 27),
+            ValueError,
+            (
+                r"n_train, n_cond, n_pred: expected n_train - n_cond - n_pred - 2 > 0, "
+                r"got 30 - 27 - 1 - 2 = 0 at index \(1,\)"
+            ),
+        ),
+        # In uint8 arithmetic, 10 - 10 - 1 - 2 wraps around to 253.
+        (
+            (np.uint8(10), np.uint8(10), np.uint8(1)),
+            ValueError,
+            r"n_train, n_cond, n_pred: expected .*, got 10 - 10 - 1 - 2 = -3",
+        ),
+    ],
+)
+def test_an_invalid_argument_of_finite_sample_factor_is_rejected(
+    arguments, error, message
+):
+    with pytest.raises(error, match=f"^{message}$"):
+        finite_sample_factor(*arguments)
