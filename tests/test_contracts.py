@@ -1,11 +1,18 @@
+from functools import partial
+
 import numpy as np
 import pytest
 
-from gspice import legacy, scale, snr, unscale
+from gspice import Model, legacy, pixelwise, scale, snr, unscale
 
 SPECTRA = {"flux": np.ones((2, 3)), "ivar": np.ones((2, 3)), "mask": np.zeros((2, 3))}
 UNSCALE = {"x": np.zeros((2, 3)), "refscale": np.ones(2), "refmean": np.zeros(3)}
-FLUX_IVAR_MASK = pytest.mark.parametrize("function", [scale, snr])
+MODEL = Model(np.zeros((1, 3)), (np.eye(3),), (10,))
+FLUX_IVAR_MASK = pytest.mark.parametrize(
+    "function",
+    [scale, snr, partial(pixelwise, MODEL)],
+    ids=["scale", "snr", "pixelwise"],
+)
 # Finite only where long double is wider than float64, as on Linux x86-64; where long
 # double is float64, it parses to inf.
 BEYOND = np.longdouble("1e400")
@@ -83,6 +90,25 @@ def test_spectra_without_a_good_pixel_are_counted_and_the_first_10_named(functio
     rows = r"0, 1, 2, 4, 5, 7, 8, 10, 11, 12, \.\.\. \(12 rows\)$"
     with pytest.raises(ValueError, match=f"^mask, ivar: .* rows {rows}"):
         function(np.ones((15, 3)), ivar, mask)
+
+
+# Four pixels, one more than MODEL has.
+WIDER = {"flux": np.ones((2, 4)), "ivar": np.ones((2, 4)), "mask": np.zeros((2, 4))}
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "name"),
+    [
+        pytest.param({"model": 5}, TypeError, "model", id="model=5"),
+        pytest.param(WIDER, ValueError, "flux", id="npix=4"),
+        pytest.param({"nguard": -1}, ValueError, "nguard", id="nguard=-1"),
+        pytest.param({"nguard": 2.0}, TypeError, "nguard", id="nguard=2.0"),
+        pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
+    ],
+)
+def test_an_invalid_argument_of_pixelwise_is_rejected(changes, error, name):
+    with pytest.raises(error, match=f"^{name}: "):
+        pixelwise(**({"model": MODEL} | SPECTRA | changes))
 
 
 CENTER = {

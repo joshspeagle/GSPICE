@@ -1,20 +1,26 @@
+import logging
 import math
 import os
+import time
 import zipfile
 from collections.abc import Callable, Iterable
-from dataclasses import KW_ONLY, dataclass, fields
+from dataclasses import KW_ONLY, dataclass, field, fields
 from functools import partial
 from itertools import pairwise
 from typing import Any
 
 import numpy as np
+from numpy.linalg import LinAlgError
 from numpy.typing import ArrayLike, NDArray
 from scipy.linalg import issymmetric
 
+from ._linalg import guard_weights, precision
 from ._spectra import finite_array, integer, numeric, real, require
 
 # The arrays that load reads. save also writes gspice_version and cov0, cov1, ...
 _REQUIRED = ("schema", "mean", "n_train", "edges", "center", "weighted")
+
+_logger = logging.getLogger("gspice")
 
 
 @dataclass(frozen=True, eq=False)
@@ -32,6 +38,11 @@ class Model:
     The attributes after n_train are keyword-only. The constructor does not check that
     a covariance is positive definite, which costs npix^3. Two models are equal only if
     they are the same object.
+
+    A model computes the precision matrix of a bin at its first use and keeps it, with
+    the guard weights of the latest nguard of each bin (see `pixelwise`). Each matrix
+    takes npix^2 x 8 bytes, 46 MB at npix 2400. Pickle, copy and deepcopy start
+    without them.
 
     Attributes
     ----------
@@ -69,6 +80,9 @@ class Model:
     edges: tuple[float, ...] = ()
     center: float | None = None
     weighted: bool = False
+    _cache: dict[tuple[str, int], Any] = field(
+        init=False, repr=False, default_factory=dict
+    )
 
     def __post_init__(self) -> None:
         mean = numeric(self.mean, "mean")
@@ -111,6 +125,53 @@ class Model:
         # again. Keywords keep a pickle valid when a later version adds a field.
         init = {f.name: getattr(self, f.name) for f in fields(self) if f.init}
         return partial(type(self), **init), ()
+
+    def _precision(self, b: int) -> NDArray[np.float64]:
+        P: NDArray[np.float64] | None = self._cache.get(("precision", b))
+        if P is None:
+            start = time.perf_counter()
+            try:
+                P = precision(self.cov[b])
+            except LinAlgError as error:
+                raise LinAlgError(f"model: cov[{b}] is {error}") from None
+            _logger.debug(
+                "cov[%d]: precision matrix in %.3f s", b, time.perf_counter() - start
+            )
+            # Read-only, like the fields: a write would change every later result.
+            P.flags.writeable = False
+            self._cache["precision", b] = P
+        return P
+
+    def _guard_weights(
+        self, b: int, nguard: int
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        cached = self._cache.get(("guard", b))
+        if cached is not None and cached[0] == nguard:
+            return cached[1], cached[2]
+        C = self.cov[b]
+        npix = len(C)
+        if nguard < npix - 1:
+            P = self._precision(b)
+            start = time.perf_counter()
+            try:
+                W, var = guard_weights(P, np.diagonal(C), nguard)
+            except LinAlgError as error:
+                raise LinAlgError(f"model: cov[{b}] is {error}") from None
+        else:
+            # Every window covers all pixels: the exact prior, without P (design
+            # section 4.2).
+            start = time.perf_counter()
+            W, var = np.zeros((npix, npix)), np.diagonal(C).copy()
+        _logger.debug(
+            "cov[%d]: guard weights for nguard %d in %.3f s",
+            b,
+            nguard,
+            time.perf_counter() - start,
+        )
+        for array in (W, var):
+            array.flags.writeable = False
+        self._cache["guard", b] = nguard, W, var
+        return W, var
 
 
 def save(model: Model, path: str | os.PathLike[str]) -> None:

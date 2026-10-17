@@ -142,7 +142,11 @@ DUPLICATES = {
 @pytest.mark.parametrize("duplicate", DUPLICATES.values(), ids=list(DUPLICATES))
 def test_pickle_and_copy_rebuild_a_model_through_its_checks(duplicate):
     model = Model(**arguments(), center=0.95, weighted=True)
-    assert same_fields(duplicate(model), model)
+    model._precision(0)
+    copy = duplicate(model)
+    assert same_fields(copy, model)
+    # Without the cache of the original.
+    assert copy._cache == {}
     # A model damaged behind its frozen fields fails the checks when it is rebuilt.
     object.__setattr__(model, "n_train", (10, 0, 30))
     with pytest.raises(ValueError, match=r"^n_train\[1\]: "):

@@ -614,12 +614,12 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
   - Q2: `fit` on D1[:50] raises ValueError (2022: LinAlgError).
   - S11.4: the D3 test of `pixelwise` above; `infill` on the input of `gaussian_estimate.D3.many21.guard5` within 1e-12 of the 60-digit reference, where the record errs by 6.4e-11 normwise and 3.1e-10 on the diagonal (precision route: 2.8e-14 and 8.8e-14).
 
-**Oracle** (`tests/oracle.py`, about 40 lines).
+**Oracle** (`tests/oracle.py`, about 70 lines, with the test matrices).
 
 - Reference: a 60-digit Cholesky solve of S_kk with the standard-library `decimal` module, for n ≤ 60, the same on every platform. It takes 5 to 30 ms per solve at n 30 to 60, so tests subsample pixels. Low-rank cases at κ ≥ 1e5 may use an exact `fractions` reference at npix ≤ 36 (0.8 s per pattern).
 - Matrices: random symmetric positive definite (SPD) with log-spaced eigenvalues and κ = 1e2, 1e5 and 1e8; squared-exponential kernels of lengths 5 and 15 plus a nugget; low rank plus diagonal. Data are drawn from N(0, C).
 - Paths: precision, with A26 raising at κ 1e14; Woodbury, with A28; guard weights (nguard 0, 1, 5, about npix/3 on the kernel of length 5 at npix ≤ 60, where the error relative to κε is largest, and ≥ npix − 1, the exact prior); pattern solve (means, variances, covariance, χ², draws through R); block χ²; noise-model C_s.
-- Tolerances, with κ the condition number of the matrix scaled to unit diagonal: dense routes 10κε in |Δμ|/σ, |Δvar|/var and |Δχ²|/(χ² + |T|) (worst measured 0.98κε over 86 matrices); Woodbury routes 10ε·κ_W, and 1e-9 when |O| ≥ 2K and κ_W ≤ 1e8 (10κε failed 108 of 526 swept results; 10ε·κ_W none).
+- Tolerances, with κ the condition number of the matrix scaled to unit diagonal: dense routes 10κε in |Δμ|/σ, |Δvar|/var and |Δχ²|/(χ² + |T|) (worst measured 0.98κε over 86 matrices), for data drawn from N(0, C). For other data, such as interpolated bad pixels, the error of μ grows with the Mahalanobis norm M = ‖L⁻¹x‖ of x, C = LLᵀ, which is about √npix for data from N(0, C), so the bound is 10κε·max(1, M/√npix) in |Δμ|/σ (at κ 1e8 and npix 12, the precision route and a float64 Cholesky solve erred by at most 0.053κε·M and 0.056κε·M over 10 draws); Woodbury routes 10ε·κ_W, and 1e-9 when |O| ≥ 2K and κ_W ≤ 1e8 (10κε failed 108 of 526 swept results; 10ε·κ_W none).
 
 **Property tests** (hypothesis, at most 50 examples, npix ≤ 60, a profile with `derandomize=True`, `database=None` and `deadline=None`; `.hypothesis/` in `.gitignore`).
 

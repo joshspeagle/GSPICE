@@ -49,4 +49,32 @@ def conditional(C, G, X, T=()):
             mean.append([sum(map(mul, z, y)) for z in Z])
             r = forward(LT, [Decimal(x[G[a]]) - mean[-1][a] for a in t])
             chi2.append(sum(map(mul, r, r)))
-    return np.array(mean, float), np.array(cov, float), np.array(chi2, float)
+    mean = np.array(mean, float).reshape(len(X), len(G))
+    return mean, np.array(cov, float), np.array(chi2, float)
+
+
+def guard_conditional(C, nguard, X, pixels):
+    # Mean (nspec, len(pixels)) and variance (len(pixels),) of each pixel given the
+    # pixels farther than nguard from it, as pixelwise predicts it.
+    npix = len(C)
+    means, variances = [], []
+    for i in pixels:
+        g = range(max(0, i - nguard), min(npix, i + nguard + 1))
+        mean, cov, _ = conditional(C, g, X)
+        means.append(mean[:, i - g.start])
+        variances.append(cov[i - g.start, i - g.start])
+    return np.array(means).T, np.array(variances)
+
+
+def random_spd(npix, kappa, seed):
+    # A test matrix of design section 11: Q diag(lambda) Q^T with log-spaced eigenvalues
+    # from 1 to 1/kappa. The mean of C and C^T is exactly symmetric.
+    Q, _ = np.linalg.qr(np.random.default_rng(seed).standard_normal((npix, npix)))
+    C = (Q * np.logspace(0, -np.log10(kappa), npix)) @ Q.T
+    return (C + C.T) / 2
+
+
+def condition(C):
+    # Of C scaled to unit diagonal: the kappa of the tolerances of design section 11.
+    d = 1 / np.sqrt(np.diagonal(C))
+    return np.linalg.cond(d[:, np.newaxis] * C * d)

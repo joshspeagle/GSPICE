@@ -1,6 +1,6 @@
 import math
 import numbers
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import numpy as np
@@ -9,11 +9,14 @@ from numpy.typing import ArrayLike, NDArray
 # Elements per chunk of rows (design section 8): 6990 rows at npix 2400.
 CHUNK = 2**24
 
+# progress(stage, done, total), with done and total counting spectra (design section 5).
+Progress = Callable[[str, int, int], None]
+
 
 def chunks(nspec: int, npix: int) -> Iterator[slice]:
     step = max(1, CHUNK // npix)
     for start in range(0, nspec, step):
-        yield slice(start, start + step)
+        yield slice(start, min(start + step, nspec))
 
 
 def validate(
@@ -109,6 +112,55 @@ def root_mean_ivar(ivar: NDArray[Any], bad: NDArray[np.bool_]) -> NDArray[np.flo
     return a
 
 
+def to_working(
+    x: NDArray[np.float64],
+    a: NDArray[np.float64],
+    center: float,
+    refmean: NDArray[np.float64] | None,
+) -> NDArray[np.float64]:
+    # x = a (x - center) - refmean in place, in the order of the 2022 standard_scale,
+    # which gives its bits. refmean None: the column mean of a (x - center).
+    x -= center
+    x *= a[:, np.newaxis]
+    if refmean is None:
+        refmean = x.mean(axis=0)
+    x -= refmean
+    return refmean
+
+
+def to_flux(
+    x: NDArray[Any],
+    a: NDArray[np.float64],
+    refmean: NDArray[np.float64],
+    center: float,
+    out: NDArray[np.float64] | None = None,
+) -> NDArray[np.float64]:
+    # f = (x + refmean)/a + center, the inverse of to_working.
+    f: NDArray[np.float64] = np.add(x, refmean, out=out)
+    f /= a[:, np.newaxis]
+    f += center
+    return f
+
+
+def median_snr(
+    flux: NDArray[Any], ivar: NDArray[Any], bad: NDArray[np.bool_]
+) -> NDArray[np.float64]:
+    good = ~bad
+    # Bad pixels sort last as inf, so the median indexes the first n values, with the
+    # (a + b) / 2 of np.median; np.nanmedian loops over rows in Python for npix >= 600.
+    values = np.full(good.shape, np.inf)
+    np.sqrt(ivar, out=values, where=good, dtype=np.float64)
+    np.multiply(flux, values, out=values, where=good, dtype=np.float64)
+    values.sort(axis=1)
+    n = np.count_nonzero(good, axis=1)
+    r = np.arange(n.size)
+    # The sort may order -0.0 and +0.0, which are equal, either way, and on some
+    # platforms differently on each call; + 0.0 turns a median of -0.0 into +0.0.
+    low, high = values[r, (n - 1) // 2], values[r, n // 2]
+    median: NDArray[np.float64] = (low + high) / 2 + 0.0
+    return median
+
+
 def scale(
     flux: ArrayLike,
     ivar: ArrayLike,
@@ -179,13 +231,8 @@ def scale(
     for rows in chunks(nspec, npix):
         X[rows] = interpolate(flux[rows], bad[rows])
         a[rows] = root_mean_ivar(ivar[rows], bad[rows])
-    # The order of the 2022 standard_scale, which gives its bits: interpolate, scale,
-    # then subtract the column mean of the whole C-contiguous array.
-    X -= center
-    X *= a[:, np.newaxis]
-    if refmean is None:
-        refmean = X.mean(axis=0)
-    X -= refmean
+    # After the chunks, as in 2022: refmean is the mean of the whole array.
+    refmean = to_working(X, a, center, refmean)
     return X, a, refmean
 
 
@@ -243,9 +290,7 @@ def unscale(
                 f"var: expected shape ({n},) or {x.shape} like x, got {var.shape}"
             )
         require(var >= 0, var, "var", "values >= 0", ("row", "pixel")[-var.ndim :])
-    f = x + refmean
-    f /= refscale[:, np.newaxis]
-    f += center
+    f = to_flux(x, refscale, refmean, center)
     if var is None:
         return f, None
     return f, var / np.square(refscale)[:, np.newaxis]
@@ -281,19 +326,7 @@ def snr(
     require_good_pixel(bad)
     out = np.empty(flux.shape[0])
     for rows in chunks(*flux.shape):
-        good = ~bad[rows]
-        # Bad pixels sort last as inf, so the median indexes the first n values, with
-        # the (a + b) / 2 of np.median; np.nanmedian loops over rows in Python for
-        # npix >= 600.
-        values = np.full(good.shape, np.inf)
-        np.sqrt(ivar[rows], out=values, where=good, dtype=np.float64)
-        np.multiply(flux[rows], values, out=values, where=good, dtype=np.float64)
-        values.sort(axis=1)
-        n = np.count_nonzero(good, axis=1)
-        r = np.arange(n.size)
-        # The sort may order -0.0 and +0.0, which are equal, either way, and on some
-        # platforms differently on each call; + 0.0 turns a median of -0.0 into +0.0.
-        out[rows] = (values[r, (n - 1) // 2] + values[r, n // 2]) / 2 + 0.0
+        out[rows] = median_snr(flux[rows], ivar[rows], bad[rows])
     return out
 
 
