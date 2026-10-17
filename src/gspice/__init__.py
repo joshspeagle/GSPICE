@@ -2,6 +2,7 @@
 
 import logging
 
+from ._datasets import Simulation, simulate
 from ._model import Model, load, save
 from ._predict import Prediction, pixelwise
 from ._spectra import scale, snr, unscale
@@ -28,6 +29,7 @@ __version__ = "2.0.0.dev0"
 __all__ = [
     "Model",
     "Prediction",
+    "Simulation",
     "cholesky_inv",
     "covar",
     "covar_iter_mask",
@@ -41,6 +43,7 @@ __all__ = [
     "pixelwise",
     "save",
     "scale",
+    "simulate",
     "snr",
     "standard_scale",
     "submatrix_inv",

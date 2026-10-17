@@ -3,7 +3,7 @@ from functools import partial
 import numpy as np
 import pytest
 
-from gspice import Model, legacy, pixelwise, scale, snr, unscale
+from gspice import Model, legacy, pixelwise, scale, simulate, snr, unscale
 
 SPECTRA = {"flux": np.ones((2, 3)), "ivar": np.ones((2, 3)), "mask": np.zeros((2, 3))}
 UNSCALE = {"x": np.zeros((2, 3)), "refscale": np.ones(2), "refmean": np.zeros(3)}
@@ -109,6 +109,28 @@ WIDER = {"flux": np.ones((2, 4)), "ivar": np.ones((2, 4)), "mask": np.zeros((2, 
 def test_an_invalid_argument_of_pixelwise_is_rejected(changes, error, name):
     with pytest.raises(error, match=f"^{name}: "):
         pixelwise(**({"model": MODEL} | SPECTRA | changes))
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "name"),
+    [
+        pytest.param({"nspec": -1}, ValueError, "nspec", id="nspec=-1"),
+        pytest.param({"nspec": 1.5}, TypeError, "nspec", id="nspec=1.5"),
+        pytest.param({"npix": 0}, ValueError, "npix", id="npix=0"),
+        pytest.param({"rng": None}, TypeError, "rng", id="rng=None"),
+        pytest.param({"rng": 0}, TypeError, "rng", id="rng=0"),
+        pytest.param({"artifacts": -0.1}, ValueError, "artifacts", id="artifacts=-0.1"),
+        pytest.param({"artifacts": 1.5}, ValueError, "artifacts", id="artifacts=1.5"),
+        pytest.param(
+            {"artifacts": np.nan}, ValueError, "artifacts", id="artifacts=nan"
+        ),
+        pytest.param({"gaussian": 1}, TypeError, "gaussian", id="gaussian=1"),
+    ],
+)
+def test_an_invalid_argument_of_simulate_is_rejected(changes, error, name):
+    arguments = {"nspec": 2, "npix": 3, "rng": np.random.default_rng(0)}
+    with pytest.raises(error, match=f"^{name}: "):
+        simulate(**(arguments | changes))
 
 
 CENTER = {

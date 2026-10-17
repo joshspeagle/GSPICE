@@ -15,7 +15,7 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.linalg import issymmetric
 
 from ._linalg import guard_weights, precision
-from ._spectra import finite_array, integer, numeric, real, require
+from ._spectra import boolean, finite_array, integer, numeric, real, require
 
 # The arrays that load reads. save also writes gspice_version and cov0, cov1, ...
 _REQUIRED = ("schema", "mean", "n_train", "edges", "center", "weighted")
@@ -103,10 +103,7 @@ class Model:
                     f"got edges[{i}] = {low} and edges[{i + 1}] = {high}"
                 )
         center = None if self.center is None else real(self.center, "center")
-        if not isinstance(self.weighted, bool | np.bool_):
-            raise TypeError(
-                f"weighted: expected a bool, got {type(self.weighted).__name__}"
-            )
+        weighted = boolean(self.weighted, "weighted")
         # After the checks, because issymmetric of scipy 1.11 rejects read-only arrays.
         for array in (mean, *cov):
             array.flags.writeable = False
@@ -116,7 +113,7 @@ class Model:
             ("n_train", n_train),
             ("edges", edges),
             ("center", center),
-            ("weighted", bool(self.weighted)),
+            ("weighted", weighted),
         ):
             object.__setattr__(self, name, value)
 
