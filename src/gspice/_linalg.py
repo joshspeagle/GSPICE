@@ -23,8 +23,7 @@ def precision(S: NDArray[np.float64]) -> NDArray[np.float64]:
     L, info = lapack.dpotrf(S.T, lower=1)
     if info:
         raise LinAlgError(
-            f"S is not positive definite: dpotrf failed at its leading minor of order "
-            f"{info}"
+            f"not positive definite: dpotrf failed at its leading minor of order {info}"
         )
     # With D = diag(S)^-1/2, D S D = (D L)(D L)^T, and D L is lower triangular with a
     # positive diagonal: it is the Cholesky factor of S scaled to unit diagonal.
@@ -34,7 +33,7 @@ def precision(S: NDArray[np.float64]) -> NDArray[np.float64]:
     # not >= also rejects a NaN rcond.
     if not rcond >= MIN_RCOND:
         raise LinAlgError(
-            f"S is numerically singular: rcond = {rcond:.2g} for S scaled to unit "
+            f"numerically singular: rcond = {rcond:.2g} for the matrix scaled to unit "
             f"diagonal, below {MIN_RCOND:.0e}"
         )
     P: NDArray[np.float64]
@@ -59,7 +58,10 @@ def guard_weights(
             continue
         R, info = lapack.dpotrf(P[g, g], lower=1)
         if info:
-            raise LinAlgError(f"P is not positive definite on the window of pixel {i}")
+            raise LinAlgError(
+                f"not positive definite in its precision matrix on the window of "
+                f"pixel {i}"
+            )
         e = np.zeros(g.stop - g.start)
         e[i - g.start] = 1.0
         v, _ = lapack.dpotrs(R, e, lower=1)

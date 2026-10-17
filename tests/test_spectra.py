@@ -6,7 +6,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 
-from _golden import same
+from _golden import checked, same
 from gspice import _spectra, scale, snr, unscale
 from gspice._spectra import interpolate
 
@@ -212,17 +212,6 @@ def test_values_at_bad_pixels_are_never_read(case, data):
     for function in (scale, snr):
         expected = function(flux, ivar, mask)
         assert same(function(dirty_flux, dirty_ivar, mask), expected)
-
-
-def checked(function, *args, **kwargs):
-    inputs = [value for value in (*args, *kwargs.values()) if value is not None]
-    pristine = [value.copy() for value in inputs]
-    result = function(*args, **kwargs)
-    for value, copy in zip(inputs, pristine, strict=True):
-        assert same(value, copy)
-    for output in result if isinstance(result, tuple) else (result,):
-        assert not any(np.shares_memory(output, value) for value in inputs)
-    return result
 
 
 @given(spectra(), st.data())

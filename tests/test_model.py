@@ -59,6 +59,7 @@ NAN_MATRIX[0, 3] = NAN_MATRIX[3, 0] = np.nan
         ("cov", with_cov(np.eye(NPIX - 1)), ValueError, r"^cov\[1\]: "),
         ("cov", with_cov(NAN_MATRIX), ValueError, r"^cov\[1\]: expected finite"),
         ("cov", with_cov(ASYMMETRIC), ValueError, r"^cov\[1\]: "),
+        ("cov", with_cov(np.diag([1.0, 0.0, 1.0, 1.0])), ValueError, r"^cov\[1\]: "),
         ("cov", with_cov(np.eye(NPIX, dtype=complex)), TypeError, r"^cov\[1\]: "),
         ("cov", 5, TypeError, r"^cov: "),
         ("n_train", (10, 20), ValueError, r"^n_train: "),
@@ -141,7 +142,11 @@ DUPLICATES = {
 @pytest.mark.parametrize("duplicate", DUPLICATES.values(), ids=list(DUPLICATES))
 def test_pickle_and_copy_rebuild_a_model_through_its_checks(duplicate):
     model = Model(**arguments(), center=0.95, weighted=True)
-    assert same_fields(duplicate(model), model)
+    model._precision(0)
+    copy = duplicate(model)
+    assert same_fields(copy, model)
+    # Without the cache of the original.
+    assert copy._cache == {}
     # A model damaged behind its frozen fields fails the checks when it is rebuilt.
     object.__setattr__(model, "n_train", (10, 0, 30))
     with pytest.raises(ValueError, match=r"^n_train\[1\]: "):
@@ -153,12 +158,15 @@ def models(draw):
     nbin = draw(st.integers(1, 3))
     npix = draw(st.integers(1, 6))
     values = st.floats(-1e100, 1e100)
+    positive = st.floats(1e-100, 1e100)
     mean = draw(hnp.arrays(np.float64, (nbin, npix), elements=values))
     cov = []
     for _ in range(nbin):
         A = draw(hnp.arrays(np.float64, (npix, npix), elements=values))
         # A + A.T is exactly symmetric, because float addition commutes.
-        cov.append((A + A.T) / 2)
+        C = (A + A.T) / 2
+        np.fill_diagonal(C, draw(hnp.arrays(np.float64, npix, elements=positive)))
+        cov.append(C)
     n_train = draw(st.lists(st.integers(1, 10**6), min_size=nbin, max_size=nbin))
     edges = st.sets(st.floats(-1e6, 1e6), min_size=nbin - 1, max_size=nbin - 1)
     center = draw(st.none() | values)

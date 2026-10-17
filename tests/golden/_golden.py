@@ -98,6 +98,19 @@ def same(a, b):
     return a == b
 
 
+def checked(function, *args, **kwargs):
+    # The result of function, after a check that it changes no input array and that no
+    # output array shares memory with one.
+    inputs = [value for value in (*args, *kwargs.values()) if value is not None]
+    pristine = [value.copy() for value in inputs]
+    result = function(*args, **kwargs)
+    for value, copy in zip(inputs, pristine, strict=True):
+        assert same(value, copy)
+    for output in result if isinstance(result, tuple) else (result,):
+        assert not any(np.shares_memory(output, value) for value in inputs)
+    return result
+
+
 def norms(a):
     a = np.asarray(a, dtype=np.float64)
     return np.linalg.norm(a, axis=1), np.linalg.norm(a, axis=0)
