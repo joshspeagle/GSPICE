@@ -26,6 +26,7 @@ from ._spectra import (
     dilate,
     finite_array,
     integer,
+    integers,
     interpolate,
     listing,
     median_snr,
@@ -37,13 +38,110 @@ from ._spectra import (
     vector,
 )
 
-# The arrays that load reads. save also writes gspice_version and cov0, cov1, ...
+# The arrays that load reads. save also writes gspice_version and cov0, cov1, ...,
+# and the arrays of _BLOCKS for a model with blocks.
 _REQUIRED = ("schema", "mean", "n_train", "edges", "center", "weighted")
+_BLOCKS = ("block_starts", "block_width", "block_nguard", "block_thresholds")
 
 _logger = logging.getLogger("gspice")
 
+# The largest nguard of a Blocks, which save writes as int64.
+NGUARD_MAX = 2**63 - 1
+
 # The path-like objects of the Python glossary, which os.fsdecode accepts.
 FilePath = str | bytes | os.PathLike[str] | os.PathLike[bytes]
+
+
+def _rebuild(instance: "Blocks | Model") -> tuple[Callable[[], object], tuple[()]]:
+    # The __reduce__ of the frozen classes: pickle, copy and deepcopy rebuild through
+    # __init__, so they check the fields again. Keywords keep a pickle valid when a
+    # later version adds a field.
+    init = {f.name: getattr(instance, f.name) for f in fields(instance) if f.init}
+    return partial(type(instance), **init), ()
+
+
+@dataclass(frozen=True, eq=False)
+class Blocks:
+    """Block-scan geometry and per-block thresholds (paper 3.2), from `fit_blocks`.
+
+    Block k holds the pixels starts[k] to starts[k] + width - 1. Its statistic chi2_A
+    of `fit_blocks` compares the block with its prediction from the pixels farther
+    than nguard from it, and thresholds[b, k] is the threshold of chi2_A for the
+    spectra of S/N bin b. The constructor takes array_like values, of an integer dtype
+    for starts, and numpy scalars, and stores them as the types given here, with
+    read-only copies of the arrays. Two Blocks are equal only if they are the same
+    object.
+
+    Attributes
+    ----------
+    starts : ndarray of int64, shape (nblock,)
+        The first pixel of each of the nblock >= 1 blocks: >= 0 and strictly
+        increasing.
+    width : int
+        The pixels per block, |A|; >= 1.
+    nguard : int
+        The half-width of the guard window around each block (pixels); from 0 to
+        2^63 - 1, so that `save` can write it.
+    thresholds : ndarray, shape (nbin, nblock)
+        The threshold of chi2_A of each bin and block (unit-free): finite and > 0.
+
+    Raises
+    ------
+    TypeError
+        If a field has a type or dtype that is not allowed above. The message starts
+        with the name of the field.
+    ValueError
+        If a field has a shape or a value that is not allowed above. The message
+        starts with the name of the field.
+    """
+
+    starts: NDArray[np.int64]
+    width: int
+    nguard: int
+    thresholds: NDArray[np.float64]
+
+    # Written by hand, as in Model.
+    def __init__(
+        self,
+        starts: ArrayLike,
+        width: Integer,
+        nguard: Integer,
+        thresholds: ArrayLike,
+    ) -> None:
+        starts = integers(starts, "starts")
+        if starts.ndim != 1 or not starts.size:
+            raise ValueError(
+                f"starts: expected a 1-D array of at least one start, got shape "
+                f"{starts.shape}"
+            )
+        # The range of int64, checked before the cast.
+        ok = (starts >= 0) & (starts <= np.iinfo(np.int64).max)
+        require(ok, starts, "starts", "values from 0 to 2^63 - 1", ("block",))
+        starts = starts.astype(np.int64)
+        _increasing(starts.tolist(), "starts")
+        width = integer(width, "width", 1)
+        nguard = integer(nguard, "nguard", 0, NGUARD_MAX)
+        thresholds = numeric(thresholds, "thresholds")
+        if thresholds.ndim != 2 or thresholds.shape[1] != starts.size:
+            raise ValueError(
+                f"thresholds: expected shape (nbin, {starts.size}), a column for each "
+                f"start, got {thresholds.shape}"
+            )
+        thresholds = finite_array(thresholds, "thresholds", ("bin", "block"))
+        require(
+            thresholds > 0, thresholds, "thresholds", "values > 0", ("bin", "block")
+        )
+        for array in (starts, thresholds):
+            array.flags.writeable = False
+        for name, value in (
+            ("starts", starts),
+            ("width", width),
+            ("nguard", nguard),
+            ("thresholds", thresholds),
+        ):
+            object.__setattr__(self, name, value)
+
+    __reduce__ = _rebuild
 
 
 @dataclass(frozen=True, eq=False)
@@ -85,6 +183,9 @@ class Model:
         None for a mean-centred model, or the constant centre c (flux).
     weighted : bool
         True if the model was fitted with positive weights that are not all equal.
+    blocks : Blocks or None
+        The blocks and thresholds of `fit_blocks`, with a row of thresholds for each
+        bin and every block within the npix pixels; None for a model without them.
 
     Raises
     ------
@@ -103,6 +204,7 @@ class Model:
     edges: tuple[float, ...]
     center: float | None
     weighted: bool
+    blocks: Blocks | None
     _cache: dict[tuple[str, int], Any] = field(init=False, repr=False)
 
     # Written by hand because the parameters take more than the fields store: any
@@ -119,6 +221,7 @@ class Model:
         edges: Iterable[Real] = (),
         center: Real | None = None,
         weighted: Boolean = False,
+        blocks: Blocks | None = None,
     ) -> None:
         mean = numeric(mean, "mean")
         if mean.ndim != 2 or 0 in mean.shape:
@@ -131,14 +234,11 @@ class Model:
         cov = _items(cov, "cov", nbin, partial(_covariance, npix=npix))
         n_train = _items(n_train, "n_train", nbin, partial(integer, minimum=1))
         edges = _items(edges, "edges", nbin - 1, real)
-        for i, (low, high) in enumerate(pairwise(edges)):
-            if low >= high:
-                raise ValueError(
-                    f"edges: expected strictly increasing values, "
-                    f"got edges[{i}] = {low} and edges[{i + 1}] = {high}"
-                )
+        _increasing(edges, "edges")
         center = None if center is None else real(center, "center")
         weighted = boolean(weighted, "weighted")
+        if blocks is not None:
+            blocks = _check_blocks(blocks, nbin, npix)
         # After the checks, because issymmetric of scipy 1.11 rejects read-only arrays.
         for array in (mean, *cov):
             array.flags.writeable = False
@@ -149,6 +249,7 @@ class Model:
             ("edges", edges),
             ("center", center),
             ("weighted", weighted),
+            ("blocks", blocks),
             ("_cache", {}),
         ):
             object.__setattr__(self, name, value)
@@ -158,11 +259,18 @@ class Model:
         # The kinds of model for which f_s is derived (design section 4.3, A13).
         return self.center is None and not self.weighted
 
-    def __reduce__(self) -> tuple[partial["Model"], tuple[()]]:
-        # Pickle, copy and deepcopy rebuild through __init__, so they check the fields
-        # again. Keywords keep a pickle valid when a later version adds a field.
-        init = {f.name: getattr(self, f.name) for f in fields(self) if f.init}
-        return partial(type(self), **init), ()
+    __reduce__ = _rebuild
+
+    def _with_blocks(self, blocks: Blocks) -> "Model":
+        # This model with the blocks of fit_blocks, which fit it. It shares the
+        # read-only fields and starts with a copy of the cache, because P and the guard
+        # weights depend only on cov.
+        model = object.__new__(Model)
+        for f in fields(self):
+            object.__setattr__(model, f.name, getattr(self, f.name))
+        object.__setattr__(model, "blocks", blocks)
+        object.__setattr__(model, "_cache", dict(self._cache))
+        return model
 
     def _precision(self, b: int, *, subject: str | None = None) -> NDArray[np.float64]:
         P: NDArray[np.float64] | None = self._cache.get(("precision", b))
@@ -547,8 +655,10 @@ def save(model: Model, path: FilePath) -> None:
     """Write model to the .npz file path.
 
     The archive is not compressed. It holds the arrays schema (the integer 1),
-    gspice_version, mean, n_train, edges, center (NaN if None) and weighted, and cov0,
-    cov1, ... for the covariance of each bin. `load` reads it.
+    gspice_version, mean, n_train, edges, center (NaN if None) and weighted, cov0,
+    cov1, ... for the covariance of each bin, and, if model.blocks is not None,
+    block_starts, block_width, block_nguard and block_thresholds for its fields.
+    `load` reads it.
 
     Parameters
     ----------
@@ -591,11 +701,12 @@ def load(path: FilePath) -> Model:
     ValueError
         If the file is not a zip archive, is a damaged one, has no schema or a schema
         other than the 0-d integer 1, lacks one of the arrays schema, mean, n_train,
-        edges, center and weighted, or holds an array that `save` does not write; the
-        message names path. Also if `Model` rejects a field, for example a count of
-        covariances other than the number of bins; the message names the field.
+        edges, center and weighted, holds some but not all of the four block arrays,
+        or holds an array that `save` does not write; the message names path. Also if
+        `Model` or `Blocks` rejects a field, for example a count of covariances other
+        than the number of bins; the message names the field.
     TypeError
-        If path is not a str or path-like, or if `Model` rejects a field.
+        If path is not a str or path-like, or if `Model` or `Blocks` rejects a field.
     OSError
         If the file cannot be read, and for some damaged archives.
     """
@@ -637,7 +748,9 @@ def _from_archive(archive: Any, path: str) -> Model:
             f"path: expected a file written by save, with schema 1, got {found} in "
             f"{path}"
         )
-    missing = [key for key in _REQUIRED if key not in archive]
+    with_blocks = any(key in archive for key in _BLOCKS)
+    required = (*_REQUIRED, *_BLOCKS) if with_blocks else _REQUIRED
+    missing = [key for key in required if key not in archive]
     if missing:
         raise ValueError(
             f"path: expected the arrays that save writes, got no {', '.join(missing)} "
@@ -646,7 +759,12 @@ def _from_archive(archive: Any, path: str) -> Model:
     cov: list[NDArray[Any]] = []
     while f"cov{len(cov)}" in archive:
         cov.append(archive[f"cov{len(cov)}"])
-    known = {*_REQUIRED, "gspice_version", *(f"cov{b}" for b in range(len(cov)))}
+    known = {
+        *_REQUIRED,
+        *_BLOCKS,
+        "gspice_version",
+        *(f"cov{b}" for b in range(len(cov))),
+    }
     unknown = sorted(set(archive.files) - known)
     if unknown:
         writer = archive.get("gspice_version")
@@ -655,6 +773,8 @@ def _from_archive(archive: Any, path: str) -> Model:
             f"path: expected only the arrays that save writes, got "
             f"{', '.join(unknown)}{by} in {path}"
         )
+    # [()] returns a 0-d array as a scalar and other arrays as they are.
+    blocks = Blocks(*(archive[key][()] for key in _BLOCKS)) if with_blocks else None
     center = archive["center"][()]
     return Model(
         archive["mean"],
@@ -663,6 +783,7 @@ def _from_archive(archive: Any, path: str) -> Model:
         edges=archive["edges"],
         center=None if isinstance(center, float) and math.isnan(center) else center,
         weighted=archive["weighted"][()],
+        blocks=blocks,
     )
 
 
@@ -670,7 +791,7 @@ def _arrays(model: Model) -> dict[str, Any]:
     # __init__ defines __version__ after it imports this module.
     from . import __version__
 
-    return {
+    arrays = {
         "schema": np.int64(1),
         "gspice_version": __version__,
         "mean": model.mean,
@@ -679,6 +800,16 @@ def _arrays(model: Model) -> dict[str, Any]:
         "center": np.nan if model.center is None else model.center,
         "weighted": model.weighted,
     } | {f"cov{b}": C for b, C in enumerate(model.cov)}
+    # Without blocks, none of their arrays, so that a version without blocks reads the
+    # file (design section 9).
+    if model.blocks is not None:
+        arrays |= {
+            "block_starts": model.blocks.starts,
+            "block_width": np.int64(model.blocks.width),
+            "block_nguard": np.int64(model.blocks.nguard),
+            "block_thresholds": model.blocks.thresholds,
+        }
+    return arrays
 
 
 def _covariance(value: ArrayLike, name: str, npix: int) -> NDArray[np.float64]:
@@ -702,6 +833,30 @@ def _covariance(value: ArrayLike, name: str, npix: int) -> NDArray[np.float64]:
     return C
 
 
+def _check_blocks(blocks: object, nbin: int, npix: int) -> Blocks:
+    if not isinstance(blocks, Blocks):
+        raise TypeError(
+            f"blocks: expected a Blocks or None, got {type(blocks).__name__}"
+        )
+    # A new Blocks, so that copy and deepcopy of a model check its fields again.
+    blocks = Blocks(blocks.starts, blocks.width, blocks.nguard, blocks.thresholds)
+    rows = len(blocks.thresholds)
+    if rows != nbin:
+        raise ValueError(
+            f"blocks: expected a row of thresholds for each of the {nbin} bins of "
+            f"mean, got {rows}"
+        )
+    # The starts increase, so the last block ends last. Python integers cannot
+    # overflow.
+    end = int(blocks.starts[-1]) + blocks.width
+    if end > npix:
+        raise ValueError(
+            f"blocks: expected blocks within the {npix} pixels of mean, got a last "
+            f"block that ends at starts[-1] + width = {end}"
+        )
+    return blocks
+
+
 def _items(
     value: Iterable[Any], name: str, count: int, check: Callable[[Any, str], Any]
 ) -> tuple[Any, ...]:
@@ -716,3 +871,12 @@ def _items(
     if len(items) != count:
         raise ValueError(f"{name}: expected {count} values, got {len(items)}")
     return tuple(check(item, f"{name}[{i}]") for i, item in enumerate(items))
+
+
+def _increasing(values: Sequence[Any], name: str) -> None:
+    for i, (low, high) in enumerate(pairwise(values)):
+        if low >= high:
+            raise ValueError(
+                f"{name}: expected strictly increasing values, "
+                f"got {name}[{i}] = {low} and {name}[{i + 1}] = {high}"
+            )

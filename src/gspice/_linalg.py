@@ -93,11 +93,7 @@ def solve_pattern(
     )
     a = index.size - m
     t = index.size - np.count_nonzero(T)
-    R, info = lapack.dpotrf(P[np.ix_(index, index)], lower=1)
-    if info:
-        raise LinAlgError(
-            "not positive definite in its precision matrix on the pixels G"
-        )
+    R = factor_pattern(P[np.ix_(index, index)])
     # x0 is x with its entries in G set to 0, so that no value in G enters the mean
     # and an outlier there cannot cancel.
     X0 = X.copy()
@@ -144,16 +140,7 @@ def solve_prior(
     pixels = np.flatnonzero(M)
     chi2 = np.zeros(nspec)
     if T.any():
-        CTT = C[np.ix_(T, T)]
-        L, info = lapack.dpotrf(CTT, lower=1)
-        if info:
-            raise LinAlgError("not positive definite on the pixels T")
-        # The check of precision (decision A26), on C at T.
-        rcond = _rcond(CTT, L)
-        if not rcond >= MIN_RCOND:
-            raise LinAlgError(
-                f"numerically singular on the pixels T: rcond = {rcond:.2g}"
-            )
+        L = factor_prior(C[np.ix_(T, T)])
         # chi2 = ||L^-1 x_T||^2, with C_TT = L L^T and the prior mean 0.
         r, _ = lapack.dtrtrs(L, X[:, T].T, lower=1)
         chi2 = np.sum(r**2, axis=0)
@@ -168,6 +155,30 @@ def solve_prior(
         draws = normals @ L.T
     mean = np.zeros((nspec, pixels.size))
     return Conditional(mean, np.diagonal(C)[pixels], chi2, cov, draws)
+
+
+def factor_pattern(PGG: NDArray[np.float64]) -> NDArray[np.float64]:
+    # The lower Cholesky factor of P at the pixels G.
+    R: NDArray[np.float64]
+    R, info = lapack.dpotrf(PGG, lower=1)
+    if info:
+        raise LinAlgError(
+            "not positive definite in its precision matrix on the pixels G"
+        )
+    return R
+
+
+def factor_prior(CTT: NDArray[np.float64]) -> NDArray[np.float64]:
+    # The lower Cholesky factor of C at the pixels T, with the check of precision
+    # (decision A26) on C at T.
+    L: NDArray[np.float64]
+    L, info = lapack.dpotrf(CTT, lower=1)
+    if info:
+        raise LinAlgError("not positive definite on the pixels T")
+    rcond = _rcond(CTT, L)
+    if not rcond >= MIN_RCOND:
+        raise LinAlgError(f"numerically singular on the pixels T: rcond = {rcond:.2g}")
+    return L
 
 
 def group_rows(keys: NDArray[np.bool_]) -> list[NDArray[np.intp]]:

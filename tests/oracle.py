@@ -54,9 +54,9 @@ def conditional(C, G, X, T=()):
     return mean, np.array(cov, float), np.array(chi2, float)
 
 
-def window(i, nguard, npix):
-    # The guard window of pixel i: the pixels within nguard of it.
-    return range(max(0, i - nguard), min(npix, i + nguard + 1))
+def window(i, nguard, npix, width=1):
+    # The guard window of pixels i to i + width - 1: the pixels within nguard of them.
+    return range(max(0, i - nguard), min(npix, i + width + nguard))
 
 
 def guard_conditional(C, nguard, X, pixels):
