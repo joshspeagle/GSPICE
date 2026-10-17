@@ -402,3 +402,9 @@ def integer(value: object, name: str, minimum: int) -> int:
     if value < minimum:
         raise ValueError(f"{name}: expected an integer >= {minimum}, got {value}")
     return int(value)
+
+
+def boolean(value: object, name: str) -> bool:
+    if not isinstance(value, bool | np.bool_):
+        raise TypeError(f"{name}: expected a bool, got {type(value).__name__}")
+    return bool(value)
