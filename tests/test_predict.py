@@ -1,5 +1,5 @@
+import dataclasses
 import logging
-from dataclasses import fields
 from functools import partial
 
 import numpy as np
@@ -9,7 +9,13 @@ from numpy.linalg import LinAlgError
 from _golden import checked, same
 from gspice import Model, _model, _spectra, infill, pixelwise, scale, snr, unscale
 from gspice._linalg import precision
-from oracle import condition, conditional, guard_conditional, random_spd
+from oracle import (
+    assert_gaussian,
+    condition,
+    conditional,
+    guard_conditional,
+    random_spd,
+)
 
 EPS = np.finfo(float).eps
 NPIX = 12
@@ -57,7 +63,8 @@ def two_bins(kappa, center=None):
 
 def arrays(result):
     # The public arrays of a Prediction or a Repaired.
-    return tuple(getattr(result, f.name) for f in fields(result) if f.name[0] != "_")
+    fields = dataclasses.fields(result)
+    return tuple(getattr(result, f.name) for f in fields if f.name[0] != "_")
 
 
 def rows_of(pixels):
@@ -88,8 +95,14 @@ REPLACE = rows_of(
 IGNORE = rows_of(
     [[8], [2, 3], [7, 8], [0, 2, 3, 5, 6, 8, 9], [5, 6], [7, 8], [0, 1], [7, 8]]
 )
-# pixelwise and infill, with the options of the tests that run both.
-FUNCTIONS = {"pixelwise": partial(pixelwise, nguard=2), "infill": infill}
+# pixelwise and infill, with the options of the tests that run both. infill draws, from
+# a new generator at each call, so that its results repeat and every output is an array.
+FUNCTIONS = {
+    "pixelwise": partial(pixelwise, nguard=2),
+    "infill": lambda *args, **kwargs: infill(
+        *args, **kwargs, rng=np.random.default_rng(6)
+    ),
+}
 # Singular with a positive diagonal. Its entries are powers of 2, so the Cholesky factor
 # at one pixel is exact, and dpotrf finds the leading minor of order 2 exactly 0.
 ROOT = 2.0 ** (PIXELS % 3 - 1)
@@ -297,10 +310,10 @@ def test_a_call_on_a_new_model_logs_its_timings_at_debug(caplog, name, count):
     [
         (partial(pixelwise, nguard=0), [((0, 3), np.float64)] * 3),
         (
-            infill,
+            FUNCTIONS["infill"],
             [((0, 3), np.float64)] * 2
             + [((0, 3), np.bool_)] * 2
-            + [((0,), np.float64), ((0,), np.int64)],
+            + [((0,), np.float64), ((0,), np.int64), ((0, 3), np.float64)],
         ),
     ],
     ids=["pixelwise", "infill"],
@@ -370,19 +383,22 @@ def test_infill_matches_the_60_digit_reference(center, kappa, given):
 def test_slices_and_chunks_of_infill_agree_with_one_call_to_rounding(monkeypatch):
     model, flux, ivar, mask = two_bins(1e2, center=0.9)
 
-    def repaired(rows):
+    def repaired(rows, rng):
         spectra = (array[rows] for array in (flux, ivar, mask))
         sets = {"replace": REPLACE[rows], "ignore": IGNORE[rows]}
-        return infill(model, *spectra, **sets, covariance=True)
+        return infill(model, *spectra, **sets, covariance=True, rng=rng)
 
-    whole = repaired(slice(None))
+    whole = repaired(slice(None), np.random.default_rng(8))
     # The pattern of rows 0 and 6 spans slices and chunks, and each row alone is a
-    # grouping of its own (design section 11).
+    # grouping of its own (design section 11). Consecutive slices share a generator,
+    # so that they draw the normals of one call.
     singles = [slice(s, s + 1) for s in range(len(flux))]
-    spans = (slice(0, 3), slice(3, 4), slice(4, None), *singles)
-    results = [(rows, repaired(rows)) for rows in spans]
+    results = []
+    for spans in ((slice(0, 3), slice(3, 4), slice(4, None)), singles):
+        rng = np.random.default_rng(8)
+        results += [(rows, repaired(rows, rng)) for rows in spans]
     monkeypatch.setattr(_spectra, "CHUNK", 3 * NPIX)
-    results.append((slice(None), repaired(slice(None))))
+    results.append((slice(None), repaired(slice(None), np.random.default_rng(8))))
     # Every grouping factorizes the same P_GG, which gives the variances and
     # covariances, and then divides them by the same a^2. The means and chi2 also come
     # from products and solves with other numbers of spectra, whose rounding can
@@ -392,15 +408,105 @@ def test_slices_and_chunks_of_infill_agree_with_one_call_to_rounding(monkeypatch
     sigma = np.sqrt(whole.var)
     dflux = 2 * tol * sigma + 4 * EPS * (np.abs(whole.flux) + 0.9)
     dchi2 = 2 * tol * (whole.chi2 + whole.dof)
+    # A draw adds R_MM^-T z_M to the mean, with the same R_MM and normals z_M in every
+    # grouping. The triangular solve errs by at most
+    # gamma_m sqrt(m) kappa(R_MM) sqrt(lambda_max(C_MM)) |z_M| in the 2-norm, with
+    # gamma_m = m u / (1 - m u), u = 2^-53 (Higham 2002, Theorem 8.5) and
+    # kappa(R_MM)^2 = kappa(C_MM). In these patterns m <= 5, kappa(C_MM) <= 18,
+    # sqrt(lambda_max(C_MM)) <= 2.9 sigma and |z_M| < 3.5, so two solves differ by at
+    # most 2 gamma_5 sqrt(5) sqrt(18) 2.9 x 3.5 sigma = 1.1e-13 sigma. Two draws then
+    # agree within that and the 2 tol sigma of the means, and round as flux does
+    # (design section 11).
+    ddraws = (2 * tol + 1.1e-13) * sigma + 4 * EPS * (np.abs(whole.draws) + 0.9)
     for rows, result in results:
         for name in ("var", "replaced", "ignored", "dof"):
             assert same(getattr(result, name), getattr(whole, name)[rows])
         M = whole.replaced[rows]
         assert same(result.flux[~M], whole.flux[rows][~M])
         assert np.all(np.abs(result.flux[M] - whole.flux[rows][M]) <= dflux[rows][M])
+        error = np.abs(result.draws[M] - whole.draws[rows][M])
+        assert np.all(error <= ddraws[rows][M])
         assert np.all(np.abs(result.chi2 - whole.chi2[rows]) <= dchi2[rows])
         for s, row in enumerate(range(len(flux))[rows]):
             assert same(result.covariance(s), whole.covariance(row))
+
+
+@pytest.mark.parametrize("rows", [len(BINS), 2])
+def test_each_spectrum_draws_from_its_own_row_of_normals_for_any_chunk_size(
+    monkeypatch, rows
+):
+    monkeypatch.setattr(_spectra, "CHUNK", rows * NPIX)
+    model, flux, ivar, mask = two_bins(1e2, center=0.9)
+    # With P = I, the conditional mean is 0, and the draw of a pixel in working units
+    # is its normal, exactly; row 3 has a G that covers all pixels, and rows 4 and 5,
+    # one chunk of 2 rows, have no pixel to replace.
+    identity = Model(
+        MEANS, (np.eye(NPIX),) * 2, (100, 100), edges=model.edges, center=0.9
+    )
+    replace = REPLACE.copy()
+    replace[[4, 5]] = False
+    rng = np.random.default_rng(9)
+    result = infill(identity, flux, ivar, mask, replace=replace, ignore=IGNORE, rng=rng)
+    reference = np.random.default_rng(9)
+    normals = reference.standard_normal(flux.shape)
+    # Nothing else draws from rng.
+    assert rng.bit_generator.state == reference.bit_generator.state
+    _, a, _ = scale(flux, ivar, mask)
+    drawn = (normals + MEANS[BINS]) / a[:, np.newaxis] + 0.9
+    assert same(result.draws, np.where(replace, drawn, result.flux))
+
+
+def test_rng_changes_no_output_but_the_draws():
+    model, flux, ivar, mask = two_bins(1e2)
+    sets = {"replace": REPLACE, "ignore": IGNORE}
+    plain = infill(model, flux, ivar, mask, **sets)
+    drawn = infill(model, flux, ivar, mask, **sets, rng=np.random.default_rng(0))
+    assert same(arrays(dataclasses.replace(drawn, draws=None)), arrays(plain))
+
+
+def test_a_draw_minus_its_mean_does_not_depend_on_the_flux():
+    # draws - flux is F z_M / a at the replaced pixels: it depends on the pattern, ivar
+    # and the normals, not on the data. One bin, so that the S/N chooses no other P.
+    _, flux, ivar, mask = two_bins(1e2)
+    model = Model(MEANS[:1], (random_spd(NPIX, 1e2, 0),), (100,), center=0.9)
+    sets = {"replace": REPLACE, "ignore": IGNORE}
+    results = [
+        infill(model, f, ivar, mask, **sets, rng=np.random.default_rng(5))
+        for f in (flux, 2 * flux)
+    ]
+    M = REPLACE
+    spread = [(r.draws - r.flux)[M] for r in results]
+    # Each draw and each mean rounds about 4 times, each time by at most eps of its
+    # size plus the centre.
+    size = sum(np.abs(r.draws[M]) + np.abs(r.flux[M]) + 0.9 for r in results)
+    assert np.all(np.abs(spread[0] - spread[1]) <= 4 * EPS * size)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("prior", [False, True], ids=["pattern", "prior"])
+def test_the_draws_follow_the_conditional_distribution(prior):
+    n = 20_000
+    C = random_spd(NPIX, 1e2, 0)
+    rng = np.random.default_rng(10)
+    x = rng.standard_normal((n, NPIX)) @ np.linalg.cholesky(C).T
+    # a = 2 in every spectrum, and pixel 6 is bad in all, so they share one pattern.
+    ivar = np.full((n, NPIX), 4.0)
+    mask = PIXELS == 6
+    replace = np.isin(PIXELS, [2, 5, 6, 7])
+    ignore = ~replace if prior else np.isin(PIXELS, [3, 4, 8])
+    result = infill(
+        Model(MEANS[:1], (C,), (100,), center=0.9),
+        (x + MEANS[0]) / 2 + 0.9,
+        ivar,
+        np.tile(mask, (n, 1)),
+        replace=replace,
+        ignore=ignore,
+        covariance=True,
+        rng=rng,
+    )
+    pixels, cov = result.covariance(0)
+    # The draws follow N(flux, cov) at the replaced pixels.
+    assert_gaussian(result.draws[:, pixels], result.flux[:, pixels], cov)
 
 
 @pytest.mark.parametrize("nguard", [0, 2])
@@ -461,6 +567,10 @@ def test_infill_where_g_covers_all_pixels_needs_no_precision_matrix():
     for s in range(len(flux)):
         pixels, cov = result.covariance(s)
         assert same(cov, SINGULAR[np.ix_(pixels, pixels)] / a2[s])
+    # Draws factor C at M, which is singular in the rows with a bad pixel.
+    rng = np.random.default_rng(0)
+    with pytest.raises(LinAlgError, match="on the pixels M, for the pattern of row"):
+        infill(prior, flux, ivar, mask, replace=replace, ignore=~replace, rng=rng)
     # Pixels 2 and 4 of row 6: C at T is singular.
     replace[6, 4] = True
     error = r"^model: cov\[0\] is not positive definite on the pixels T, for the pattern of row 6$"

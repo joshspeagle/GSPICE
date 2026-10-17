@@ -185,6 +185,10 @@ def test_an_invalid_argument_of_simulate_is_rejected(changes, error, name):
             {"ignore": np.ones(4, bool)}, ValueError, "ignore", id="ignore=(4,)"
         ),
         pytest.param({"covariance": 1}, TypeError, "covariance", id="covariance=1"),
+        pytest.param({"rng": 0}, TypeError, "rng", id="rng=0"),
+        pytest.param(
+            {"rng": np.random.RandomState(0)}, TypeError, "rng", id="rng=RandomState"
+        ),
     ],
 )
 def test_an_invalid_argument_of_infill_is_rejected(changes, error, name):

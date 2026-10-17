@@ -123,8 +123,9 @@ def solve_pattern(
         cov = cov[np.ix_(order, order)]
     draws: NDArray[np.float64] | None = None
     if normals is not None:
-        # (mu_G + R^-T z)_M = mu_M + R_MM^-T z_M.
-        noise, _ = lapack.dtrtrs(RMM, normals[:, index[a:]].T, lower=1, trans=1)
+        # (mu_G + R^-T z)_M = mu_M + R_MM^-T z_M, with z_M in the order of index[a:].
+        z = normals[:, np.argsort(order)].T
+        noise, _ = lapack.dtrtrs(RMM, z, lower=1, trans=1)
         draws = (mean + noise).T[:, order]
     return Conditional(mean.T[:, order], var[order], chi2, cov, draws)
 
@@ -134,6 +135,7 @@ def solve_prior(
     M: NDArray[np.bool_],
     T: NDArray[np.bool_],
     X: NDArray[np.float64],
+    normals: NDArray[np.float64] | None = None,
     covariance: bool = False,
 ) -> Conditional:
     # Where G covers all pixels, the conditional is the prior N(0, C): exact from C, and
@@ -156,8 +158,16 @@ def solve_prior(
         r, _ = lapack.dtrtrs(L, X[:, T].T, lower=1)
         chi2 = np.sum(r**2, axis=0)
     cov = C[np.ix_(pixels, pixels)] if covariance else None
+    draws: NDArray[np.float64] | None = None
+    if normals is not None:
+        L, info = lapack.dpotrf(C[np.ix_(pixels, pixels)], lower=1)
+        if info:
+            raise LinAlgError("not positive definite on the pixels M")
+        # L z_M is a draw from N(0, C_MM), with C_MM = L L^T. Unlike the solve at T,
+        # the product needs no check of the condition of L.
+        draws = normals @ L.T
     mean = np.zeros((nspec, pixels.size))
-    return Conditional(mean, np.diagonal(C)[pixels], chi2, cov, None)
+    return Conditional(mean, np.diagonal(C)[pixels], chi2, cov, draws)
 
 
 def group_rows(keys: NDArray[np.bool_]) -> list[NDArray[np.intp]]:

@@ -5,6 +5,7 @@ from scipy.special import expit, logit
 
 from _golden import same
 from gspice import _datasets, simulate
+from oracle import assert_gaussian
 
 EPS = np.finfo(float).eps
 
@@ -201,20 +202,7 @@ def test_gaussian_flux_has_the_stated_mean_and_covariance():
     n, npix = 20_000, 40
     sim = simulate(n, npix, rng=np.random.default_rng(7), gaussian=True)
     mu, J = _datasets._linearization(*_datasets._lines(npix))
-    L = np.linalg.cholesky(J @ J.T + np.diag(mu / 50**2))
-    # With Sigma = L L^T, y = L^-1 (flux - mu) is iid N(0, I) if flux ~ N(mu, Sigma).
-    # Then each entry of sqrt(n) mean(y) is N(0, 1); and (n - 1) cov(y) is Wishart, so
-    # the diagonal of cov(y) has the standard deviation sqrt(2 / (n - 1)) about 1 and
-    # the other entries sqrt(1 / (n - 1)) about 0, close to normal at this n. Over the
-    # m entries tested, z = Phi^-1(1 - 0.001 / (2 m)) standard deviations each bound
-    # the probability of a failure by 0.001 (Bonferroni).
-    y = np.linalg.solve(L, (sim.flux - mu).T).T
-    upper = np.triu_indices(npix)
-    z = stats.norm.isf(0.001 / (2 * (npix + upper[0].size)))
-    assert np.all(np.abs(y.mean(axis=0)) <= z / np.sqrt(n))
-    deviation = (np.cov(y, rowvar=False) - np.eye(npix))[upper]
-    sd = np.where(upper[0] == upper[1], np.sqrt(2 / (n - 1)), np.sqrt(1 / (n - 1)))
-    assert np.all(np.abs(deviation) <= z * sd)
+    assert_gaussian(sim.flux, mu, J @ J.T + np.diag(mu / 50**2))
 
 
 @pytest.mark.slow
