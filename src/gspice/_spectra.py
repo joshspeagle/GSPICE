@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from scipy.ndimage import maximum_filter1d
 
 # Elements per chunk of rows (design section 8): 6990 rows at npix 2400.
 CHUNK = 2**24
@@ -65,11 +66,9 @@ def validate(
 def require_good_pixel(bad: NDArray[np.bool_]) -> None:
     empty = np.flatnonzero(bad.all(axis=1))
     if empty.size:
-        listed = ", ".join(map(str, empty[:10]))
-        more = f", ... ({empty.size} rows)" if empty.size > 10 else ""
         raise ValueError(
             f"mask, ivar: expected a good pixel in every spectrum, got none in rows "
-            f"{listed}{more}"
+            f"{listing(empty, 'rows')}"
         )
 
 
@@ -99,6 +98,17 @@ def interpolate(flux: NDArray[Any], bad: NDArray[np.bool_]) -> NDArray[np.float6
     slope = (flat[hi] - f_lo) / np.maximum(span, 1)
     flat[holes] = np.where(span > 0, slope * (holes - lo) + f_lo, f_lo)
     return x
+
+
+def dilate(flags: NDArray[np.bool_], d: int) -> NDArray[np.bool_]:
+    # The maximum over the 2 d + 1 pixels around each pixel of a row, with the pixels
+    # beyond its ends unflagged, at a cost that does not grow with d. From any pixel,
+    # d = npix - 1 already reaches the whole row.
+    size = 2 * min(d, flags.shape[1] - 1) + 1
+    dilated: NDArray[np.bool_] = maximum_filter1d(
+        flags, size, axis=1, mode="constant", cval=0
+    )
+    return dilated
 
 
 def root_mean_ivar(ivar: NDArray[Any], bad: NDArray[np.bool_]) -> NDArray[np.float64]:
@@ -220,7 +230,7 @@ def scale(
     center = real(center, "center")
     nspec, npix = flux.shape
     if refmean is not None:
-        refmean = _vector(refmean, "refmean", npix, "pixel")
+        refmean = vector(refmean, "refmean", npix, "pixel")
     elif nspec == 0:
         raise ValueError(
             f"flux: expected at least one spectrum when refmean is None, got shape "
@@ -279,9 +289,9 @@ def unscale(
     if x.ndim != 2:
         raise ValueError(f"x: expected a 2-D array, got shape {x.shape}")
     nspec, n = x.shape
-    refscale = _vector(refscale, "refscale", nspec, "row")
+    refscale = vector(refscale, "refscale", nspec, "row")
     require(refscale > 0, refscale, "refscale", "values > 0", ("row",))
-    refmean = _vector(refmean, "refmean", n, "pixel")
+    refmean = vector(refmean, "refmean", n, "pixel")
     center = real(center, "center")
     if var is not None:
         var = numeric(var, "var")
@@ -364,11 +374,11 @@ def finite_array(
     return array
 
 
-def _vector(value: ArrayLike, name: str, size: int, axis: str) -> NDArray[np.float64]:
-    vector = numeric(value, name)
-    if vector.shape != (size,):
-        raise ValueError(f"{name}: expected shape ({size},), got {vector.shape}")
-    return finite_array(vector, name, (axis,))
+def vector(value: ArrayLike, name: str, size: int, axis: str) -> NDArray[np.float64]:
+    array = numeric(value, name)
+    if array.shape != (size,):
+        raise ValueError(f"{name}: expected shape ({size},), got {array.shape}")
+    return finite_array(array, name, (axis,))
 
 
 def require(
@@ -386,6 +396,12 @@ def require(
         raise ValueError(
             f"{name}: expected {expected}, got {values[index]} at {located}"
         )
+
+
+def listing(indices: NDArray[np.intp], noun: str) -> str:
+    # The first 10 indices, and their count if there are more (design section 8).
+    more = f", ... ({indices.size} {noun})" if indices.size > 10 else ""
+    return ", ".join(map(str, indices[:10])) + more
 
 
 def real(value: object, name: str) -> float:

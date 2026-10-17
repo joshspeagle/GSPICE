@@ -17,6 +17,7 @@
 - `gspice.pixelwise`, which predicts each pixel of each spectrum from the pixels farther than `nguard` from it, and its result `gspice.Prediction`. A model keeps the precision matrix and the guard weights of each bin after their first use.
 - `gspice.simulate`, which draws synthetic continuum-normalized spectra for tests and examples, and its result `gspice.Simulation`. The spectra have absorption lines whose depths follow two latent parameters in two populations, Gaussian noise, and optional cosmic rays, bad columns and shifted blocks. With `gaussian=True` and no artifacts they are exactly Gaussian.
 - `gspice.infill`, which replaces chosen pixels of each spectrum by their Gaussian conditional mean given the other pixels, and its result `gspice.Repaired`. It reports the replaced and ignored pixels and χ², and with `covariance=True` the conditional covariance of the replaced pixels of each spectrum.
+- `gspice.fit`, which fits a model to training spectra with the iterative outlier clipping of paper Alg. 4, and returns the model and the final training mask.
 
 ### Removed
 
@@ -46,3 +47,8 @@
 - `scale` and `snr` raise ValueError for a spectrum without a good pixel, and name its row. For such a spectrum, the 2022 `standard_scale` returned NaN in every value of Dvec and refmean.
 - `pixelwise` computes the conditional variances through the precision matrix, where the 2022 `gp_interp` used the Schur updates of a precomputed inverse. On the golden data set D3, whose covariance has the condition number 8.6e4, the 2022 predvar differs from a 60-digit reference by up to 7.6e-10 at nguard 5 and 2.7e-10 at nguard 20, relative. `pixelwise` differs by at most 1.7e-13 and 8.7e-14.
 - `infill` computes the conditional covariance through the precision matrix, where the 2022 `gaussian_estimate` used the Schur updates of a precomputed inverse. On D3, the 2022 predcovar differs from a 60-digit reference by up to 3.0e-10 relative on the diagonal, and `infill` by at most 8.8e-14.
+- `fit` masks the flags of every clipping pass, as paper Alg. 4 does. The 2022 `covar_iter_mask` masked only the flags of the last two passes; `fit(cumulative=False)` keeps that rule. On the golden data sets D1 to D4, the final mask of the default `fit` differs from the 2022 mask in 157, 152, 106 and 8 entries.
+- `fit` flags a pixel whose |z| exceeds the threshold. The 2022 `get_chimask` also flagged a pixel whose |z| equals it.
+- `fit` drops a spectrum that has no good pixel, or that a clipping mask covers completely. For such a spectrum, the 2022 `covar_iter_mask` returned a covariance of NaN or raised an error.
+- `fit` needs at least npix + 1 spectra for a mean-centred model, and a good pixel in one of them at every pixel, and raises ValueError otherwise. The 2022 `covar_iter_mask` accepted npix spectra, whose covariance is singular, and then raised LinAlgError or flagged most pixels. It filled a pixel that is bad in every spectrum by interpolation, which also makes the covariance singular; on D1 it then raised LinAlgError.
+- `fit` counts a pixel with ivar = 0 as bad, also against `maxbadpix`. The 2022 `covar_iter_mask` counted only the pixels in its mask.

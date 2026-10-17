@@ -3,15 +3,30 @@ from functools import partial
 import numpy as np
 import pytest
 
-from gspice import Model, infill, legacy, pixelwise, scale, simulate, snr, unscale
+from gspice import (
+    Model,
+    fit,
+    infill,
+    legacy,
+    pixelwise,
+    scale,
+    simulate,
+    snr,
+    unscale,
+)
 
 SPECTRA = {"flux": np.ones((2, 3)), "ivar": np.ones((2, 3)), "mask": np.zeros((2, 3))}
 UNSCALE = {"x": np.zeros((2, 3)), "refscale": np.ones(2), "refmean": np.zeros(3)}
 MODEL = Model(np.zeros((1, 3)), (np.eye(3),), (10,))
+REJECT_EMPTY = {
+    "scale": scale,
+    "snr": snr,
+    "pixelwise": partial(pixelwise, MODEL),
+    "infill": partial(infill, MODEL),
+}
+# fit drops a spectrum without a good pixel, which the others reject.
 FLUX_IVAR_MASK = pytest.mark.parametrize(
-    "function",
-    [scale, snr, partial(pixelwise, MODEL), partial(infill, MODEL)],
-    ids=["scale", "snr", "pixelwise", "infill"],
+    "function", [*REJECT_EMPTY.values(), fit], ids=[*REJECT_EMPTY, "fit"]
 )
 # Finite only where long double is wider than float64, as on Linux x86-64; where long
 # double is float64, it parses to inf.
@@ -79,7 +94,9 @@ def test_a_non_finite_or_negative_value_at_a_good_pixel_is_rejected(
         function(**arrays, mask=mask)
 
 
-@FLUX_IVAR_MASK
+@pytest.mark.parametrize(
+    "function", list(REJECT_EMPTY.values()), ids=list(REJECT_EMPTY)
+)
 def test_spectra_without_a_good_pixel_are_counted_and_the_first_10_named(function):
     # 12 rows without a good pixel: 7 by mask, 4 by ivar 0 and row 12 by both.
     mask = np.zeros((15, 3), bool)
@@ -183,6 +200,41 @@ def test_an_invalid_spectrum_of_repaired_covariance_is_rejected(s, error):
     result = infill(MODEL, **SPECTRA, covariance=True)
     with pytest.raises(error, match="^s: "):
         result.covariance(s)
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "name"),
+    [
+        pytest.param({"nsigma": 5}, TypeError, "nsigma", id="nsigma=5"),
+        pytest.param({"nsigma": ["6"]}, TypeError, "nsigma", id="nsigma=['6']"),
+        pytest.param({"nsigma": [[6]]}, ValueError, "nsigma", id="nsigma=[[6]]"),
+        pytest.param({"nsigma": [6, -1]}, ValueError, "nsigma", id="nsigma=[6,-1]"),
+        pytest.param(
+            {"nsigma": [6, np.inf]}, ValueError, "nsigma", id="nsigma=[6,inf]"
+        ),
+        pytest.param({"maxbadpix": -1}, ValueError, "maxbadpix", id="maxbadpix=-1"),
+        pytest.param({"nguard": -1}, ValueError, "nguard", id="nguard=-1"),
+        pytest.param({"cumulative": 1}, TypeError, "cumulative", id="cumulative=1"),
+        pytest.param({"center": np.nan}, ValueError, "center", id="center=nan"),
+        pytest.param({"weights": np.ones(3)}, ValueError, "weights", id="weights=(3,)"),
+        pytest.param(
+            {"weights": np.array([1.0, -1.0])}, ValueError, "weights", id="weights<0"
+        ),
+        pytest.param(
+            {"weights": np.array([1.0, np.inf])},
+            ValueError,
+            "weights",
+            id="weights=inf",
+        ),
+        pytest.param(
+            {"weights": np.ones(2, complex)}, TypeError, "weights", id="weights=complex"
+        ),
+        pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
+    ],
+)
+def test_an_invalid_argument_of_fit_is_rejected(changes, error, name):
+    with pytest.raises(error, match=f"^{name}: "):
+        fit(**(SPECTRA | changes))
 
 
 CENTER = {

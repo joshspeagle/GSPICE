@@ -3,7 +3,7 @@ import math
 import os
 import time
 import zipfile
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import KW_ONLY, dataclass, field, fields
 from functools import partial
 from itertools import pairwise
@@ -16,14 +16,22 @@ from scipy.linalg import issymmetric
 
 from ._linalg import guard_weights, precision
 from ._spectra import (
+    Progress,
     boolean,
+    check_progress,
     chunks,
+    dilate,
     finite_array,
     integer,
+    interpolate,
+    listing,
     median_snr,
     numeric,
     real,
     require,
+    root_mean_ivar,
+    validate,
+    vector,
 )
 
 # The arrays that load reads. save also writes gspice_version and cov0, cov1, ...
@@ -132,14 +140,15 @@ class Model:
         init = {f.name: getattr(self, f.name) for f in fields(self) if f.init}
         return partial(type(self), **init), ()
 
-    def _precision(self, b: int) -> NDArray[np.float64]:
+    def _precision(self, b: int, *, subject: str | None = None) -> NDArray[np.float64]:
         P: NDArray[np.float64] | None = self._cache.get(("precision", b))
         if P is None:
             start = time.perf_counter()
             try:
                 P = precision(self.cov[b])
             except LinAlgError as error:
-                raise LinAlgError(f"model: cov[{b}] is {error}") from None
+                where = f"model: cov[{b}]" if subject is None else subject
+                raise LinAlgError(f"{where} is {error}") from None
             _logger.debug(
                 "cov[%d]: precision matrix in %.3f s", b, time.perf_counter() - start
             )
@@ -160,7 +169,7 @@ class Model:
         return bins
 
     def _guard_weights(
-        self, b: int, nguard: int
+        self, b: int, nguard: int, *, subject: str | None = None
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         cached = self._cache.get(("guard", b))
         if cached is not None and cached[0] == nguard:
@@ -168,12 +177,13 @@ class Model:
         C = self.cov[b]
         npix = len(C)
         if nguard < npix - 1:
-            P = self._precision(b)
+            P = self._precision(b, subject=subject)
             start = time.perf_counter()
             try:
                 W, var = guard_weights(P, np.diagonal(C), nguard)
             except LinAlgError as error:
-                raise LinAlgError(f"model: cov[{b}] is {error}") from None
+                where = f"model: cov[{b}]" if subject is None else subject
+                raise LinAlgError(f"{where} is {error}") from None
         else:
             # Every window covers all pixels: the exact prior, without P (design
             # section 4.2).
@@ -189,6 +199,307 @@ class Model:
             array.flags.writeable = False
         self._cache["guard", b] = nguard, W, var
         return W, var
+
+
+def fit(
+    flux: ArrayLike,
+    ivar: ArrayLike,
+    mask: ArrayLike | None = None,
+    *,
+    nsigma: Sequence[float] | NDArray[np.integer[Any] | np.floating[Any]] = (
+        20.0,
+        8.0,
+        6.0,
+    ),
+    maxbadpix: int = 64,
+    nguard: int = 20,
+    cumulative: bool = True,
+    center: float | None = None,
+    weights: ArrayLike | None = None,
+    progress: Progress | None = None,
+) -> tuple[Model, NDArray[np.bool_]]:
+    """Fit a model to training spectra with iterative outlier clipping (paper Alg. 4).
+
+    The bad pixels are (mask != 0) | (ivar == 0), and fit never reads flux or ivar
+    there. A spectrum is used unless it has more than maxbadpix bad pixels, has weight
+    0, or a pass mask or the final mask covers it completely; N_s counts the spectra
+    of a fit. A fit on a mask interpolates the pixels in it, scales each spectrum by
+    a_s over the pixels outside it (see `scale`), and estimates
+
+        m = sum_s w_s x_s / V1,  S = sum_s w_s (x_s - m)(x_s - m)^T / (V1 - V2 / V1),
+
+    where x_s = a_s ftilde_s, V1 = sum_s w_s and V2 = sum_s w_s^2; with unit weights,
+    m is the column mean and the divisor is N_s - 1. With a constant centre c, m = 0,
+    x_s = a_s (ftilde_s - c) and S = sum_s w_s x_s x_s^T / V1.
+
+    Pass n of N = len(nsigma) fits on its mask M_n with unit weights, computes the
+    in-sample z of `pixelwise` with nguard at every pixel, interpolated ones included,
+    and flags F_n: each pixel with |z| > nsigma[n - 1] and its two neighbours.
+    M_1 = bad. With cumulative=True (paper Alg. 4), M_{n+1} = M_n | F_n and the final
+    mask is M_{N+1}; with cumulative=False (2022), M_{n+1} = bad | F_n and the final
+    mask is bad | F_{N-1} | F_N. nsigma=() fits on the mask bad, without clipping.
+    The final fit uses the final mask and the weights w_s; reweighting the clipping
+    raised false flags in the paper (l.548).
+
+    With cumulative=False, fit equals legacy covar_iter_mask, the covariance to
+    rounding and the mask exactly, if nguard is 20, center and weights are None, flux
+    is float64, ivar == 0 only at pixels in mask, nsigma is not empty, no |z| lies
+    within the error of the 2022 Schur updates of a threshold, no pass mask or final
+    mask covers completely a spectrum with at most maxbadpix bad pixels, and fit
+    raises no error.
+
+    Parameters
+    ----------
+    flux, ivar, mask : array_like, shape (nspec, npix)
+        As in `scale`, except that a spectrum without a good pixel is dropped.
+    nsigma : sequence of float or ndarray, shape (N,), optional
+        The threshold on |z| of each clipping pass, in order; finite and > 0.
+    maxbadpix : int, optional
+        The largest number of bad pixels of a used spectrum; >= 0.
+    nguard : int, optional
+        The half-width of the guard window of z (pixels); >= 0.
+    cumulative : bool, optional
+        Whether each pass keeps the flags of every earlier pass (paper Alg. 4), or
+        only those of the pass before it (2022).
+    center : float, optional
+        The constant centre c (flux); finite. None: a mean-centred model.
+    weights : array_like, shape (nspec,), optional
+        The weights w_s of the final fit, of an integer or floating dtype; finite and
+        >= 0. None: equal weights.
+    progress : callable, optional
+        progress(stage, done, total), called after each chunk of spectra of each pass
+        and of the final fit, with the stage "fit", the number of spectra of that fit
+        done, and their total N_s.
+
+    Returns
+    -------
+    model : Model
+        The model, of one bin, with n_train (N_s,), the centre, and weighted True if
+        the weights of the spectra of the final fit are not all equal. It holds its
+        precision matrix (see `Model`).
+    mask : ndarray of bool, shape (nspec, npix)
+        The final mask, and True at every pixel of a spectrum that is not used.
+
+    Raises
+    ------
+    TypeError
+        If an argument has a type or a dtype that is not allowed above.
+    ValueError
+        If an argument has a shape or a value that is not allowed above, or if a fit
+        lacks the spectra it needs: N_s - 1 >= npix for a mean-centred model, N_s >=
+        npix for a constant centre, and a good pixel in one of them at every pixel.
+        The message names the counts or the first such pixels.
+    numpy.linalg.LinAlgError
+        If a covariance has a variance of 0, or fails the check of its precision
+        matrix: it is not positive definite, or the reciprocal condition number of the
+        covariance scaled to unit diagonal is below 1e-13, which can happen for N_s - 1
+        close to npix. Clipping checks P only if nguard < npix - 1. The message names
+        the pass or the final fit and N_s, and the pixel of variance 0 or the
+        reciprocal condition number below 1e-13.
+
+    Notes
+    -----
+    Cost per pass: about N_s npix^2 flops for the covariance, npix^3 for its precision
+    matrix, npix (w^3/3 + 2 npix w) for the guard weights, w = min(2 nguard + 1, npix),
+    and 2 N_s npix^2 for z. The final fit costs about N_s npix^2 + npix^3 flops. Each
+    fit holds the working vectors of its spectra, N_s npix x 8 bytes.
+    """
+    start = time.perf_counter()
+    thresholds = _thresholds(nsigma)
+    maxbadpix = integer(maxbadpix, "maxbadpix", 0)
+    nguard = integer(nguard, "nguard", 0)
+    cumulative = boolean(cumulative, "cumulative")
+    if center is not None:
+        center = real(center, "center")
+    check_progress(progress)
+    flux, ivar, bad = validate(flux, ivar, mask)
+    nspec, npix = flux.shape
+    if weights is None:
+        weights = np.ones(nspec)
+    else:
+        weights = vector(weights, "weights", nspec, "row")
+        require(weights >= 0, weights, "weights", "values >= 0", ("row",))
+    over = np.count_nonzero(bad, axis=1) > maxbadpix
+    zero = ~over & (weights == 0)
+    removed = (nspec, int(np.count_nonzero(over)), int(np.count_nonzero(zero)))
+    rows = np.flatnonzero(~over & ~zero & ~bad.all(axis=1))
+    M = bad[rows]
+    n_cond = max(npix - 2 * nguard - 1, 0)
+    for n, threshold in enumerate(thresholds, 1):
+        _check(M, center, f"pass {n}", removed)
+        n_train = rows.size
+        # In a spectrum of typical leverage, the in-sample |z| of an outlier of any
+        # amplitude approaches this ceiling (design section 4.1).
+        if center is None:
+            ceiling = math.sqrt((n_train - 1) * (n_train - n_cond - 1) / n_train)
+        else:
+            ceiling = math.sqrt(n_train - n_cond)
+        if threshold > ceiling:
+            _logger.warning(
+                "fit: pass %d has nsigma %g above %.3g, the in-sample ceiling of |z| "
+                "at N_s = %d",
+                n,
+                threshold,
+                ceiling,
+                n_train,
+            )
+        subject = f"fit: the clipping covariance of pass {n} (N_s = {n_train})"
+        z = _clipping_z(flux, ivar, rows, M, center, nguard, subject, progress)
+        flagged = dilate(np.abs(z, out=z) > threshold, 1)
+        # Free z before the next fit allocates its working vectors.
+        del z
+        # The final mask is M_N | F_N in both modes.
+        if cumulative or n == len(thresholds):
+            M = M | flagged
+        else:
+            M = bad[rows] | flagged
+        keep = ~M.all(axis=1)
+        _logger.info(
+            "fit: pass %d with nsigma %g flagged %.3g%% of the pixels of its %d "
+            "spectra; spectra dropped: %d",
+            n,
+            threshold,
+            100 * np.count_nonzero(flagged) / flagged.size,
+            n_train,
+            n_train - np.count_nonzero(keep),
+        )
+        rows, M = rows[keep], M[keep]
+    _check(M, center, "the final fit", removed)
+    n_train = rows.size
+    # Only the ratios of the weights matter. In units of the largest, V2 neither
+    # overflows nor underflows, and equal weights are exactly 1.
+    w = weights[rows] / np.max(weights[rows])
+    subject = f"fit: the final covariance (N_s = {n_train})"
+    _, model = _fitted(flux, ivar, rows, M, center, w, subject, progress)
+    if model.weighted:
+        _logger.info(
+            "fit: the final fit of %d spectra is weighted, with V1^2/V2 = %.4g "
+            "effective spectra",
+            n_train,
+            w.sum() ** 2 / (w @ w),
+        )
+    model._precision(0, subject=subject)
+    training = np.ones((nspec, npix), dtype=bool)
+    training[rows] = M
+    _logger.debug("fit: %d spectra in %.3f s", nspec, time.perf_counter() - start)
+    return model, training
+
+
+def _thresholds(value: ArrayLike) -> tuple[float, ...]:
+    nsigma = numeric(value, "nsigma")
+    if nsigma.ndim == 0:
+        raise TypeError(f"nsigma: expected a 1-D sequence or array, got {nsigma}")
+    if nsigma.ndim != 1:
+        raise ValueError(
+            f"nsigma: expected a 1-D sequence or array, got shape {nsigma.shape}"
+        )
+    ok = np.isfinite(nsigma) & (nsigma > 0)
+    require(ok, nsigma, "nsigma", "finite values > 0", ("element",))
+    return tuple(nsigma.astype(np.float64).tolist())
+
+
+def _check(
+    M: NDArray[np.bool_],
+    center: float | None,
+    fitted: str,
+    removed: tuple[int, int, int],
+) -> None:
+    # The requirements of design section 4.1 for the fit whose mask is M.
+    n_train, npix = M.shape
+    needed = npix + 1 if center is None else npix
+    if n_train < needed:
+        nspec, over, zero = removed
+        full = nspec - over - zero - n_train
+        kind = "a mean-centred" if center is None else "a constant-centre"
+        raise ValueError(
+            f"fit: {fitted} needs at least {needed} spectra for {kind} model of "
+            f"{npix} pixels, got {n_train}: of {nspec} spectra, maxbadpix removed "
+            f"{over}, weight 0 removed {zero} and full masks removed {full}"
+        )
+    empty = np.flatnonzero(M.all(axis=0))
+    if empty.size:
+        raise ValueError(
+            f"fit: {fitted} needs a good pixel in one of its {n_train} spectra at "
+            f"every pixel, got none at pixels {listing(empty, 'pixels')}"
+        )
+
+
+def _clipping_z(
+    flux: NDArray[Any],
+    ivar: NDArray[Any],
+    rows: NDArray[np.intp],
+    M: NDArray[np.bool_],
+    center: float | None,
+    nguard: int,
+    subject: str,
+    progress: Progress | None,
+) -> NDArray[np.float64]:
+    # The in-sample z of the spectra rows, whose mask is M, at every pixel under the
+    # clipping model with unit weights (design decisions A12 and A23). With unit
+    # weights, X holds the working vectors.
+    X, model = _fitted(flux, ivar, rows, M, center, np.ones(rows.size), subject, None)
+    W, var = model._guard_weights(0, nguard, subject=subject)
+    sigma = np.sqrt(var)
+    nspec, npix = X.shape
+    # z = (x - x W) / sqrt(var), as in pixelwise, in place of the working vectors.
+    for c in chunks(nspec, npix):
+        X[c] -= X[c] @ W
+        X[c] /= sigma
+        if progress is not None:
+            progress("fit", c.stop, nspec)
+    return X
+
+
+def _fitted(
+    flux: NDArray[Any],
+    ivar: NDArray[Any],
+    rows: NDArray[np.intp],
+    M: NDArray[np.bool_],
+    center: float | None,
+    w: NDArray[np.float64],
+    subject: str,
+    progress: Progress | None,
+) -> tuple[NDArray[np.float64], Model]:
+    # The model of design section 4.1 on the spectra rows, whose mask is M, with the
+    # weights w, and the working vectors x_s times sqrt(w_s).
+    X = np.empty(M.shape)
+    a = np.empty(rows.size)
+    for c in chunks(*M.shape):
+        X[c] = interpolate(flux[rows[c]], M[c])
+        a[c] = root_mean_ivar(ivar[rows[c]], M[c])
+    nspec, npix = X.shape
+    if center is not None:
+        X -= center
+    X *= a[:, np.newaxis]
+    V1 = w.sum()
+    if center is None:
+        mean = w @ X / V1
+        X -= mean
+        divisor = V1 - w @ w / V1
+    else:
+        mean = np.zeros(npix)
+        divisor = V1
+    X *= np.sqrt(w)[:, np.newaxis]
+    # numpy computes B^T B by syrk and copies one triangle to the other, so each
+    # product, and so their sum, is exactly symmetric.
+    S = np.zeros((npix, npix))
+    for c in chunks(nspec, npix):
+        B = X[c]
+        S += B.T @ B
+        if progress is not None:
+            progress("fit", c.stop, nspec)
+    S /= divisor
+    # Model rejects a diagonal entry of 0 with a ValueError about cov[0]. Such a pixel
+    # makes S singular, so fit raises as for any S that is not positive definite.
+    constant = np.flatnonzero(np.diagonal(S) == 0)
+    if constant.size:
+        raise LinAlgError(
+            f"{subject} is not positive definite: its variance at pixel {constant[0]} "
+            "is 0"
+        )
+    weighted = bool(np.any(w != 1))
+    model = Model(mean[np.newaxis], (S,), (nspec,), center=center, weighted=weighted)
+    return X, model
 
 
 def save(model: Model, path: str | os.PathLike[str]) -> None:

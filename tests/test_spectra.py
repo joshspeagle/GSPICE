@@ -8,7 +8,7 @@ from hypothesis.extra import numpy as hnp
 
 from _golden import checked, same
 from gspice import _spectra, scale, snr, unscale
-from gspice._spectra import interpolate
+from gspice._spectra import dilate, interpolate
 
 EPS = np.finfo(float).eps
 # Beyond the float64 range and below its smallest value, where long double is wider
@@ -63,6 +63,28 @@ def test_interpolation_matches_np_interp_and_keeps_good_pixels(case):
         good = np.flatnonzero(~b)
         expected = np.interp(np.flatnonzero(b), good, values[good])
         assert np.all(np.abs(row[b] - expected) <= 8 * EPS * np.abs(values[good]).max())
+
+
+def flags(*rows):
+    return np.array([[pixel == "1" for pixel in row] for row in rows])
+
+
+@pytest.mark.parametrize(
+    ("rows", "d", "expected"),
+    [
+        # A flag at an end of a row does not wrap into the next or the previous row.
+        (("00001", "00000"), 2, ("00111", "00000")),
+        (("00000", "10000"), 1, ("00000", "11000")),
+        (("01001",), 1, ("11111",)),
+        (("01010",), 0, ("01010",)),
+        (("10000", "00000"), 7, ("11111", "00000")),
+    ],
+)
+def test_dilate_flags_every_pixel_within_d_of_a_flag_in_its_row(rows, d, expected):
+    original = flags(*rows)
+    dilated = dilate(original, d)
+    assert same(dilated, flags(*expected))
+    assert not np.shares_memory(dilated, original)
 
 
 @given(spectra(), st.data())
