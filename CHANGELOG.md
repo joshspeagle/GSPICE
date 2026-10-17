@@ -15,6 +15,7 @@
 - `gspice.scale`, `gspice.unscale` and `gspice.snr`. `scale` interpolates each spectrum over its bad pixels and scales it to unit mean noise, `unscale` returns scaled values and variances to flux units, and `snr` gives the median signal-to-noise ratio of each spectrum.
 - `gspice.Model`, which holds the mean, the covariance and the training count of each S/N bin, and `gspice.save` and `gspice.load`, which write and read a model as one .npz file.
 - `gspice.pixelwise`, which predicts each pixel of each spectrum from the pixels farther than `nguard` from it, and its result `gspice.Prediction`. A model keeps the precision matrix and the guard weights of each bin after their first use.
+- `gspice.simulate`, which draws synthetic continuum-normalized spectra for tests and examples, and its result `gspice.Simulation`. The spectra have absorption lines whose depths follow two latent parameters in two populations, Gaussian noise, and optional cosmic rays, bad columns and shifted blocks. With `gaussian=True` and no artifacts they are exactly Gaussian.
 
 ### Removed
 
