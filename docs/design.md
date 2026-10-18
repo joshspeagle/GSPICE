@@ -133,7 +133,7 @@ class Blocks:
 | Dense, constant centre | `center=c` | S = Σ_s w_s x_s x_sᵀ / V1 (no mean is estimated) | N_s ≥ npix; no pixel bad in every training spectrum |
 | Low rank plus diagonal | `rank=K` | (V, Λ) = leading K eigenpairs of S; d = diag(S) − Σ_k λ_k v_k² | λ_K > 0 and every d_i > 0, so S of rank K + 1 or more: N_s − 1 ≥ K + 1 (N_s ≥ K + 1 with a constant centre); no requirement of a good pixel at every pixel |
 | S/N binned | `snr_bins=` | the chosen kind per bin, with its own m_b and N_s | per bin as above |
-| Noise-aware | `noise=True` | Σ₊ from the estimator below; with `rank=K`, (V, Λ) are its leading K eigenpairs and d_i = Σ_{k>K} max(λ_k, 0) Q_ik² | W_i > 0; every denominator below > 0; λ_K > 0 with `rank=K` |
+| Noise-aware | `noise=True` | Σ₊ from the estimator below; with `rank=K`, (V, Λ) are its leading K eigenpairs and d_i = Σ_{k>K} max(λ_k, 0) Q_ik² | two spectra good at every pixel, so W_i > 0; every denominator below > 0; λ_K > 0 with `rank=K` |
 
 Covariances are accumulated in float64, in row chunks, and are exactly symmetric. The K leading eigenpairs of S come from `eigh` of S restricted to their indices, which is exact and simple; an SVD of X or a Lanczos solver is a candidate gated optimization.
 
@@ -143,6 +143,8 @@ Covariances are accumulated in float64, in row chunks, and are exactly symmetric
 - A_si = √w_s u_si (f_si − μ_i), D1 = BᵀB with B_si = √w_s u_si, and D2 = EᵀE with E_si = w_s u_si;
 - N_i = Σ_s w_s u_si (1 − w_s/W_i) / ivar_si;
 - Σ_ij = ((AᵀA)_ij − δ_ij N_i) / (D1_ij − D2_ij (1/W_i + 1/W_j − D1_ij/(W_i W_j))).
+
+Every denominator is ≥ 0. It is 0 exactly where no spectrum is good at both pixels, or where one spectrum alone is good at either pixel. Rounding moves the second kind of 0 off 0, so `fit` requires two spectra good at every pixel before it checks the denominators. At weights that differ by a factor near 1/ε, rounding can also take a positive denominator to a small value that passes the check (Σ_ij 11% wrong at a weight ratio δ = 1e-15, measured in the review of item 5.3).
 
 The estimate Σ is unbiased element by element if (1) spectra are independent, with a common mean μ and a common signal covariance; (2) the noise has zero mean and variance 1/ivar; (3) the noise is uncorrelated between pixels and with the signal; and (4) masks, weights and ivar do not depend on the flux. Gaussianity is not needed. The outlier flags of the final mask break condition 4, and so does photon noise with ivar computed from the flux. The derivation goes in the pull request that implements the estimator (5.3). Σ₊ = Q max(λ, 0) Qᵀ, from `eigh` of Σ, is biased upward (trace +17% at npix 200 and N_s 5000, with the paper's S/N law and 2% bad pixels). At prediction, C_s = Σ₊ + diag(ν_s), or VΛVᵀ + diag(d + ν_s), with ν_si = 1/ivar_si at good pixels and 1/a_s² at bad pixels, so that P_s exists. Cost: three products of N_s·npix² and one `eigh`.
 

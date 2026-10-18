@@ -370,3 +370,38 @@ def test_a_low_rank_model_gives_the_thresholds_of_its_dense_covariance(nguard):
     # the mean of two of them.
     tol = 20 * condition(C) * EPS
     assert np.all(np.abs(thresholds - reference) <= tol * (reference + 1))
+
+
+@pytest.mark.parametrize("nguard", [3, NPIX])
+def test_a_noise_model_scans_each_spectrum_with_its_own_covariance(nguard):
+    # A noise model of singular cov[0], and spectra whose ivar differs between pixels
+    # and spectra, so that C_s does too; rows 0 to 2 have bad pixels. The reference
+    # chi2_A is infill of A with its guard ignored in the infilled flux, with ivar
+    # a_s^2 at the bad pixels, so that nu_s = 1/a_s^2 there as before. With nguard
+    # NPIX, every G covers all pixels: the prior, from C_s at A.
+    rng = np.random.default_rng(8)
+    B = rng.standard_normal((NPIX, 5))
+    model = Model(np.ones((1, NPIX)), (B @ B.T / 5,), (100,), noise=True)
+    ivar = rng.uniform(4, 16, (20, NPIX))
+    C = [model.cov[0] + np.diag(1 / row) for row in ivar]
+    flux = 1 + np.array(
+        [np.linalg.cholesky(C_s) @ rng.standard_normal(NPIX) for C_s in C]
+    )
+    mask = np.zeros(flux.shape, bool)
+    mask[0, :3] = mask[1, 37:] = mask[2, 15:22] = True
+    flux[mask] = np.nan
+    options = {"width": WIDTH, "stride": STRIDE, "nguard": nguard, "percentile": 50}
+    thresholds = fit_blocks(model, flux, ivar, mask, **options).blocks.thresholds
+    filled = infill(model, flux, ivar, mask).flux
+    a2 = np.array([np.mean(row[~m]) for row, m in zip(ivar, mask, strict=True)])
+    full = np.where(mask, a2[:, np.newaxis], ivar)
+    chi2 = np.empty((len(flux), STARTS.size))
+    for k, start in enumerate(STARTS):
+        A = (PIXELS >= start) & (PIXELS < start + WIDTH)
+        G = np.isin(PIXELS, window(start, nguard, NPIX, WIDTH))
+        chi2[:, k] = infill(model, filled, full, replace=A, ignore=G & ~A).chi2 / WIDTH
+    # As in the test of the bins above, with the largest condition number of the C_s;
+    # the mean a_s^2 here rounds otherwise than root_mean_ivar, which moves nu_s by a
+    # few eps.
+    tol = 2 * 10 * max(map(condition, C)) * EPS * (chi2.max() + 1)
+    assert np.all(np.abs(thresholds - np.percentile(chi2, 50, axis=0)) <= tol)

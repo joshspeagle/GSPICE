@@ -1,6 +1,7 @@
 import dataclasses
 import subprocess
 import sys
+import tracemalloc
 from functools import partial
 
 import numpy as np
@@ -11,6 +12,7 @@ from gspice import (
     Calibration,
     LowRank,
     Model,
+    _model,
     _predict,
     _spectra,
     calibration,
@@ -27,6 +29,7 @@ from gspice import (
     snr,
     unscale,
 )
+from gspice._linalg import precision
 
 SPECTRA = {"flux": np.ones((2, 3)), "ivar": np.ones((2, 3)), "mask": np.zeros((2, 3))}
 UNSCALE = {"x": np.zeros((2, 3)), "refscale": np.ones(2), "refmean": np.zeros(3)}
@@ -436,6 +439,11 @@ def test_an_invalid_spectrum_of_repaired_covariance_is_rejected(s, error):
                 ("12", TypeError, r"snr_bins\[0\]"),
             )
         ),
+        pytest.param({"noise": 1}, TypeError, "noise", id="noise=1"),
+        *(
+            pytest.param({"noise": True, key: value}, ValueError, "noise", id=key)
+            for key, value in (("center", 0.9), ("rank", 1), ("snr_bins", 1))
+        ),
         pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
     ],
 )
@@ -624,6 +632,131 @@ def test_a_call_validates_the_spectra_and_finds_their_bins_once(monkeypatch, fun
     monkeypatch.setattr(Model, "_bins", counted("bins", Model._bins))
     function(MODEL, np.ones((4, 3)), np.ones((4, 3)))
     assert calls == ["validate", "bins"]
+
+
+# A noise model whose C_s = 0.5 + diag(nu_s) is positive definite, with one block.
+NOISE = Model(
+    np.zeros((1, 3)),
+    (np.full((3, 3), 0.5),),
+    (10,),
+    noise=True,
+    blocks=Blocks([0], 1, 0, np.ones((1, 1))),
+)
+
+
+@pytest.mark.parametrize(
+    ("function", "expected"),
+    [
+        (partial(pixelwise, nguard=1), [0, 1, 2, 3]),
+        # The spectra with a pixel to replace, the bad pixel of row 1.
+        (infill, [1]),
+        (partial(fit_blocks, width=1, nguard=0, percentile=50), [0, 1, 2, 3]),
+        (partial(repair, nguard=1), [0, 1, 2, 3]),
+        (partial(calibration, sizes=(2, 3), rng=np.random.default_rng(0)), [0, 2, 3]),
+        (partial(noise_audit, nguard=1), [0, 1, 2, 3]),
+        # The prior needs no precision matrix.
+        (partial(pixelwise, nguard=2), []),
+    ],
+    ids=[
+        "pixelwise",
+        "infill",
+        "fit_blocks",
+        "repair",
+        "calibration",
+        "noise_audit",
+        "prior",
+    ],
+)
+def test_a_noise_model_forms_the_precision_matrix_of_each_spectrum_once_per_call(
+    monkeypatch, function, expected
+):
+    # Design section 4.2: P_s once per spectrum and call, for every operation of the
+    # call, and never P of the noise-free covariance. Chunks of two spectra. Row 1
+    # has a bad pixel, so that its two good pixels leave calibration none to
+    # condition on at the sizes 2 and 3; C_s differs between spectra, as ivar does.
+    monkeypatch.setattr(_spectra, "CHUNK", 6)
+    calls = []
+
+    def counted(S):
+        calls.append(np.diagonal(S) - 0.5)
+        return precision(S)
+
+    monkeypatch.setattr(_model, "precision", counted)
+    ivar = np.array([[1.0, 2.0, 4.0], [1.0, 0.0, 2.0], [4.0] * 3, [0.5] * 3])
+    flux = np.random.default_rng(3).standard_normal(ivar.shape)
+    function(NOISE, flux, ivar)
+    # The diagonal of C_s is 0.5 + nu_s, with nu = 1/ivar at good pixels and 1/a_s^2
+    # at the bad pixel, a_s^2 = 1.5 the mean ivar of its good pixels.
+    nu = 1 / np.where(ivar == 0, 1.5, ivar)
+    assert len(calls) == len(expected)
+    for diagonal, s in zip(calls, expected, strict=True):
+        np.testing.assert_allclose(diagonal, nu[s], rtol=2 * np.finfo(float).eps)
+    assert NOISE._cache == {}
+
+
+def test_infill_of_a_noise_model_forms_no_c_s_for_a_spectrum_without_a_replacement(
+    monkeypatch,
+):
+    # It reads no covariance there, and C_s costs npix^2 (10.2 ms per spectrum
+    # measured at npix 2400, against 0.059 ms for a model without noise).
+    calls = []
+
+    def counted(self, nu, label):
+        calls.append(label)
+        return original(self, nu, label)
+
+    original = Model._with_noise
+    monkeypatch.setattr(Model, "_with_noise", counted)
+    ivar = np.ones((4, 3))
+    ivar[[1, 3], 1] = 0.0
+    infill(NOISE, np.zeros(ivar.shape), ivar)
+    assert calls == [f"model: cov[0] + diag(nu) of row {s}" for s in (1, 3)]
+
+
+@pytest.mark.parametrize(
+    "function",
+    [
+        partial(pixelwise, nguard=1),
+        infill,
+        partial(fit_blocks, width=1, nguard=0, percentile=50),
+        partial(calibration, sizes=(1,), rng=np.random.default_rng(0)),
+        partial(noise_audit, nguard=1),
+    ],
+    ids=["pixelwise", "infill", "fit_blocks", "calibration", "noise_audit"],
+)
+def test_a_noise_model_reports_progress_after_each_spectrum(function):
+    # A noise model works in chunks of one spectrum, whose P_s takes more than a
+    # chunk of another model; repair is in its own tests.
+    calls = []
+    flux = np.random.default_rng(3).standard_normal((4, 3))
+    function(
+        NOISE, flux, np.ones(flux.shape), progress=lambda *args: calls.append(args)
+    )
+    assert [args[1:] for args in calls] == [(s, 4) for s in range(1, 5)]
+
+
+@pytest.mark.parametrize(
+    "function", [partial(pixelwise, nguard=5), infill], ids=["pixelwise", "infill"]
+)
+def test_a_noise_model_holds_the_matrices_of_one_spectrum_at_a_time(function):
+    # C_s, P_s and the guard weights of a spectrum are freed before the next C_s is
+    # formed: the peak measured 3.3 npix^2 x 8 bytes here in both, and 6.3 in
+    # pixelwise and 5.3 in infill with the previous spectrum alive.
+    npix = 200
+    rng = np.random.default_rng(0)
+    B = rng.standard_normal((npix, 20))
+    model = Model(np.ones((1, npix)), (B @ B.T / 20,), (10,), noise=True)
+    ivar = rng.uniform(1, 4, (3, npix))
+    flux = 1 + rng.standard_normal((3, npix))
+    mask = np.zeros(flux.shape, bool)
+    mask[:, 10:20] = True
+    tracemalloc.start()
+    try:
+        function(model, flux, ivar, mask)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 4.5 * npix**2 * 8
 
 
 def test_importing_gspice_loads_neither_scipy_stats_nor_scipy_interpolate():

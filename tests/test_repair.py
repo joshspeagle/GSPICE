@@ -483,6 +483,53 @@ def rng():
     return np.random.default_rng(5)
 
 
+def test_a_noise_model_follows_the_steps_with_one_precision_matrix_per_spectrum(
+    monkeypatch,
+):
+    # The noise model of the distribution of artifact_case in flux units: a_s = A at
+    # every spectrum, so nu_s = 1/A^2 at every pixel and C_s = C/A^2. The steps of the
+    # public pixelwise and infill of the noise model give its masks, and step 5 is
+    # infill of the noise model bit for bit, which forms P_s again from the same C_s.
+    model, flux, ivar, mask = artifact_case()
+    signal = (model.cov[0] - np.eye(NPIX)) / A**2
+    noise = Model(model.mean / A, (signal,), (1000,), noise=True, blocks=model.blocks)
+    case = steps(noise, flux, ivar, mask)
+    assert_margins(case)
+    monkeypatch.setattr(_spectra, "CHUNK", 4 * NPIX)
+    calls = []
+    options = {"covariance": True, "progress": lambda *args: calls.append(args)}
+    result = repair(noise, flux, ivar, mask, **OPTIONS, **options, rng=rng())
+    assert same(result.replaced, case.M) and same(result.ignored, case.ignored)
+    assert same(result.blocks, case.flagged)
+    expected = infill(
+        noise,
+        flux,
+        ivar,
+        mask,
+        replace=result.replaced,
+        ignore=result.ignored,
+        covariance=True,
+        rng=rng(),
+    )
+    assert same(arrays(result), arrays(expected))
+    for s in range(NSPEC):
+        assert same(result.covariance(s), expected.covariance(s))
+    # A noise model works in chunks of one spectrum, whatever CHUNK: after steps 1
+    # to 4 and after step 5 of each.
+    assert calls == [
+        ("repair", done, NSPEC) for done in range(1, NSPEC + 1) for _ in "15"
+    ]
+    # The dense model of the same distribution in scaled units finds the same pixels.
+    scaled = repair(model, flux, ivar, mask, **OPTIONS)
+    assert same(result.replaced, scaled.replaced)
+    assert same(result.ignored, scaled.ignored)
+    assert same(result.blocks, scaled.blocks)
+    empty = repair(noise, flux[:0], ivar[:0], mask[:0], **OPTIONS, rng=rng())
+    shapes = [array.shape for array in arrays(empty)[:8]]
+    assert shapes == [(0, NPIX)] * 4 + [(0,)] * 3 + [(0, NPIX)]
+    assert empty.blocks.shape == (0, STARTS.size)
+
+
 def test_repair_matches_r26_gp_repair():
     # Done when 1 of issue #59 (design section 14, item 4.3): r26 with max_block_iter
     # = nblock, count_on "all", dilate 1 and ivar 0 only at masked pixels, on the same

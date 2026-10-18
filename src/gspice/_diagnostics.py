@@ -9,7 +9,16 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 from ._model import Model, rebuild, sample_factor
-from ._predict import conditionals, means, predict, validated, weigh, working
+from ._predict import (
+    conditionals,
+    means,
+    noisy,
+    predict,
+    spans,
+    validated,
+    weigh,
+    working,
+)
 from ._spectra import (
     Integer,
     Progress,
@@ -18,7 +27,6 @@ from ._spectra import (
     check_choice,
     check_progress,
     check_rng,
-    chunks,
     integer,
     integers,
     items,
@@ -386,9 +394,9 @@ def noise_audit(
     the median S/N that picks the bin of s. e_i holds the astrophysical error, the noise
     propagated from the conditioning pixels and the estimation error of model, so
     E[rho_i^2] >= k_i where the identity holds, and e_i grows with S/N. Next to a bad
-    run longer than nguard, rho_i^2 can fall below k_i. A model absorbs into its
-    covariance a k_i that its training spectra share, so the z of `pixelwise` is blind
-    to it; rho is not.
+    run longer than nguard, rho_i^2 can fall below k_i. A model without noise
+    absorbs into its covariance a k_i that its training spectra share, so the z of
+    `pixelwise` is blind to it; rho is not.
 
     Parameters
     ----------
@@ -399,8 +407,9 @@ def noise_audit(
     nguard : int, optional
         The half-width of the guard window of `pixelwise` (pixels); >= 0.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra with the
-        stage "noise_audit", the number of spectra done and their total.
+        progress(stage, done, total), called after each chunk of spectra, of one
+        spectrum for a noise model, with the stage "noise_audit", the number of
+        spectra done and their total.
 
     Returns
     -------
@@ -433,13 +442,14 @@ def noise_audit(
     weigh(model, nguard, bins)
     center = 0.0 if model.center is None else model.center
     total, count = np.zeros(npix), np.zeros(npix, dtype=np.int64)
-    for rows in chunks(nspec, npix):
+    for rows in spans(model, nspec, npix):
         good = ~bad[rows]
         count += np.count_nonzero(good, axis=0)
         # The flux of pixelwise, without its var and z.
         X, a = working(model, flux[rows], ivar[rows], bad[rows], bins[rows])
         predicted = np.empty(X.shape)
-        predict(model, nguard, X, bins[rows], None, predicted, None, None)
+        cover = noisy(model, ivar[rows], bad[rows], rows.start)
+        predict(cover, nguard, X, bins[rows], None, predicted, None, None)
         to_flux(predicted, a, means(model, bins[rows]), center, out=predicted)
         # 0 at the bad pixels, whose flux and ivar are never read.
         terms = np.zeros(good.shape)
@@ -448,7 +458,7 @@ def noise_audit(
         np.multiply(terms, ivar[rows], out=terms, where=good)
         total += terms.sum(axis=0)
         # Free the arrays of this chunk before the next one is built.
-        del X, predicted, terms
+        del X, predicted, terms, cover
         if progress is not None:
             progress("noise_audit", rows.stop, nspec)
     rho = np.full(npix, np.nan)
@@ -482,9 +492,10 @@ def calibration(
     outside G = M | bad, and C_MM their full conditional covariance, and
     fs = f_s(N_s, npix - |G|, n) of `finite_sample_factor`, NaN where it is not
     defined, with N_s the n_train of the bin of the spectrum, or 1 for a model with a
-    constant centre, weights or a `LowRank` covariance, for which no factor is
+    constant centre, weights, a `LowRank` covariance or noise, for which no factor is
     derived. For held-out Gaussian spectra of a model with a derived factor,
     z2 / (n fs) then has the mean 1, so use spectra that the model was not fitted to.
+    For a noise model, the covariance is C_s of the spectrum (see `Model`).
 
     Rank the m good pixels of a spectrum from 0 to m - 1 in increasing order. With
     layout="run", M holds those of ranks start to start + n - 1, with
@@ -512,8 +523,9 @@ def calibration(
     rng : numpy.random.Generator
         The source of the masks, as above.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra with the
-        stage "calibration", the number of spectra done and their total.
+        progress(stage, done, total), called after each chunk of spectra, of one
+        spectrum for a noise model, with the stage "calibration", the number of
+        spectra done and their total.
 
     Returns
     -------
@@ -533,15 +545,16 @@ def calibration(
         None and the median number of good pixels per spectrum is below 2.
     numpy.linalg.LinAlgError
         Before the first chunk, if the covariance of a bin with a spectrum that has
-        more good pixels than the smallest size fails its check. Otherwise as in
-        `infill` with replace=M.
+        more good pixels than the smallest size fails its check; for a noise model,
+        at the spectrum. Otherwise as in `infill` with replace=M.
 
     Notes
     -----
     Cost: that of `infill` for each size: npix^3 flops for P at the first use of a bin;
     then per pattern of a chunk of max(1, 2**24 // npix) spectra, at most one per
     spectrum, |G|^3/3 + n^3/3 flops, and per spectrum 2 |G| (npix + |G|) flops. The
-    masks of a chunk take up to len(sizes) x 2^24 bytes.
+    masks of a chunk take up to len(sizes) x 2^24 bytes. A noise model forms P_s once
+    per spectrum for all sizes, npix^3 flops for a dense cov[0].
     """
     start = time.perf_counter()
     if sizes is not None:
@@ -565,25 +578,27 @@ def calibration(
     bins = model._bins(flux, ivar, bad)
     # P of each bin with a spectrum that keeps a conditioning pixel for some size
     # (m > n), before any spectrum, so that a covariance that fails its check raises
-    # at once, as in infill.
-    for b in np.unique(bins[count > min(sizes)]).tolist():
-        model._precision(b)
+    # at once, as in infill. A noise model forms P_s per spectrum.
+    if not model.noise:
+        for b in np.unique(bins[count > min(sizes)]).tolist():
+            model._precision(b)
     shape = (nspec, len(sizes))
     z2, n = np.full(shape, np.nan), np.empty(shape, dtype=np.int64)
-    for rows in chunks(nspec, npix):
+    for rows in spans(model, nspec, npix):
         X, _ = working(model, flux[rows], ivar[rows], bad[rows], bins[rows])
         index = np.arange(rows.start, rows.stop)
+        cover = noisy(model, ivar[rows], bad[rows], rows.start)
         for j, M in enumerate(_masks(bad[rows], sizes, layout, rng)):
             # chi2, dof and fs of infill with replace=M. M holds only good pixels, so
             # T = M, and dof = |M| is 0, with z2 NaN, only where no mask was drawn.
             for group, _, solution in conditionals(
-                model, X, bins[rows], index, M | bad[rows], M, M, None, False
+                cover, X, bins[rows], index, M | bad[rows], M, M, None, False
             ):
                 if solution is not None:
                     z2[index[group], j] = solution.chi2
             n[rows, j] = np.count_nonzero(M, axis=1)
         # Free the arrays of this chunk before the next one is built.
-        del X, M
+        del X, M, cover
         if progress is not None:
             progress("calibration", rows.stop, nspec)
     # Design section 4.3: the models without a derived factor report 1. M holds only

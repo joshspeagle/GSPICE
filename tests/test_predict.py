@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+from decimal import Decimal, localcontext
 from functools import partial
 
 import numpy as np
@@ -22,6 +23,7 @@ from gspice import (
 )
 from gspice._linalg import precision
 from oracle import (
+    CONTEXT,
     assert_gaussian,
     condition,
     conditional,
@@ -325,8 +327,12 @@ def test_inputs_are_unchanged_and_outputs_are_read_only_and_not_shared(name):
 
 
 @pytest.mark.parametrize("name", FUNCTIONS)
-def test_float32_and_f_ordered_inputs_give_the_result_of_a_float64_c_copy(name):
-    model, flux, ivar, mask = two_bins(1e2, center=0.9)
+@pytest.mark.parametrize("noise", [False, True], ids=["dense", "noise"])
+def test_float32_and_f_ordered_inputs_give_the_result_of_a_float64_c_copy(name, noise):
+    if noise:
+        model, flux, ivar, mask = noise_case(1e2)
+    else:
+        model, flux, ivar, mask = two_bins(1e2, center=0.9)
     function = partial(FUNCTIONS[name], model, **SETS[name])
     flux32, ivar32 = flux.astype(np.float32), ivar.astype(np.float32)
     cast = function(flux32.astype(float), ivar32.astype(float), mask)
@@ -494,18 +500,26 @@ def test_slices_and_chunks_of_infill_agree_with_one_call_to_rounding(monkeypatch
             assert same(result.covariance(s), whole.covariance(row))
 
 
+@pytest.mark.parametrize("noise", [False, True], ids=["dense", "noise"])
 @pytest.mark.parametrize("rows", [len(BINS), 2])
 def test_each_spectrum_draws_from_its_own_row_of_normals_for_any_chunk_size(
-    monkeypatch, rows
+    monkeypatch, rows, noise
 ):
     monkeypatch.setattr(_spectra, "CHUNK", rows * NPIX)
     model, flux, ivar, mask = two_bins(1e2, center=0.9)
     # With P = I, the conditional mean is 0, and the draw of a pixel in working units
     # is its normal, exactly; row 3 has a G that covers all pixels, and rows 4 and 5,
-    # one chunk of 2 rows, have no pixel to replace.
-    identity = Model(
-        MEANS, (np.eye(NPIX),) * 2, (100, 100), edges=model.edges, center=0.9
-    )
+    # one chunk of 2 rows, have no pixel to replace. A noise model of cov[0] = 0 has
+    # C_s = I where ivar is 1 at good pixels, so that a_s = 1 and nu_s = 1.
+    if noise:
+        identity = Model(MEANS[:1], (np.zeros((NPIX, NPIX)),), (100,), noise=True)
+        ivar = np.where(ivar == 0, 0.0, 1.0)
+        means = MEANS[np.zeros(BINS.size, int)]
+    else:
+        identity = Model(
+            MEANS, (np.eye(NPIX),) * 2, (100, 100), edges=model.edges, center=0.9
+        )
+        means = MEANS[BINS]
     replace = REPLACE.copy()
     replace[[4, 5]] = False
     rng = np.random.default_rng(9)
@@ -514,8 +528,11 @@ def test_each_spectrum_draws_from_its_own_row_of_normals_for_any_chunk_size(
     normals = reference.standard_normal(flux.shape)
     # Nothing else draws from rng.
     assert rng.bit_generator.state == reference.bit_generator.state
-    _, a, _ = scale(flux, ivar, mask)
-    drawn = (normals + MEANS[BINS]) / a[:, np.newaxis] + 0.9
+    if noise:
+        drawn = normals + means
+    else:
+        _, a, _ = scale(flux, ivar, mask)
+        drawn = (normals + means) / a[:, np.newaxis] + 0.9
     assert same(result.draws, np.where(replace, drawn, result.flux))
 
 
@@ -820,3 +837,148 @@ def test_fs_is_1_for_a_model_without_a_derived_factor(kind):
     model = dataclasses.replace(model, n_train=(11, 60), **kind)
     result = infill(model, flux, ivar, mask, replace=replace)
     assert same(result.fs, np.ones(len(flux)))
+
+
+def noise_case(kappa, rank=None):
+    # A noise model and spectra whose working vectors x = flux - mean are drawn from
+    # N(0, C_s) at good pixels, with the bad pixels of BAD. cov[0] is positive
+    # semi-definite with two eigenvalues 0, or a LowRank with d = 0 at every third
+    # pixel, so that only nu_s > 0 makes C_s positive definite. ivar of each spectrum
+    # and pixel is kappa times a number from 0.25 to 1, so that C_s scaled to unit
+    # diagonal has a condition number near kappa.
+    rng = np.random.default_rng(21)
+    mean = 1 + 0.1 * np.cos(PIXELS)
+    if rank is None:
+        Q, _ = np.linalg.qr(rng.standard_normal((NPIX, NPIX)))
+        values = np.logspace(0, -np.log10(kappa), NPIX)
+        values[-2:] = 0.0
+        C = (Q * values) @ Q.T
+        C = (C + C.T) / 2
+    else:
+        V, values, d = random_low_rank(NPIX, rank, kappa, 21)
+        d[::3] = 0.0
+        C = LowRank(V, values, d)
+    model = Model(mean[np.newaxis], (C,), (100,), noise=True)
+    ivar = kappa * rng.uniform(0.25, 1, (BINS.size, NPIX))
+    mask = np.zeros(ivar.shape, bool)
+    for s, pixels, in_mask in BAD:
+        if in_mask:
+            mask[s, pixels] = True
+        else:
+            ivar[s, pixels] = 0.0
+    x = np.array(
+        [
+            np.linalg.cholesky(dense(C_s)) @ rng.standard_normal(NPIX)
+            for C_s in noisy(model, ivar, mask)[0]
+        ]
+    )
+    flux = x + mean
+    flux[mask | (ivar == 0)] = np.nan
+    ivar[mask] = np.inf
+    return model, flux, ivar, mask
+
+
+def noisy(model, ivar, mask):
+    # C_s = cov[0] + diag(nu_s) of each spectrum as the model forms it in float64, and
+    # its exact rows of Decimal, with nu_si = 1/ivar_si at good pixels and 1/a_s^2 at
+    # bad ones (design section 4.1).
+    bad = mask | (ivar == 0)
+    a = scale(np.ones(ivar.shape), ivar, mask)[1]
+    nu = np.divide(1.0, ivar, out=np.empty(ivar.shape), where=~bad)
+    nu[bad] = np.repeat(1 / a**2, NPIX).reshape(ivar.shape)[bad]
+    C = model.cov[0]
+    floats, rows = [], []
+    for v in nu:
+        if isinstance(C, LowRank):
+            floats.append(LowRank(C.vectors, C.values, C.diag + v))
+            exact_rows = low_rank(C.vectors, C.values, C.diag)
+        else:
+            floats.append(C + np.diag(v))
+            exact_rows = [[Decimal(c) for c in row] for row in C.tolist()]
+        with localcontext(CONTEXT):
+            for i, value in enumerate(v.tolist()):
+                exact_rows[i][i] += Decimal(value)
+        rows.append(exact_rows)
+    return floats, rows
+
+
+@pytest.mark.filterwarnings("error")
+@pytest.mark.parametrize("nguard", [2, NPIX - 1])
+@pytest.mark.parametrize("kappa", [1e2, 1e8])
+@pytest.mark.parametrize("rank", [None, 2], ids=["dense", "low-rank"])
+def test_pixelwise_of_a_noise_model_matches_the_60_digit_reference_of_each_c_s(
+    rank, kappa, nguard
+):
+    model, flux, ivar, mask = noise_case(kappa, rank)
+    result = pixelwise(model, flux, ivar, mask, nguard=nguard)
+    bad = mask | (ivar == 0)
+    # x = ftilde - mean in flux units: scale with a_s = 1.
+    X, _, _ = scale(flux, np.ones(flux.shape), bad, refmean=model.mean[0])
+    n_cond = [NPIX - len(window(i, nguard, NPIX)) for i in range(NPIX)]
+    for s, (C_s, exact_s) in enumerate(zip(*noisy(model, ivar, mask), strict=True)):
+        xhat, var = guard_conditional(exact_s, nguard, X[[s]], range(NPIX))
+        f, z = xhat[0] + model.mean[0], (X[s] - xhat[0]) / np.sqrt(var)
+        # As in the test of pixelwise above, with a_s = 1 and no centre: the flux
+        # rounds once when the mean is added.
+        tol = tolerance(C_s, n_cond)
+        L = np.linalg.cholesky(dense(C_s))
+        D = max(1, np.linalg.norm(np.linalg.solve(L, X[s])) / np.sqrt(NPIX))
+        sigma = np.sqrt(var)
+        assert np.all(np.abs(result.flux[s] - f) <= tol * D * sigma + EPS * np.abs(f))
+        assert np.all(np.abs(result.var[s] - var) <= (tol + EPS) * var)
+        good = ~bad[s]
+        assert np.all(
+            np.abs(result.z[s, good] - z[good]) <= (tol * (D + np.abs(z)))[good]
+        )
+    np.testing.assert_array_equal(np.isnan(result.z), bad)
+
+
+@pytest.mark.filterwarnings("error")
+@pytest.mark.parametrize("kappa", [1e2, 1e8])
+@pytest.mark.parametrize("rank", [None, 2], ids=["dense", "low-rank"])
+def test_infill_of_a_noise_model_matches_the_60_digit_reference_of_each_c_s(
+    rank, kappa
+):
+    model, flux, ivar, mask = noise_case(kappa, rank)
+    result = infill(
+        model, flux, ivar, mask, replace=REPLACE, ignore=IGNORE, covariance=True
+    )
+    bad = mask | (ivar == 0)
+    G, T = REPLACE | IGNORE | bad, REPLACE & ~bad
+    X, _, _ = scale(flux, np.ones(flux.shape), bad, refmean=model.mean[0])
+    for s, (C_s, exact_s) in enumerate(zip(*noisy(model, ivar, mask), strict=True)):
+        pixels, cov = result.covariance(s)
+        g, t = np.flatnonzero(G[s]), np.flatnonzero(T[s])
+        mean, reference, chi2 = conditional(exact_s, g, X[[s]], t)
+        at = np.flatnonzero(REPLACE[s, g])
+        reference = reference[np.ix_(at, at)]
+        f, v = mean[0, at] + model.mean[0, pixels], np.diagonal(reference)
+        # As in the test of infill above, with a_s = 1 and no centre. Row 3 has a G
+        # that covers all pixels: the prior N(0, C_s).
+        tol = tolerance(C_s, NPIX - g.size)
+        sigma = np.sqrt(v)
+        assert np.all(
+            np.abs(result.flux[s, pixels] - f) <= tol * sigma + EPS * np.abs(f)
+        )
+        assert np.all(np.abs(result.var[s, pixels] - v) <= (tol + EPS) * v)
+        assert np.all(np.abs(cov - reference) <= (tol + EPS) * np.outer(sigma, sigma))
+        assert abs(result.chi2[s] - chi2[0]) <= tol * (chi2[0] + t.size)
+    # No factor is derived for a noise model (design section 4.3).
+    assert same(result.fs, np.ones(len(flux)))
+    with pytest.raises(ValueError, match=r"^inflate: .*, got a noise model with "):
+        infill(model, flux, ivar, mask, inflate=True)
+
+
+@pytest.mark.parametrize("name", FUNCTIONS)
+def test_a_c_s_that_fails_the_check_of_its_precision_matrix_names_its_row(name):
+    # cov[0] = 1 at every entry: with nu_s = 1e-15, C_s scaled to unit diagonal has a
+    # reciprocal condition number near 1e-15, below 1e-13 (decision A26); with
+    # nu_s = 1, it passes. Pixel 0 is bad, so that infill has a pixel to replace.
+    model = Model(np.zeros((1, NPIX)), (np.ones((NPIX, NPIX)),), (10,), noise=True)
+    ivar = np.ones((4, NPIX))
+    ivar[2] = 1e15
+    mask = np.zeros(ivar.shape, bool)
+    mask[:, 0] = True
+    message = r"^model: cov\[0\] \+ diag\(nu\) of row 2 is numerically singular: "
+    with pytest.raises(LinAlgError, match=message):
+        FUNCTIONS[name](model, np.zeros(ivar.shape), ivar, mask)

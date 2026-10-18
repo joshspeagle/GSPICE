@@ -184,17 +184,19 @@ PIXELS = np.arange(NPIX)
 
 
 def spectra(rank=None):
-    # Seven spectra and a model, dense or of the rank. Rows 1 to 5 have bad pixels: an
-    # interior run, runs at both ends, isolated pixels, all but 3 pixels, and 2 pixels
-    # of ivar 0, so that their good pixels number 9, 8, 9, 3 and 10, and 12 in rows 0
-    # and 6.
-    if rank is None:
+    # Seven spectra and a model, dense, of the rank, or for rank "noise" a noise model,
+    # with ivar from 0.5 to 2, so that C_s differs between spectra. Rows 1 to 5 have
+    # bad pixels: an interior run, runs at both ends, isolated pixels, all but 3
+    # pixels, and 2 pixels of ivar 0, so that their good pixels number 9, 8, 9, 3 and
+    # 10, and 12 in rows 0 and 6.
+    rng = np.random.default_rng(14)
+    if rank is None or rank == "noise":
         C = random_spd(NPIX, 1e2, 0)
     else:
         C = LowRank(*random_low_rank(NPIX, rank, 1e2, 0))
-    model = Model(np.zeros((1, NPIX)), (C,), (30,))
-    flux = np.random.default_rng(14).standard_normal((7, NPIX))
-    ivar = np.ones((7, NPIX))
+    model = Model(np.zeros((1, NPIX)), (C,), (30,), noise=rank == "noise")
+    flux = rng.standard_normal((7, NPIX))
+    ivar = rng.uniform(0.5, 2, (7, NPIX)) if model.noise else np.ones((7, NPIX))
     mask = np.zeros((7, NPIX), bool)
     mask[1, 4:7] = True
     mask[2, [0, 1, 10, 11]] = True
@@ -226,7 +228,7 @@ def fields(result):
 
 @pytest.mark.parametrize("rows", [None, 2], ids=["one-chunk", "2-row-chunks"])
 @pytest.mark.parametrize("layout", ["run", "scattered"])
-@pytest.mark.parametrize("rank", [None, 3], ids=["dense", "low-rank"])
+@pytest.mark.parametrize("rank", [None, 3, "noise"], ids=["dense", "low-rank", "noise"])
 def test_calibration_is_infill_of_the_documented_masks_for_any_chunk_size(
     monkeypatch, rank, layout, rows
 ):
@@ -508,13 +510,17 @@ NSPEC = 7
 
 
 def audited(rank=None):
-    # A model of 40 simulated spectra, of the rank, and 7 others in float32 with bad
-    # pixels: pixel 3 in every spectrum, by mask in rows 0 to 3 and by ivar 0 in rows 4
-    # to 6, and pixel 8 in every spectrum but row 2. Flux is NaN at the bad pixels and ivar inf at the
-    # masked ones, so that a read of either shows.
+    # A model of 40 simulated spectra, of the rank, or for rank "noise" a noise model,
+    # and 7 others in float32 with bad pixels: pixel 3 in every spectrum, by mask in
+    # rows 0 to 3 and by ivar 0 in rows 4 to 6, and pixel 8 in every spectrum but row
+    # 2. Flux is NaN at the bad pixels and ivar inf at the masked ones, so that a read
+    # of either shows.
     rng = np.random.default_rng(13)
     train = simulate(40, NPIX, rng=rng)
-    model, _ = fit(train.flux, train.ivar, nsigma=(), rank=rank)
+    if rank == "noise":
+        model, _ = fit(train.flux, train.ivar, nsigma=(), noise=True)
+    else:
+        model, _ = fit(train.flux, train.ivar, nsigma=(), rank=rank)
     test = simulate(NSPEC, NPIX, rng=rng)
     flux, ivar = test.flux.astype(np.float32), test.ivar.astype(np.float32)
     mask = np.zeros(flux.shape, bool)
@@ -527,7 +533,7 @@ def audited(rank=None):
 
 
 @pytest.mark.filterwarnings("error")
-@pytest.mark.parametrize("rank", [None, 3], ids=["dense", "low-rank"])
+@pytest.mark.parametrize("rank", [None, 3, "noise"], ids=["dense", "low-rank", "noise"])
 def test_rho_is_the_rms_residual_in_reported_sigmas_over_the_good_spectra(
     monkeypatch, rank
 ):
