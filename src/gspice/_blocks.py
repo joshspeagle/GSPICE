@@ -2,7 +2,7 @@ import logging
 import math
 import time
 from fractions import Fraction
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import numpy as np
 from numpy.linalg import LinAlgError
@@ -11,7 +11,7 @@ from scipy.linalg import lapack
 
 from ._linalg import factor_pattern, factor_prior
 from ._model import NGUARD_MAX, Blocks, Model
-from ._predict import infill, validated
+from ._predict import filled, validated, working
 from ._spectra import (
     Integer,
     Progress,
@@ -20,7 +20,7 @@ from ._spectra import (
     chunks,
     integer,
     real,
-    root_mean_ivar,
+    to_flux,
     to_working,
 )
 
@@ -44,7 +44,8 @@ def fit_blocks(
     Block k holds the width pixels from starts[k], with the starts 0, stride,
     2 stride, ... <= npix - width, and npix - width if the last of them is smaller:
     31 blocks at npix 2400 with the defaults. fit_blocks first replaces the bad pixels
-    by their conditional mean with `infill`, and runs no detection by z (paper l.510).
+    by their conditional mean as `infill` does, and runs no detection by z (paper
+    l.510).
     For a spectrum in S/N bin b, let x be the working vector of its infilled flux (see
     `Model`), P the inverse of cov[b], A a block, G the pixels within nguard of A,
     clipped at the ends, and O the pixels outside G. Then
@@ -112,10 +113,11 @@ def fit_blocks(
     Cost: npix^3 flops for P at the first use of a bin, then |G|^3/3 flops per bin and
     block, and about 2 sum_A |G| npix flops per spectrum, plus the `infill` of the bad
     pixels. The factors of all bins take nbin sum_A |G|^2 x 8 bytes during the scan:
-    8.8 MB per bin at npix 2400 with the defaults, and 649 MB at stride 1. `infill`
-    holds its outputs for all spectra, about 19 bytes per pixel, and the scan keeps
-    their flux. The new model shares the arrays of model, its precision matrices and
-    its guard weights (see `Model`).
+    8.8 MB per bin at npix 2400 with the defaults, and 649 MB at stride 1. Beyond the
+    inputs and their float64 copies if they are long double, fit_blocks holds a bool
+    array of the input shape, chi2 of the spectra of one bin (nblock float64 per
+    spectrum), and a few float64 arrays of one chunk of max(1, 2**24 // npix) spectra. The new model shares the arrays of model, its
+    precision matrices and its guard weights (see `Model`).
     """
     start = time.perf_counter()
     width = integer(width, "width", 1)
@@ -147,12 +149,11 @@ def fit_blocks(
             )
     # A stride above npix gives the starts of npix, and keeps arange in int64.
     starts = np.append(np.arange(0, npix - width, min(stride, npix)), npix - width)
-    # The factors of every bin before any spectrum, so that a covariance that fails a
-    # check raises at once; infill checks P of the bins with bad pixels likewise. One
-    # call on all spectra, so that its messages name the rows of the caller.
+    # The factors of every bin, and P of the bins with bad pixels for their infill,
+    # before any spectrum, so that a covariance that fails a check raises at once.
     factors = [block_factors(model, b, starts, width, nguard) for b in range(nbin)]
-    filled = infill(model, flux, ivar, mask).flux
-    center = 0.0 if model.center is None else model.center
+    for b in np.unique(bins[bad.any(axis=1)]).tolist():
+        model._precision(b)
     thresholds = np.empty((nbin, starts.size))
     done = 0
     for b in range(nbin):
@@ -160,10 +161,9 @@ def fit_blocks(
         chi2 = np.empty((rows.size, starts.size))
         for c in chunks(rows.size, npix):
             spectra = rows[c]
-            x = filled[spectra]
-            a = root_mean_ivar(ivar[spectra], bad[spectra])
-            to_working(x, a, center, model.mean[b])
-            chi2[c] = block_chi2(factors[b], x)
+            chi2[c] = block_chi2(
+                factors[b], _scan_vectors(model, b, flux, ivar, bad, spectra)
+            )
             done += spectra.size
             if progress is not None:
                 progress("fit_blocks", done, nspec)
@@ -175,6 +175,28 @@ def fit_blocks(
         time.perf_counter() - start,
     )
     return model._with_blocks(Blocks(starts, width, nguard, thresholds))
+
+
+def _scan_vectors(
+    model: Model,
+    b: int,
+    flux: NDArray[Any],
+    ivar: NDArray[Any],
+    bad: NDArray[np.bool_],
+    spectra: NDArray[np.intp],
+) -> NDArray[np.float64]:
+    # The working vectors x of the infilled flux of the spectra of bin b.
+    bins = np.full(spectra.size, b)
+    G = bad[spectra]
+    X, a = working(model, flux[spectra], ivar[spectra], G, bins)
+    X = filled(model, X, bins, spectra, G, G)
+    # Through flux units, as the docstring of fit_blocks defines x.
+    center = 0.0 if model.center is None else model.center
+    x = np.array(flux[spectra], dtype=np.float64)
+    to_flux(X, a, model.mean[b], center, out=X)
+    x[G] = X[G]
+    to_working(x, a, center, model.mean[b])
+    return x
 
 
 class BlockFactor(NamedTuple):

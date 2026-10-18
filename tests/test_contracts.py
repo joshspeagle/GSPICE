@@ -8,6 +8,8 @@ from gspice import (
     Blocks,
     Calibration,
     Model,
+    _predict,
+    _spectra,
     calibration,
     finite_sample_factor,
     fit,
@@ -168,7 +170,7 @@ def test_an_invalid_argument_of_pixelwise_is_rejected(changes, error, name):
 )
 def test_an_invalid_argument_of_noise_audit_is_rejected(changes, error, name):
     arguments = {"model": MODEL} | SPECTRA | changes
-    # Zero spectra, so that pixelwise, which repeats these checks, never runs.
+    # Zero spectra, so that no chunk runs.
     for key in ("flux", "ivar", "mask"):
         arguments[key] = arguments[key][:0]
     with pytest.raises(error, match=f"^{name}: "):
@@ -571,3 +573,33 @@ def test_an_invalid_argument_of_finite_sample_factor_is_rejected(
 ):
     with pytest.raises(error, match=f"^{message}$"):
         finite_sample_factor(*arguments)
+
+
+@pytest.mark.parametrize(
+    "function",
+    [
+        partial(pixelwise, nguard=1),
+        infill,
+        partial(fit_blocks, width=2, percentile=50),
+        partial(repair, nguard=1, blockwise=False),
+        partial(calibration, sizes=(1,), rng=np.random.default_rng(0)),
+        partial(noise_audit, nguard=1),
+    ],
+    ids=["pixelwise", "infill", "fit_blocks", "repair", "calibration", "noise_audit"],
+)
+def test_a_call_validates_the_spectra_and_finds_their_bins_once(monkeypatch, function):
+    # Chunks of one spectrum, so that a check or a binning per chunk shows.
+    monkeypatch.setattr(_spectra, "CHUNK", 3)
+    calls = []
+
+    def counted(name, original):
+        def wrapper(*args, **kwargs):
+            calls.append(name)
+            return original(*args, **kwargs)
+
+        return wrapper
+
+    monkeypatch.setattr(_predict, "validate", counted("validate", _predict.validate))
+    monkeypatch.setattr(Model, "_bins", counted("bins", Model._bins))
+    function(MODEL, np.ones((4, 3)), np.ones((4, 3)))
+    assert calls == ["validate", "bins"]
