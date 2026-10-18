@@ -808,7 +808,7 @@ def filled(
     result = X.copy()
     T = np.zeros(M.shape, dtype=bool)
     for group, pixels, solution in conditionals(
-        model, X, bins, rows, G, M, T, None, covariance=False, variance=True
+        model, X, bins, rows, G, M, T, None, covariance=False, variance=False
     ):
         if solution is not None:
             result[np.ix_(group, pixels)] = solution.mean
