@@ -158,22 +158,26 @@ def to_flux(
     return f
 
 
-def median_snr(
+def chunked_snr(
     flux: NDArray[Any], ivar: NDArray[Any], bad: NDArray[np.bool_]
 ) -> NDArray[np.float64]:
-    good = ~bad
-    # Bad pixels sort last as inf, so the median indexes the first n values, with the
-    # (a + b) / 2 of np.median; np.nanmedian loops over rows in Python for npix >= 600.
-    values = np.full(good.shape, np.inf)
-    np.sqrt(ivar, out=values, where=good, dtype=np.float64)
-    np.multiply(flux, values, out=values, where=good, dtype=np.float64)
-    values.sort(axis=1)
-    n = np.count_nonzero(good, axis=1)
-    r = np.arange(n.size)
-    # The sort may order -0.0 and +0.0, which are equal, either way, and on some
-    # platforms differently on each call; + 0.0 turns a median of -0.0 into +0.0.
-    low, high = values[r, (n - 1) // 2], values[r, n // 2]
-    median: NDArray[np.float64] = (low + high) / 2 + 0.0
+    # The S/N of snr per chunk of rows. A row without a good pixel gets inf.
+    median = np.empty(len(flux))
+    for rows in chunks(*flux.shape):
+        good = ~bad[rows]
+        # Bad pixels sort last as inf, so the median indexes the first n values, with
+        # the (a + b) / 2 of np.median; np.nanmedian loops over rows in Python for
+        # npix >= 600.
+        values = np.full(good.shape, np.inf)
+        np.sqrt(ivar[rows], out=values, where=good, dtype=np.float64)
+        np.multiply(flux[rows], values, out=values, where=good, dtype=np.float64)
+        values.sort(axis=1)
+        n = np.count_nonzero(good, axis=1)
+        r = np.arange(n.size)
+        # The sort may order -0.0 and +0.0, which are equal, either way, and on some
+        # platforms differently on each call; + 0.0 turns a median of -0.0 into +0.0.
+        low, high = values[r, (n - 1) // 2], values[r, n // 2]
+        median[rows] = (low + high) / 2 + 0.0
     return median
 
 
@@ -340,10 +344,7 @@ def snr(
     """
     flux, ivar, bad = validate(flux, ivar, mask)
     require_good_pixel(bad)
-    out = np.empty(flux.shape[0])
-    for rows in chunks(*flux.shape):
-        out[rows] = median_snr(flux[rows], ivar[rows], bad[rows])
-    return out
+    return chunked_snr(flux, ivar, bad)
 
 
 def as_array(value: object, name: str) -> NDArray[Any]:

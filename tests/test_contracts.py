@@ -424,6 +424,18 @@ def test_an_invalid_spectrum_of_repaired_covariance_is_rejected(s, error):
         pytest.param({"rank": 3}, ValueError, "rank", id="rank=3"),
         pytest.param({"rank": 1.0}, TypeError, "rank", id="rank=1.0"),
         pytest.param({"rank": True}, TypeError, "rank", id="rank=True"),
+        *(
+            pytest.param({"snr_bins": value}, error, name, id=f"snr_bins={value!r}")
+            for value, error, name in (
+                (0, ValueError, "snr_bins"),
+                (True, TypeError, "snr_bins"),
+                (2.0, TypeError, "snr_bins"),
+                ((), ValueError, "snr_bins"),
+                ((2.0, 1.0), ValueError, "snr_bins"),
+                ((1.0, np.nan), ValueError, r"snr_bins\[1\]"),
+                ("12", TypeError, r"snr_bins\[0\]"),
+            )
+        ),
         pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
     ],
 )
