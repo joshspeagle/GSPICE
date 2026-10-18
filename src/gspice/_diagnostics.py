@@ -555,7 +555,8 @@ def calibration(
     |G|^3/3 flops, or n^3/3 where G covers all pixels, and per spectrum
     2 |G| (npix + |G|) flops. The masks of a chunk take up to len(sizes) x 2^24
     bytes. A noise model forms P_s once per spectrum for all sizes, npix^3 flops for a
-    dense cov[0] or npix^2 K for a `LowRank` of rank K.
+    dense cov[0]; a `LowRank` cov[0] forms none, and costs per spectrum and size as in
+    `infill`, with M = T.
     """
     start = time.perf_counter()
     if sizes is not None:

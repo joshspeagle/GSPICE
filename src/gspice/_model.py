@@ -293,7 +293,8 @@ class Model:
     weighted: bool
     blocks: Blocks | None
     _cache: dict[tuple[str, int], Any] = field(init=False, repr=False)
-    # The name of cov[0] in messages, for the model of one spectrum of a noise model.
+    # The name of cov[0] in messages. It is set only on the model of one spectrum of a
+    # noise model, which it marks for the low-rank route of the infills.
     _label: str | None = field(init=False, repr=False)
 
     # Written by hand because the parameters take more than the fields store: any
