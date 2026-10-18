@@ -119,9 +119,11 @@ def root_mean_ivar(ivar: NDArray[Any], bad: NDArray[np.bool_]) -> NDArray[np.flo
     # numpy sums a contiguous row pairwise and a strided axis sequentially. As a
     # C-contiguous float64 array, ivar of every dtype and layout sums pairwise in
     # float64, which gives the 2022 refscale of a C-contiguous float64 ivar bit for bit.
-    iv = np.ascontiguousarray(ivar, dtype=np.float64)
+    # np.array always copies, so zeroing the bad pixels leaves ivar as it is.
+    iv = np.array(ivar, dtype=np.float64, order="C")
+    iv[bad] = 0.0
     a: NDArray[np.float64] = np.sqrt(
-        np.where(bad, 0.0, iv).sum(axis=1) / np.count_nonzero(~bad, axis=1)
+        iv.sum(axis=1) / (bad.shape[1] - np.count_nonzero(bad, axis=1))
     )
     return a
 
