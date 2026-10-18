@@ -786,6 +786,7 @@ Each line is one issue, one branch and one pull request with a single goal; line
 - Docs: Sphinx with the theme chosen in the docs phase (S11.9), built in CI with `sphinx-build -W`; background, glossary, SVG schematics in currentColor, figures built from data.
 - Tutorials and examples, after the docs.
 - Release preparation: CITATION.cff, .zenodo.json, version, licence wording, the Python floor against end-of-life dates; the lead approves before any tag, release or upload.
+- Detection of long shifted regions in `repair` (#68): the block pass rarely flags the interior of a shift longer than a block. This departs from r26 and from section 5.4, so it needs its own adversarial review.
 - IDL (`pro/`) and Julia (`julia/`) updated and modernized, last.
 
 ## 15. Worked examples
