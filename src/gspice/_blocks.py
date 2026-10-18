@@ -124,8 +124,8 @@ def fit_blocks(
     precision matrices and its guard weights (see `Model`). A noise model forms P_s,
     npix^3 flops for a dense cov[0] or npix^2 K for a `LowRank` of rank K, and the
     factors of the blocks for each spectrum, unless every block covers all pixels with
-    its guard and, for a dense cov[0], the spectrum has no bad pixel: the infill of a
-    `LowRank` forms no P_s (see `infill`).
+    its guard: the infill of the bad pixels then forms no P_s, and costs as in
+    `infill`.
     """
     start = time.perf_counter()
     width = integer(width, "width", 1)

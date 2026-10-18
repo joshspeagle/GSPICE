@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import NamedTuple
 
 import numpy as np
@@ -19,9 +20,11 @@ class Conditional(NamedTuple):
     draws: NDArray[np.float64] | None
 
 
-def precision(S: NDArray[np.float64]) -> NDArray[np.float64]:
-    # S is symmetric, so S.T is S, and it is F-contiguous when S is C-contiguous: f2py
-    # then copies it without a transpose.
+def cholesky(S: NDArray[np.float64]) -> NDArray[np.float64]:
+    # The lower Cholesky factor L of S, F-ordered, with the check of precision
+    # (decision A26) on S. S is symmetric, so S.T is S, and it is F-contiguous when S
+    # is C-contiguous: f2py then copies it without a transpose.
+    L: NDArray[np.float64]
     L, info = lapack.dpotrf(S.T, lower=1)
     if info:
         raise LinAlgError(
@@ -34,8 +37,12 @@ def precision(S: NDArray[np.float64]) -> NDArray[np.float64]:
             f"numerically singular: rcond = {rcond:.2g} for the matrix scaled to unit "
             f"diagonal, below {MIN_RCOND:.0e}"
         )
+    return L
+
+
+def precision(S: NDArray[np.float64]) -> NDArray[np.float64]:
     P: NDArray[np.float64]
-    P, _ = lapack.dpotri(L, lower=1, overwrite_c=1)
+    P, _ = lapack.dpotri(cholesky(S), lower=1, overwrite_c=1)
     _mirror(P)
     # P is exactly symmetric, so its transpose is P as a C-contiguous view.
     return P.T
@@ -229,6 +236,56 @@ def solve_pattern(
 ) -> Conditional:
     # variance=False skips the inverse of R_MM, |M|^3/3 flops, and var is then NaN;
     # covariance=True needs variance=True.
+    def blocks(
+        index: NDArray[np.intp], X0: NDArray[np.float64]
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        return P[np.ix_(index, index)], P[index] @ X0.T
+
+    return _conditional(blocks, G, M, T, X, normals, covariance, variance)
+
+
+def solve_factor(
+    L: NDArray[np.float64],
+    G: NDArray[np.bool_],
+    M: NDArray[np.bool_],
+    T: NDArray[np.bool_],
+    X: NDArray[np.float64],
+    normals: NDArray[np.float64] | None = None,
+    covariance: bool = False,
+    variance: bool = True,
+) -> Conditional:
+    # solve_pattern from the lower Cholesky factor L of C, without P (design section
+    # 12, (e)): with Y = L^-1 E_G, the columns of L^-1 at G, P_GG = Y^T Y and
+    # P_{G,:} x0 = Y^T (L^-1 x0). L^-1 is lower triangular, so the rows of Y above the
+    # first pixel g0 of G are 0, and Y needs only the factor L[g0:, g0:].
+    def blocks(
+        index: NDArray[np.intp], X0: NDArray[np.float64]
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        g0 = int(np.min(index))
+        E = np.zeros((L.shape[0] - g0, index.size), order="F")
+        E[index - g0, np.arange(index.size)] = 1.0
+        Y, _ = lapack.dtrtrs(L[g0:, g0:], E, lower=1, overwrite_b=1)
+        Z, _ = lapack.dtrtrs(L, X0.T, lower=1)
+        return Y.T @ Y, Y.T @ Z[g0:]
+
+    return _conditional(blocks, G, M, T, X, normals, covariance, variance)
+
+
+def _conditional(
+    blocks: Callable[
+        [NDArray[np.intp], NDArray[np.float64]],
+        tuple[NDArray[np.float64], NDArray[np.float64]],
+    ],
+    G: NDArray[np.bool_],
+    M: NDArray[np.bool_],
+    T: NDArray[np.bool_],
+    X: NDArray[np.float64],
+    normals: NDArray[np.float64] | None,
+    covariance: bool,
+    variance: bool,
+) -> Conditional:
+    # solve_pattern with blocks(index, X0) giving P_GG and P_{G,:} X0^T in the order
+    # of index.
     nspec = X.shape[0]
     m = np.count_nonzero(M)
     if m == 0:
@@ -245,12 +302,13 @@ def solve_pattern(
     )
     a = index.size - m
     t = index.size - np.count_nonzero(T)
-    R = factor_pattern(P[np.ix_(index, index)])
     # x0 is x with its entries in G set to 0, so that no value in G enters the mean
     # and an outlier there cannot cancel.
     X0 = X.copy()
     X0[:, G] = 0.0
-    y, _ = lapack.dtrtrs(R, P[index] @ X0.T, lower=1)
+    PGG, PX0 = blocks(index, X0)
+    R = factor_pattern(PGG)
+    y, _ = lapack.dtrtrs(R, PX0, lower=1)
     RMM = R[a:, a:]
     # mu_M = -(R^-T y)_M = -R_MM^-T y_M, because R^-T is upper triangular.
     mean, _ = lapack.dtrtrs(RMM, -y[a:], lower=1, trans=1)

@@ -15,6 +15,7 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.linalg import eigh, issymmetric
 
 from ._linalg import (
+    cholesky,
     guard_solutions,
     guard_weights,
     low_rank_variances,
@@ -435,6 +436,29 @@ class Model:
             P.flags.writeable = False
             self._cache["precision", b] = P
         return P
+
+    def _conditioner(
+        self, b: int, C: NDArray[np.float64]
+    ) -> tuple[NDArray[np.float64] | None, NDArray[np.float64] | None]:
+        # (P, None) where a step of the call formed P of C, the dense cov[b], else
+        # (None, L) with L its lower Cholesky factor and the check of P: the infills
+        # of the model of one spectrum of a noise model (design section 12, (e)).
+        P: NDArray[np.float64] | None = self._cache.get(("precision", b))
+        if P is not None:
+            return P, None
+        L: NDArray[np.float64] | None = self._cache.get(("factor", b))
+        if L is None:
+            start = time.perf_counter()
+            try:
+                L = cholesky(C)
+            except LinAlgError as error:
+                raise LinAlgError(f"{self._name(b)} is {error}") from None
+            _logger.debug(
+                "cov[%d]: Cholesky factor in %.3f s", b, time.perf_counter() - start
+            )
+            L.flags.writeable = False
+            self._cache["factor", b] = L
+        return None, L
 
     def _bins(
         self, flux: NDArray[Any], ivar: NDArray[Any], bad: NDArray[np.bool_]

@@ -6,6 +6,7 @@ from numpy.linalg import LinAlgError
 
 from gspice import _linalg
 from gspice._linalg import (
+    cholesky,
     group_rows,
     guard_means,
     guard_solutions,
@@ -13,6 +14,7 @@ from gspice._linalg import (
     precision,
     prior_chi2,
     prior_draws,
+    solve_factor,
     solve_low_rank,
     solve_pattern,
     woodbury,
@@ -200,12 +202,21 @@ def draw_covariance(solve, M, X):
     return D.T @ D
 
 
+def solver(route, C):
+    # solve_pattern from P, or the same conditional from the Cholesky factor of C.
+    if route == "factor":
+        return functools.partial(solve_factor, cholesky(C))
+    return functools.partial(solve_pattern, precision(C))
+
+
+@pytest.mark.parametrize("route", ["precision", "factor"])
 @pytest.mark.parametrize("pattern", PATTERNS)
 @pytest.mark.parametrize("name", MATRICES)
-def test_pattern_solve_matches_the_reference(name, pattern):
-    C, P, X, tol = case(name)
+def test_pattern_solve_matches_the_reference(name, pattern, route):
+    C, _, X, tol = case(name)
     G, M, T = (mask(pixels) for pixels in PATTERNS[pattern])
-    solution = solve_pattern(P, G, M, T, X, covariance=True)
+    solve = solver(route, C)
+    solution = solve(G, M, T, X, covariance=True)
     mean, cov, chi2 = conditional(C, np.flatnonzero(G), X, np.flatnonzero(T))
     at = np.flatnonzero(M[G])
     mean, cov = mean[:, at], cov[np.ix_(at, at)]
@@ -217,19 +228,21 @@ def test_pattern_solve_matches_the_reference(name, pattern):
     np.testing.assert_array_equal(solution.cov, solution.cov.T)
     np.testing.assert_array_equal(np.diagonal(solution.cov), solution.var)
     assert np.max(np.abs(solution.chi2 - chi2) / (chi2 + np.count_nonzero(T))) <= tol
-    draws = draw_covariance(functools.partial(solve_pattern, P, G, M, T), M, X)
+    draws = draw_covariance(functools.partial(solve, G, M, T), M, X)
     assert np.max(np.abs(draws - cov) / scale) <= tol
 
 
-def test_pattern_solve_never_reads_the_data_in_G_outside_T():
-    _, P, X, *_ = case("spd1e5")
+@pytest.mark.parametrize("route", ["precision", "factor"])
+def test_pattern_solve_never_reads_the_data_in_G_outside_T(route):
+    C, _, X, *_ = case("spd1e5")
+    solve = solver(route, C)
     G, M, T = (mask(pixels) for pixels in PATTERNS["run"])
     normals = np.random.default_rng(2).standard_normal((len(X), np.sum(M)))
-    expected = solve_pattern(P, G, M, T, X, normals, covariance=True)
+    expected = solve(G, M, T, X, normals, covariance=True)
     X = X.copy()
     X[:, G & ~T] = np.nan
     for actual, value in zip(
-        solve_pattern(P, G, M, T, X, normals, covariance=True), expected, strict=True
+        solve(G, M, T, X, normals, covariance=True), expected, strict=True
     ):
         np.testing.assert_array_equal(actual, value)
 

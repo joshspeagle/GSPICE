@@ -14,6 +14,7 @@ from ._linalg import (
     guard_means,
     prior_chi2,
     prior_draws,
+    solve_factor,
     solve_low_rank,
     solve_pattern,
 )
@@ -409,11 +410,14 @@ def infill(
     each spectrum costs npix normals and |M|^2 flops more. Where G covers all pixels,
     it costs 2 |M|^2 flops more instead, and each pattern and chunk |M|^3/3 flops for
     the factor of cov[b] at M, which a `LowRank` forms at |M|^2 K flops. A noise
-    model forms C_s for each spectrum with a pixel to replace, and P_s, npix^3 flops
-    for a dense cov[0], where G is also short of all pixels; every spectrum is its
-    own pattern. A `LowRank` cov[0] of rank K forms no P_s: per spectrum, npix K^2
-    flops for its K x K system, |M| K^2 for the mean and var, and |T|^2 K + |T|^3/3
-    for chi2, or with rng |M|^2 K + |M|^3/3 for chi2 and the draws.
+    model forms C_s for each spectrum with a pixel to replace; every spectrum is its
+    own pattern. Where G is also short of all pixels, a dense cov[0] forms no P_s:
+    per spectrum, npix^3/3 flops for the Cholesky factor of C_s and about
+    (npix - g0)^2 |G| + npix |G|^2 for P_GG and P_{G,:} x0 from it, with g0 the first
+    pixel of G, before the pattern costs above. A `LowRank` cov[0] of rank K forms no
+    P_s: per spectrum, npix K^2 flops for its K x K system, |M| K^2 for the mean and
+    var, and |T|^2 K + |T|^3/3 for chi2, or with rng |M|^2 K + |M|^3/3 for chi2 and
+    the draws.
     """
     start = time.perf_counter()
     inflate = boolean(inflate, "inflate")
@@ -511,7 +515,7 @@ def infilled(
     if inflate:
         inflation = _inflation(n_train, n_cond, replaced.any(axis=1), ("row",))
     # P of the bins that need it, before any spectrum, so that a covariance that fails
-    # its check raises at once. A noise model forms P_s per spectrum.
+    # its check raises at once. A noise model factors C_s per spectrum.
     if not model.noise:
         for b in np.unique(bins[needs]).tolist():
             model._precision(b)
@@ -685,8 +689,8 @@ def weigh(model: Model, nguard: int, bins: NDArray[np.intp]) -> None:
 
 def spans(model: Model, nspec: int, npix: int) -> Iterator[slice]:
     # The chunks of spectra of the functions that predict: max(1, 2**24 // npix)
-    # spectra, or one for a noise model, whose P_s per spectrum costs more than a
-    # chunk of another model, so that progress comes after each spectrum.
+    # spectra, or one for a noise model, whose factor of C_s per spectrum costs more
+    # than a chunk of another model, so that progress comes after each spectrum.
     if model.noise:
         return (slice(s, s + 1) for s in range(nspec))
     return chunks(nspec, npix)
@@ -696,8 +700,9 @@ def noisy(model: Model, ivar: NDArray[Any], bad: NDArray[np.bool_], row: int) ->
     # The model whose covariance conditions a chunk of spectra, of first row row:
     # model, or for a noise model, whose chunks hold one spectrum, the model of
     # C_s = cov[0] + diag(nu_s), with nu_si = 1/ivar_si at good pixels and 1/a_s^2 at
-    # bad ones (design section 4.1). It forms P_s at its first use and keeps it for
-    # every operation of the call on the spectrum (decision A22).
+    # bad ones (design section 4.1). It forms P_s, or the Cholesky factor of C_s, at
+    # its first use and keeps it for every operation of the call on the spectrum
+    # (decision A22).
     if not model.noise:
         return model
     a = root_mean_ivar(ivar, bad)[0]
@@ -784,9 +789,9 @@ def conditionals(
     # and their rows in the caller's arrays, with T in M in G: for each pattern, its
     # spectra in X, the pixels of M, and the solution of solve_pattern, or None where
     # M is empty. normals (nspec, npix) give the draws. variance=False skips the var
-    # of solve_pattern, which is then NaN; the prior and the low-rank route keep var. The caller
-    # computed P of the bins that need it, so only a solve can raise, or for a noise
-    # model P_s.
+    # of solve_pattern, which is then NaN; the prior and the low-rank route keep var.
+    # The caller computed P of the bins that need it, so only a solve can raise, or
+    # for a noise model P_s or the factor of C_s.
     # The bin of each spectrum, one-hot, is part of the key of its pattern.
     one_hot = np.eye(len(model.cov), dtype=bool)
     keys = np.concatenate([G, M, T, one_hot[bins]], axis=1)
@@ -873,15 +878,24 @@ def _solve(
     row: int,
 ) -> Conditional:
     C, prior = model.cov[b], G.all()
-    # The model of one spectrum of a noise model, which has a label, conditions a
-    # LowRank C_s from V and d + nu_s, without P_s (design section 12, (b)).
-    low_rank = isinstance(C, LowRank) and model._label is not None and not prior
-    # Outside the try, as the message of P names the covariance.
-    P = None if prior or low_rank else model._precision(b)
+    # The model of one spectrum of a noise model, which has a label, conditions C_s
+    # without P_s: a LowRank from V and d + nu_s, and a dense one from its Cholesky
+    # factor unless the call formed P_s (design section 12, (b) and (e)).
+    noise = model._label is not None and not prior
+    # Outside the try, as the messages of P and of the factor name the covariance.
+    P = L = None
+    if noise and not isinstance(C, LowRank):
+        P, L = model._conditioner(b, C)
+    elif not (prior or noise):
+        P = model._precision(b)
     try:
-        if isinstance(C, LowRank) and low_rank:
+        if isinstance(C, LowRank) and noise:
             V, values, d = C.vectors, C.values, C.diag
             return solve_low_rank(V, values, d, G, M, T, X, normals, covariance)
+        if L is not None:
+            return solve_factor(
+                L, G, M, T, X, normals, covariance=covariance, variance=variance
+            )
         if P is None:
             # The prior N(0, C): exact from C, and without P, which a singular C does
             # not have. It forms C at M only for the covariance or the draws, and
