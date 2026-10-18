@@ -243,9 +243,9 @@ def test_an_invalid_argument_of_infill_is_rejected(changes, error, name):
         infill(**({"model": MODEL} | SPECTRA | changes))
 
 
-# Row 1 has one good pixel, so that no default size of calibration is at most half of
-# its good pixels.
-ONE_GOOD = np.array([[False] * 3, [True, True, False]])
+# Every row has one good pixel, so that no default size of calibration is at most half
+# of the median good-pixel count.
+ONE_GOOD = np.array([[True, True, False]] * 2)
 
 
 @pytest.mark.parametrize(
