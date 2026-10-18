@@ -4,7 +4,6 @@
 # From https://github.com/desihub/gfa_reduce/blob/master/py/gfa_reduce/analysis/djs_maskinterp.py
 
 import numpy as np
-from scipy.interpolate import interp1d
 
 from ._errors import _LegacyError
 
@@ -57,6 +56,9 @@ def maskinterp1(yval, mask):
 
     igood = (np.where(good))[0]
     ibad = (np.where(bad))[0]
+    # Imported here, so that `import gspice` does not load scipy.interpolate.
+    from scipy.interpolate import interp1d
+
     f = interp1d(igood, yval[igood], fill_value="extrapolate")
 
     yval[bad] = f(ibad)
