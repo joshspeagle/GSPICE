@@ -186,6 +186,22 @@ def test_pattern_solve_never_reads_the_data_in_G_outside_T():
         np.testing.assert_array_equal(actual, value)
 
 
+@pytest.mark.parametrize("pattern", PATTERNS)
+@pytest.mark.parametrize("name", MATRICES)
+def test_pattern_solve_without_variances_keeps_the_mean_chi2_and_draws(name, pattern):
+    # Exact: the skipped inverse of R_MM enters neither the mean, chi2 nor the draws.
+    _, P, X, _ = case(name)
+    G, M, T = (mask(pixels) for pixels in PATTERNS[pattern])
+    normals = np.random.default_rng(2).standard_normal((len(X), np.sum(M)))
+    expected = solve_pattern(P, G, M, T, X, normals)
+    solution = solve_pattern(P, G, M, T, X, normals, variance=False)
+    for field in ("mean", "chi2", "draws"):
+        np.testing.assert_array_equal(
+            getattr(solution, field), getattr(expected, field)
+        )
+    assert np.isnan(solution.var).all() and solution.var.shape == expected.var.shape
+
+
 @pytest.mark.parametrize("G", [[], [3, 4, 5]])
 def test_a_pattern_without_pixels_to_predict_skips_lapack(monkeypatch, G):
     _, P, X, *_ = case("spd1e5")
