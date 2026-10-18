@@ -48,6 +48,7 @@
 
 ### Behaviour changes
 
+- The block χ² of `fit_blocks` and `repair` reads the guard pixels of each block, which the earlier unreleased code never read. An outlier in a guard cancels only to rounding, so χ²_A changes linearly with its size: by up to 6e-8 at κ 1e8 and 1e4σ, and by 8.6 at κ 1e10 and 1e10σ (measured in PR #99).
 - The golden tests compare 11 outputs at a relative tolerance looser than 1e-10: 1e-9 for 7 outputs and 1e-8 for 4. These outputs come from ill-conditioned inputs, on which the 2022 results differ from a direct Cholesky solve by up to 7.6e-10.
 - The 2022 modules `gspice.specUtils`, `gspice.matrixUtils` and `gspice.djs_maskinterp` moved to `gspice.legacy.specUtils`, `gspice.legacy.matrixUtils` and `gspice.legacy.djs_maskinterp`, and the unused `gspice.gspiceMain` is deleted. Imports of the old module paths fail, and pickles that name the old paths no longer load. To migrate, insert `legacy.` into the module path, for example `from gspice.legacy.specUtils import standard_scale`.
 - `gspice.__all__` holds the new public names and `legacy`, so `from gspice import *` binds them. It no longer binds the 11 functions and the 3 modules of the 2022 package. It can shadow names such as `load` and `save` of an earlier `from numpy import *`. To migrate, use `from gspice.legacy import *`, which binds the same 14 names as the 2022 star import, without a warning.

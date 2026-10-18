@@ -158,7 +158,7 @@ Let P = C⁻¹ be the precision matrix. For a pixel set G with complement O, the
 
   x_G | x_O ~ N(μ_G, P_GG⁻¹),  μ_G = −P_GG⁻¹ P_GO x_O = −P_GG⁻¹ (P_{G,:} x₀),
 
-where x₀ is x with the G entries set to 0. Values in G are never read, so an outlier in G cannot cause cancellation. Pixels of G that are not reported are marginalized. G = all pixels gives the prior N(0, C).
+where x₀ is x with the G entries set to 0. Values in G are never read, so an outlier in G cannot cause cancellation. The block scan is the exception: it reads x_G (section 12, item (c)). Pixels of G that are not reported are marginalized. G = all pixels gives the prior N(0, C).
 
 Every new-API algorithm uses this identity. Schur updates of a precomputed inverse (Appendix A) factorize the same |G|×|G| block of P per pixel set and add products with C, so they are never cheaper by operation count. Their accuracy depends on how strongly G is coupled to the conditioning pixels. At nguard 5, against long-double and 60-digit references (npix 120, random and squared-exponential matrices), the 2022 Schur variances err by 1.1e-4 to 3.0e-2 relative at κ about 2e8 and by 0.47 to 210 at 1e10 to 2e10, where up to 74 of 120 are negative; at 1e12, 40 to 80 of 120 are negative. The error comes from the update itself: with a Cholesky solve of U, as the paper, IDL and Julia do (D-36), it was 3.1e-5 to 3.3e-2 at κ 2e8. The precision route errs by 5.0e-10 to 3.0e-9 at κ about 2e8 and by 1.8e-6 to 1.2e-5 at 1e12 (D-37). Where the guard window is nearly independent of the conditioning pixels, the order reverses for the variances: the Schur variances err by at most 1.3e-11 at nguard 20 and are exact to rounding from nguard 40, while the precision route errs by up to about 0.5κε (squared-exponential kernel of length 5, npix 120: 1.2e-8 to 2.4e-8 at κ 2e8 for nguard 20 to 100, and 6.6e-5 to 1.2e-4 at κ 1e12 for nguard 40). The Schur means still err more at nguard 20 (3.8e-8σ against 2.3e-9σ at κ 2e8). The precision route is chosen because its error stayed within about κε in every measured regime, while the Schur error has no such bound. So there is no `method="schur"`.
 
@@ -180,7 +180,7 @@ Guard windows are contiguous, so slices replace gathers; this is the IDL "contig
 |---|---|---|---|---|
 | Pixelwise | {j : \|j − i\| ≤ nguard} for each i | interpolated, conditioned on as data (2022 and paper) | P, W (cached) | x W: 2 npix² flops |
 | Infill | replace ∪ ignore ∪ bad | never conditioned on | P (cached) | per pattern as above |
-| Block scan | {j : dist(j, A) ≤ nguard}, block A ordered last | infilled before the scan | R per block; χ²_A = ‖R_AAᵀ r_A‖²/\|A\| | 2\|G\| (npix + \|G\|) per block |
+| Block scan | {j : dist(j, A) ≤ nguard}, block A ordered last | infilled before the scan | R per block; χ²_A = ‖R_AAᵀ r_A‖²/\|A\| = ‖y_A‖²/\|A\| with y = R⁻¹ (Px)_G, which reads x_G (section 12, item (c)) | 2 npix² for Px, then \|G\|² per block |
 
 A pattern is the triple (G, M, T). Spectra of one S/N bin with equal patterns share one factorization, except in noise-aware models, where each spectrum has its own P_s. Where G covers all pixels, every operation returns the exact prior from C (μ_G = 0, C_MM = C[M, M], var = diag(C)) without P; diag(P⁻¹) would err by 0.23κε to 0.29κε. Its draws are L z_M, with L the lower Cholesky factor of C_MM. The prior forms C only at the target pixels: C_TT for χ², and C_MM only for the covariance or the draws, so a `LowRank` C is never formed in full.
 
@@ -683,8 +683,8 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 | No per-pixel work that scales with nspec | W and block factors per model and bin | holds except noise models (A22) |
 | Noise-aware pixelwise, per spectrum | C_s, P_s and W_s per spectrum | 0.01 + 0.39 + 0.10 = 0.50 s at full rank, 0.01 + 0.04 + 0.10 = 0.15 s at K = 50: 14 h and 4.2 h per 1e5 spectra (computed); 0.44 s at full rank and 0.120 s at K = 50 (case 6, PR 5.5, measured) |
 | Against 2022 at 4000 × 2400 | as above | 16.1 to 16.4 s against 1.75 to 2.06 s for P, W, product and Z (measured; D-65); 17.3 s against 1.36 s (cases 7 and 1, PR 5.5) |
-| Block scan per spectrum | 31 blocks, \|G\| 190, R per block | 0.79 ms for 31·2·2400·190 = 2.8e7 GEMM flops (measured); 0.51 ms for the scan and 0.77 ms for `fit_blocks` (case 3, PR 5.5) |
-| Repair per spectrum | two passes, scans, two infills | 2 × 0.39 + 0.79 + 2 × (0.10 to 0.18) = 1.8 to 1.9 ms without flagged blocks or exclusions, and 1.5 ms more after one exclusion (computed); 1.30 ms on 2000 spectra from N(0, C), and 30.3 ms on `simulate` with `artifacts=0.4` (case 4, PR 5.5) |
+| Block scan per spectrum | 31 blocks, \|G\| 190, R per block | 2·2400² + 31·190² = 1.3e7 flops (computed); 0.33 ms for the scan and 0.46 ms for `fit_blocks`, against 0.51 ms and 0.60 ms before optimization (c) in the same run (case 3, PR #99) |
+| Repair per spectrum | two passes, scans, two infills | 2 × 0.39 + 0.33 + 2 × (0.10 to 0.18) = 1.3 to 1.5 ms without flagged blocks or exclusions, and 1.5 ms more after one exclusion (computed); 1.30 ms on 2000 spectra from N(0, C), and 30.3 ms on `simulate` with `artifacts=0.4` (case 4, PR 5.5); 0.85 ms against 1.15 ms before optimization (c) on 500 spectra from N(0, C) (PR #99) |
 | `fit`, 60,000 × 2400, three passes | one covariance and one pixelwise pass per clipping pass | 3 × (5.1 + 0.49 + 23.4) + 5.1 = 92 s, with 6 × 0.85 = 5.1 s per covariance and 60,000 × 0.39 ms = 23.4 s per pass (computed); `rank=K` adds 1.24 s per pass; 23.5 s at 20,000 × 2400 (case 5, PR 5.5, measured) |
 
 **Benchmarks.** `benchmarks/run.py` (A27) writes JSON with the commit, machine, thread settings, library versions and load average, and reports the minimum and median of at least 5 repeats. PR 2.9 adds cases 1, 2 and 7, and PR 5.5 the rest:
@@ -698,11 +698,11 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 7. legacy `gp_interp`, the 2022 code, at 4000 × 2400;
 8. the 2022 Schur route, the 2022 `gaussian_estimate`, which updates C⁻¹ with `submatrix_inv_mult`, per pixel set, against `solve_pattern` at \|G\| 11, 41 and 190.
 
-**Gated optimizations.** Each one is its own pull request, and only if the benchmark shows a gain. (a) and (c) read x_g, where an outlier can cancel, so they must also pass the oracle with 1e4σ outliers in g.
+**Gated optimizations.** Each one is its own pull request, and only if the benchmark shows a gain. (a) and (c) read x_g, where an outlier can cancel, so they must also pass the oracle with 1e4σ outliers in g. Such data are not from N(0, C), so the bound grows with the outliers, as for μ in section 11; for (c), `test_blocks` derives it from backward errors.
 
 - (a) Residual pixelwise for one-spectrum groups: x̂_i = x_i − (P_gg⁻¹ (Px)_g)_i, which avoids building W per spectrum for noise models.
 - (b) Infill for low-rank noise models from V and d + ν_s without forming P_s.
-- (c) Block χ² from r_G = P_GG⁻¹ (Px)_G after one product per spectrum.
+- (c) Block χ² from r_G = P_GG⁻¹ (Px)_G after one product per spectrum. Done in #80, as χ²_A = ‖y_A‖²/|A| with y = R⁻¹ (Px)_G.
 - (d) Batched small-pattern infill. Closed by PR 5.5: a numpy-batched Cholesky was 16% to 110% slower than the solves it replaces, at |G| 11 to 100 (5 repeats).
 - (e) Full-rank noise-model infill from chol(C_s) and P_{:,G} = L⁻ᵀ(L⁻¹ E_G), without `dpotri`.
 - (f) Blockwise prediction on spectra with their own bad pixels: one factor for the shared part of G and a rank-|E_s| update for the extra bad pixels E_s of each spectrum.
