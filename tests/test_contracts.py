@@ -739,7 +739,7 @@ def test_a_noise_model_reports_progress_after_each_spectrum(function):
     "function", [partial(pixelwise, nguard=5), infill], ids=["pixelwise", "infill"]
 )
 def test_a_noise_model_holds_the_matrices_of_one_spectrum_at_a_time(function):
-    # C_s, P_s and the guard weights of a spectrum are freed before the next C_s is
+    # C_s, P_s and the guard solutions of a spectrum are freed before the next C_s is
     # formed: the peak measured 3.3 npix^2 x 8 bytes here in both, and 6.3 in
     # pixelwise and 5.3 in infill with the previous spectrum alive.
     npix = 200

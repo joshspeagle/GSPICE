@@ -156,16 +156,17 @@ def solve_low_rank(
     return Conditional(mean, var, chi2, cov, draws)
 
 
-def guard_weights(
+def guard_solutions(
     P: NDArray[np.float64], c: NDArray[np.float64], nguard: int
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    # Row i of V holds v = P_gg^-1 e_i at pixels i - nguard to i + nguard, so column
+    # j is pixel i - nguard + j; it is 0 outside g and where g covers all pixels, which
+    # keep the prior variance c_i.
     npix = P.shape[0]
-    # Row i holds the weights of pixel i, so each one is a contiguous write; a window
-    # that covers all pixels keeps its zeros, the prior mean.
-    Wt = np.zeros((npix, npix))
+    V = np.zeros((npix, 2 * nguard + 1))
     var = np.empty(npix)
     for i in range(npix):
-        g = slice(max(0, i - nguard), min(npix, i + nguard + 1))
+        g = _window(i, nguard, npix)
         if g.stop - g.start == npix:
             var[i] = c[i]
             continue
@@ -178,11 +179,42 @@ def guard_weights(
         e = np.zeros(g.stop - g.start)
         e[i - g.start] = 1.0
         v, _ = lapack.dpotrs(R, e, lower=1)
+        V[i, g.start - i + nguard : g.stop - i + nguard] = v
+        var[i] = v[i - g.start]
+    return V, var
+
+
+def guard_weights(
+    P: NDArray[np.float64], V: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    npix, nguard = P.shape[0], V.shape[1] // 2
+    # Row i holds the weights of pixel i, so each one is a contiguous write; a window
+    # that covers all pixels keeps its zeros, the prior mean.
+    Wt = np.zeros((npix, npix))
+    for i in range(npix):
+        g = _window(i, nguard, npix)
+        if g.stop - g.start == npix:
+            continue
         # Rows of a C-contiguous P are contiguous, so P[g] is read in one pass.
+        v = V[i, g.start - i + nguard : g.stop - i + nguard]
         np.matmul(-v, P[g], out=Wt[i])
         Wt[i, g] = 0.0
-        var[i] = v[i - g.start]
-    return Wt.T, var
+    return Wt.T
+
+
+def guard_means(
+    P: NDArray[np.float64], V: NDArray[np.float64], X: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    # x W in exact arithmetic, where the terms of x_g cancel only to rounding (design
+    # section 12, item (a)); for nguard < npix - 1. Row s of X P is (P x_s)^T, as P is
+    # symmetric.
+    nguard = V.shape[1] // 2
+    Y = np.pad(X @ P, ((0, 0), (nguard, nguard)))
+    windows = np.lib.stride_tricks.sliding_window_view(Y, V.shape[1], axis=1)
+    mean: NDArray[np.float64] = X - np.einsum("sij,ij->si", windows, V)
+    # The prior mean 0 at the pixels whose window covers all pixels.
+    mean[:, P.shape[0] - 1 - nguard : nguard + 1] = 0.0
+    return mean
 
 
 def solve_pattern(
@@ -309,6 +341,10 @@ def group_rows(keys: NDArray[np.bool_]) -> list[NDArray[np.intp]]:
     order = np.argsort(inverse, kind="stable")
     starts = np.cumsum(counts) - counts
     return [order[s : s + n] for s, n in zip(starts.tolist(), counts.tolist())]
+
+
+def _window(i: int, nguard: int, npix: int) -> slice:
+    return slice(max(0, i - nguard), min(npix, i + nguard + 1))
 
 
 def _rcond(S: NDArray[np.float64], L: NDArray[np.float64]) -> float:

@@ -14,7 +14,13 @@ from numpy.linalg import LinAlgError
 from numpy.typing import ArrayLike, NDArray
 from scipy.linalg import eigh, issymmetric
 
-from ._linalg import guard_weights, low_rank_variances, precision, woodbury
+from ._linalg import (
+    guard_solutions,
+    guard_weights,
+    low_rank_variances,
+    precision,
+    woodbury,
+)
 from ._spectra import (
     Boolean,
     Integer,
@@ -438,6 +444,39 @@ class Model:
             return np.zeros(len(flux), dtype=np.intp)
         return np.searchsorted(self.edges, chunked_snr(flux, ivar, bad), side="right")
 
+    def _guard_solutions(
+        self, b: int, nguard: int, *, subject: str | None = None
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        # V and var of guard_solutions, kept for the model of one spectrum of a noise
+        # model, whose pixelwise passes reuse them.
+        cached = self._cache.get(("solutions", b))
+        if cached is not None and cached[0] == nguard:
+            return cached[1], cached[2]
+        V, var = self._solve_guards(b, nguard, subject)
+        self._cache["solutions", b] = nguard, V, var
+        return V, var
+
+    def _solve_guards(
+        self, b: int, nguard: int, subject: str | None
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        # V and var of guard_solutions, for nguard < npix - 1, read-only.
+        P = self._precision(b, subject=subject)
+        start = time.perf_counter()
+        try:
+            V, var = guard_solutions(P, variances_of(self.cov[b]), nguard)
+        except LinAlgError as error:
+            where = self._name(b) if subject is None else subject
+            raise LinAlgError(f"{where} is {error}") from None
+        _logger.debug(
+            "cov[%d]: guard solutions for nguard %d in %.3f s",
+            b,
+            nguard,
+            time.perf_counter() - start,
+        )
+        for array in (V, var):
+            array.flags.writeable = False
+        return V, var
+
     def _guard_weights(
         self, b: int, nguard: int, *, subject: str | None = None
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
@@ -446,13 +485,9 @@ class Model:
             return cached[1], cached[2]
         npix = self.mean.shape[1]
         if nguard < npix - 1:
-            P = self._precision(b, subject=subject)
+            V, var = self._solve_guards(b, nguard, subject)
             start = time.perf_counter()
-            try:
-                W, var = guard_weights(P, variances_of(self.cov[b]), nguard)
-            except LinAlgError as error:
-                where = self._name(b) if subject is None else subject
-                raise LinAlgError(f"{where} is {error}") from None
+            W = guard_weights(self._precision(b), V)
         else:
             # Every window covers all pixels: the exact prior, without P (design
             # section 4.2).
