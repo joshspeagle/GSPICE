@@ -11,6 +11,7 @@ from gspice import (
     fit_blocks,
     infill,
     legacy,
+    noise_audit,
     pixelwise,
     scale,
     simulate,
@@ -27,6 +28,7 @@ REJECT_EMPTY = {
     "pixelwise": partial(pixelwise, MODEL),
     "infill": partial(infill, MODEL),
     "fit_blocks": partial(fit_blocks, MODEL),
+    "noise_audit": partial(noise_audit, MODEL),
 }
 # fit drops a spectrum without a good pixel, which the others reject.
 FLUX_IVAR_MASK = pytest.mark.parametrize(
@@ -153,6 +155,18 @@ NGUARD_ARGUMENTS = [
 def test_an_invalid_argument_of_pixelwise_is_rejected(changes, error, name):
     with pytest.raises(error, match=f"^{name}: "):
         pixelwise(**({"model": MODEL} | SPECTRA | changes))
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "name"), [*MODEL_ARGUMENTS, *NGUARD_ARGUMENTS]
+)
+def test_an_invalid_argument_of_noise_audit_is_rejected(changes, error, name):
+    arguments = {"model": MODEL} | SPECTRA | changes
+    # Zero spectra, so that pixelwise, which repeats these checks, never runs.
+    for key in ("flux", "ivar", "mask"):
+        arguments[key] = arguments[key][:0]
+    with pytest.raises(error, match=f"^{name}: "):
+        noise_audit(**arguments)
 
 
 @pytest.mark.parametrize(

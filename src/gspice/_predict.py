@@ -174,7 +174,10 @@ def pixelwise(
     mean and variance in flux units, as `unscale` returns them. Bad pixels enter as
     interpolated values; their z is NaN, and var omits the error of those values (next
     to a 60-pixel bad run at correlation length 20, <z^2> measured 0.65 to 2.45,
-    depending on the noise level). nguard >= npix - 1 gives the prior.
+    depending on the noise level). A bad pixel farther than nguard from i takes its
+    value from the nearest good pixels, so that a good pixel within nguard of i, or i
+    itself next to a bad run longer than nguard, can enter the prediction of i.
+    nguard >= npix - 1 gives the prior.
 
     Parameters
     ----------

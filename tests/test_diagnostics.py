@@ -1,10 +1,22 @@
 from fractions import Fraction
+from functools import partial
 
 import numpy as np
 import pytest
+from numpy.linalg import LinAlgError
 from scipy import stats
 
-from gspice import finite_sample_factor, fit, infill, pixelwise, simulate
+from _golden import checked
+from gspice import (
+    Model,
+    _spectra,
+    finite_sample_factor,
+    fit,
+    infill,
+    noise_audit,
+    pixelwise,
+    simulate,
+)
 
 EPS = np.finfo(float).eps
 # Each held-out test averages over SETS training sets, each with HELD_OUT spectra of
@@ -82,3 +94,112 @@ def test_the_held_out_z2_of_pixelwise_with_inflate_has_the_mean_1():
         return np.mean(pixelwise(model, flux, ivar, nguard=10, inflate=True).z ** 2)
 
     assert_mean_1(200, 61, statistic)
+
+
+NPIX, NSPEC = 12, 7
+
+
+def audited():
+    # A model of 40 simulated spectra, and 7 others in float32 with bad pixels: pixel 3
+    # in every spectrum, by mask in rows 0 to 3 and by ivar 0 in rows 4 to 6, and pixel
+    # 8 in every spectrum but row 2. Flux is NaN at the bad pixels and ivar inf at the
+    # masked ones, so that a read of either shows.
+    rng = np.random.default_rng(13)
+    train = simulate(40, NPIX, rng=rng)
+    model, _ = fit(train.flux, train.ivar, nsigma=())
+    test = simulate(NSPEC, NPIX, rng=rng)
+    flux, ivar = test.flux.astype(np.float32), test.ivar.astype(np.float32)
+    mask = np.zeros(flux.shape, bool)
+    mask[:4, 3] = True
+    ivar[4:, 3] = 0.0
+    mask[[0, 1, 3, 4, 5, 6], 8] = True
+    flux[mask | (ivar == 0)] = np.nan
+    ivar[mask] = np.inf
+    return model, flux, ivar, mask
+
+
+@pytest.mark.filterwarnings("error")
+def test_rho_is_the_rms_residual_in_reported_sigmas_over_the_good_spectra(monkeypatch):
+    # Chunks of 2 rows, the last one partial, so that the sums run over the chunks.
+    monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
+    model, flux, ivar, mask = audited()
+    rho = checked(partial(noise_audit, model, nguard=2), flux, ivar, mask)
+    # With the same chunks, pixelwise computes the predictions of noise_audit from the
+    # same arrays, bit for bit.
+    predicted = pixelwise(model, flux, ivar, mask, nguard=2).flux
+    good = ~(mask | (ivar == 0))
+    np.testing.assert_array_equal(np.isnan(rho), ~good.any(axis=0))
+    for i in np.flatnonzero(good.any(axis=0)):
+        s = good[:, i]
+        # In float64, from the float32 inputs, as noise_audit computes.
+        terms = (flux[s, i] - predicted[s, i]) ** 2 * ivar[s, i]
+        # Both sides compute the terms alike. Each sum of the n <= 7 positive terms,
+        # in any order, lies within gamma_6 = 6u / (1 - 6u) of the exact sum,
+        # relative, with u = eps / 2; the division and the root round once each, and
+        # the root halves a relative error. So |drho| <= (gamma_6 + 3u) rho < 5 eps rho.
+        assert abs(rho[i] - np.sqrt(np.mean(terms))) <= 5 * EPS * rho[i]
+
+
+def test_progress_of_noise_audit_counts_the_spectra_done_after_each_chunk(
+    monkeypatch,
+):
+    monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
+    model, flux, ivar, mask = audited()
+    calls = []
+    noise_audit(model, flux, ivar, mask, progress=lambda *args: calls.append(args))
+    assert calls == [("noise_audit", done, NSPEC) for done in (2, 4, 6, 7)]
+
+
+def test_a_covariance_that_fails_its_check_raises_before_any_chunk(monkeypatch):
+    # As in pixelwise: cov[1] has no inverse, and only row 6, in the last chunk, is in
+    # bin 1, at S/N 100; the other rows have S/N 10.
+    monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
+    cov = (np.eye(NPIX), np.ones((NPIX, NPIX)))
+    model = Model(np.zeros((2, NPIX)), cov, (10, 10), edges=(30.0,))
+    flux = np.full((NSPEC, NPIX), 10.0)
+    flux[6] = 100.0
+    calls = []
+    error = (
+        r"^model: cov\[1\] is not positive definite: dpotrf failed at its leading "
+        r"minor of order 2$"
+    )
+    with pytest.raises(LinAlgError, match=error):
+        noise_audit(
+            model,
+            flux,
+            np.ones(flux.shape),
+            nguard=2,
+            progress=lambda *args: calls.append(args),
+        )
+    assert calls == []
+
+
+@pytest.mark.slow
+def test_rho_squared_minus_e_is_the_ratio_of_true_to_reported_noise_variance():
+    # Design section 11. The reported sigma is 1/1.2 of the true sigma at pixels 100 to
+    # 299 of the training and the held-out spectra, so k_i = 1.44 there and 1
+    # elsewhere; the model absorbs it into its covariance.
+    npix, n_test = 400, 4000
+    k = np.ones(npix)
+    k[100:300] = 1.2**2
+    rng = np.random.default_rng(14)
+    train, test = simulate(2000, npix, rng=rng), simulate(n_test, npix, rng=rng)
+    model, _ = fit(train.flux, k * train.ivar, nsigma=())
+    ivar = k * test.ivar
+    rho = noise_audit(model, test.flux, ivar)
+    predicted = pixelwise(model, test.flux, ivar).flux
+    e = np.mean(ivar * (test.truth - predicted) ** 2, axis=0)
+    # Without bad pixels, rho_i^2 - e_i is the mean over the spectra s of
+    # d_si = ivar_si ((f_si - fhat_si)^2 - (t_si - fhat_si)^2), and its mean over a set
+    # of pixels is the mean over s of D_s, the mean of d_si over the set. The noise is
+    # independent between pixels and of ivar, and the model has one S/N bin, so fhat_si
+    # does not depend on the noise of f_si, and E[d_si] = k_i. Given the model, the D_s
+    # of the independent spectra are independent and identically distributed, so their
+    # mean has the standard error std(D_s) / sqrt(n_test), and it is normal to good
+    # accuracy at n_test 4000. The mean of each set then lies beyond 3 standard errors
+    # with the probability 0.27%, and the test fails falsely with a probability of at
+    # most 0.54% (Bonferroni).
+    d = ivar * ((test.flux - predicted) ** 2 - (test.truth - predicted) ** 2)
+    for pixels in (k > 1, k == 1):
+        deviation = np.mean(rho[pixels] ** 2 - e[pixels] - k[pixels])
+        assert abs(deviation) <= 3 * stats.sem(d[:, pixels].mean(axis=1))
