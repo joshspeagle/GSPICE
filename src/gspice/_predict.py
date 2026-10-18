@@ -401,24 +401,23 @@ def infill(
 
     Notes
     -----
-    Cost: npix^3 flops for P at the first use of a bin, npix^2 K for a `LowRank` of
-    rank K; then per pattern and chunk
-    |G|^3/3 + |M|^3/3 flops, and |M|^3/3 more with covariance=True, and per spectrum
-    2 |G| (npix + |G|) flops. An (npix,) mask on spectra with their own bad pixels
-    makes one pattern per spectrum, with G the mask and those bad pixels, so a large
-    mask then costs |G|^3/3 flops per spectrum. The model keeps P (see `Model`). With
-    covariance=True, the result keeps |M|^2 x 8 bytes per pattern and chunk. With rng,
-    each spectrum costs npix normals and |M|^2 flops more. Where G covers all pixels,
-    it costs 2 |M|^2 flops more instead, and each pattern and chunk |M|^3/3 flops for
-    the factor of cov[b] at M, which a `LowRank` forms at |M|^2 K flops. A noise
-    model forms C_s for each spectrum with a pixel to replace; every spectrum is its
-    own pattern. Where G is also short of all pixels, a dense cov[0] forms no P_s:
-    per spectrum, npix^3/3 flops for the Cholesky factor of C_s and about
-    (npix - g0)^2 |G| + npix |G|^2 for P_GG and P_{G,:} x0 from it, with g0 the first
-    pixel of G, before the pattern costs above. A `LowRank` cov[0] of rank K forms no
-    P_s: per spectrum, npix K^2 flops for its K x K system, |M| K^2 for the mean and
-    var, and |T|^2 K + |T|^3/3 for chi2, or with rng |M|^2 K + |M|^3/3 for chi2 and
-    the draws.
+    Cost: npix^3 flops for P at the first use of a bin, npix^2 K for a `LowRank` of rank
+    K; then per pattern and chunk |G|^3/3 + |M|^3/3 flops, and |M|^3/3 more with
+    covariance=True, and per spectrum 2 |G| (npix + |G|) flops, or 2 |G| npix where G is
+    one run. An (npix,) mask on spectra with their own bad pixels makes one pattern per
+    spectrum, with G the mask and those bad pixels, so a large mask then costs |G|^3/3
+    flops per spectrum. The model keeps P (see `Model`). With covariance=True, the
+    result keeps |M|^2 x 8 bytes per pattern and chunk. With rng, each spectrum costs
+    npix normals and |M|^2 flops more. Where G covers all pixels, it costs 2 |M|^2 flops
+    more instead, and each pattern and chunk |M|^3/3 flops for the factor of cov[b] at
+    M, which a `LowRank` forms at |M|^2 K flops. A noise model forms C_s for each
+    spectrum with a pixel to replace; every spectrum is its own pattern. Where G is also
+    short of all pixels, a dense cov[0] forms no P_s: per spectrum, npix^3/3 flops for
+    the Cholesky factor of C_s and about (npix - g0)^2 |G| + npix |G|^2 for P_GG and
+    P_{G,:} x0 from it, with g0 the first pixel of G, before the pattern costs above. A
+    `LowRank` cov[0] of rank K forms no P_s: per spectrum, npix K^2 flops for its K x K
+    system, |M| K^2 for the mean and var, and |T|^2 K + |T|^3/3 for chi2, or with rng
+    |M|^2 K + |M|^3/3 for chi2 and the draws.
     """
     start = time.perf_counter()
     inflate = boolean(inflate, "inflate")

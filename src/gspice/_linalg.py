@@ -237,9 +237,18 @@ def solve_pattern(
     # variance=False skips the inverse of R_MM, |M|^3/3 flops, and var is then NaN;
     # covariance=True needs variance=True.
     def blocks(
-        index: NDArray[np.intp], X0: NDArray[np.float64]
+        index: NDArray[np.intp],
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        return P[np.ix_(index, index)], P[index] @ X0.T
+        # index holds the distinct pixels of G, so G is one run where last - first <
+        # |G|. Then the products over the runs of O before and after it skip the copy
+        # of X; with more runs, they cost more than the copy (design section 12, (g)).
+        PGG = P[np.ix_(index, index)]
+        first, last = int(np.min(index)), int(np.max(index))
+        if last - first < index.size:
+            rhs = X[:, :first] @ P[index, :first].T
+            rhs += X[:, last + 1 :] @ P[index, last + 1 :].T
+            return PGG, rhs.T
+        return PGG, P[index] @ _without(X, G).T
 
     return _conditional(blocks, G, M, T, X, normals, covariance, variance)
 
@@ -259,13 +268,13 @@ def solve_factor(
     # P_{G,:} x0 = Y^T (L^-1 x0). L^-1 is lower triangular, so the rows of Y above the
     # first pixel g0 of G are 0, and Y needs only the factor L[g0:, g0:].
     def blocks(
-        index: NDArray[np.intp], X0: NDArray[np.float64]
+        index: NDArray[np.intp],
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         g0 = int(np.min(index))
         E = np.zeros((L.shape[0] - g0, index.size), order="F")
         E[index - g0, np.arange(index.size)] = 1.0
         Y, _ = lapack.dtrtrs(L[g0:, g0:], E, lower=1, overwrite_b=1)
-        Z, _ = lapack.dtrtrs(L, X0.T, lower=1)
+        Z, _ = lapack.dtrtrs(L, _without(X, G).T, lower=1, overwrite_b=1)
         return Y.T @ Y, Y.T @ Z[g0:]
 
     return _conditional(blocks, G, M, T, X, normals, covariance, variance)
@@ -273,8 +282,7 @@ def solve_factor(
 
 def _conditional(
     blocks: Callable[
-        [NDArray[np.intp], NDArray[np.float64]],
-        tuple[NDArray[np.float64], NDArray[np.float64]],
+        [NDArray[np.intp]], tuple[NDArray[np.float64], NDArray[np.float64]]
     ],
     G: NDArray[np.bool_],
     M: NDArray[np.bool_],
@@ -284,8 +292,9 @@ def _conditional(
     covariance: bool,
     variance: bool,
 ) -> Conditional:
-    # solve_pattern with blocks(index, X0) giving P_GG and P_{G,:} X0^T in the order
-    # of index.
+    # solve_pattern with blocks(index) giving P_GG and P_{G,O} X_O^T in the order of
+    # index, with O the pixels outside G: no value in G enters the mean, so that an
+    # outlier there cannot cancel.
     nspec = X.shape[0]
     m = np.count_nonzero(M)
     if m == 0:
@@ -302,13 +311,10 @@ def _conditional(
     )
     a = index.size - m
     t = index.size - np.count_nonzero(T)
-    # x0 is x with its entries in G set to 0, so that no value in G enters the mean
-    # and an outlier there cannot cancel.
-    X0 = X.copy()
-    X0[:, G] = 0.0
-    PGG, PX0 = blocks(index, X0)
+    PGG, PX0 = blocks(index)
     R = factor_pattern(PGG)
-    y, _ = lapack.dtrtrs(R, PX0, lower=1)
+    # PX0 is a new array, which dtrtrs may overwrite.
+    y, _ = lapack.dtrtrs(R, PX0, lower=1, overwrite_b=1)
     RMM = R[a:, a:]
     # mu_M = -(R^-T y)_M = -R_MM^-T y_M, because R^-T is upper triangular.
     mean, _ = lapack.dtrtrs(RMM, -y[a:], lower=1, trans=1)
@@ -423,6 +429,12 @@ def group_rows(keys: NDArray[np.bool_]) -> list[NDArray[np.intp]]:
 
 def _window(i: int, nguard: int, npix: int) -> slice:
     return slice(max(0, i - nguard), min(npix, i + nguard + 1))
+
+
+def _without(X: NDArray[np.float64], G: NDArray[np.bool_]) -> NDArray[np.float64]:
+    X0 = X.copy()
+    X0[:, G] = 0.0
+    return X0
 
 
 def _rcond(S: NDArray[np.float64], L: NDArray[np.float64]) -> float:

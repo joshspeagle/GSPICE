@@ -190,6 +190,8 @@ PATTERNS = {
     "prior": (range(NPIX), [0, 4, 11, 17, 23, 29, 35, 40, 47], [4, 17, 29, 40, 47]),
     # G \ M and M \ T are empty.
     "replace": (range(10, 20), range(10, 20), range(10, 20)),
+    # G one run, with M and T inside it: the products over the runs of O.
+    "one run": (range(16, 32), range(20, 28), [20, 21, 22, *range(24, 28)]),
 }
 
 
@@ -233,11 +235,12 @@ def test_pattern_solve_matches_the_reference(name, pattern, route):
     assert np.max(np.abs(draws - cov) / scale) <= tol
 
 
+@pytest.mark.parametrize("pattern", ["run", "one run"])
 @pytest.mark.parametrize("route", ["precision", "factor"])
-def test_pattern_solve_never_reads_the_data_in_G_outside_T(route):
+def test_pattern_solve_never_reads_the_data_in_G_outside_T(route, pattern):
     C, _, X, *_ = case("spd1e5")
     solve = solver(route, C)
-    G, M, T = (mask(pixels) for pixels in PATTERNS["run"])
+    G, M, T = (mask(pixels) for pixels in PATTERNS[pattern])
     normals = np.random.default_rng(2).standard_normal((len(X), np.sum(M)))
     expected = solve(G, M, T, X, normals, covariance=True)
     X = X.copy()
