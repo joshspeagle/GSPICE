@@ -681,11 +681,11 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 | Pixelwise, 1e5 × 2400, < 60 s single core | P and W once, one chunked product | 52 to 54 s end to end with float32 inputs, 7.9 s of it for the first write to the outputs (measured) |
 | Infill about 0.5 ms per spectrum, 30-pixel masks | per-pattern Cholesky of P_GG on a C-contiguous P | 0.10 ms (median 0.18 ms, 3 repeats), 0.58 ms on the Fortran-ordered P of `dpotri`; 3.6e-14σ in mean and 7e-15 in var from a direct solve (measured) |
 | No per-pixel work that scales with nspec | W and block factors per model and bin | holds except noise models (A22) |
-| Noise-aware pixelwise, per spectrum | C_s, P_s and W_s per spectrum | 0.01 + 0.39 + 0.10 = 0.50 s at full rank, 0.01 + 0.04 + 0.10 = 0.15 s at K = 50: 14 h and 4.2 h per 1e5 spectra (computed) |
-| Against 2022 at 4000 × 2400 | as above | 16.1 to 16.4 s against 1.75 to 2.06 s for P, W, product and Z (measured; D-65) |
-| Block scan per spectrum | 31 blocks, \|G\| 190, R per block | 0.79 ms for 31·2·2400·190 = 2.8e7 GEMM flops (measured) |
-| Repair per spectrum | two passes, scans, two infills | 2 × 0.39 + 0.79 + 2 × (0.10 to 0.18) = 1.8 to 1.9 ms without flagged blocks or exclusions, and 1.5 ms more after one exclusion (computed) |
-| `fit`, 60,000 × 2400, three passes | one covariance and one pixelwise pass per clipping pass | 3 × (5.1 + 0.49 + 23.4) + 5.1 = 92 s, with 6 × 0.85 = 5.1 s per covariance and 60,000 × 0.39 ms = 23.4 s per pass (computed); `rank=K` adds 1.24 s per pass |
+| Noise-aware pixelwise, per spectrum | C_s, P_s and W_s per spectrum | 0.01 + 0.39 + 0.10 = 0.50 s at full rank, 0.01 + 0.04 + 0.10 = 0.15 s at K = 50: 14 h and 4.2 h per 1e5 spectra (computed); 0.44 s at full rank and 0.120 s at K = 50 (case 6, PR 5.5, measured) |
+| Against 2022 at 4000 × 2400 | as above | 16.1 to 16.4 s against 1.75 to 2.06 s for P, W, product and Z (measured; D-65); 17.3 s against 1.36 s (cases 7 and 1, PR 5.5) |
+| Block scan per spectrum | 31 blocks, \|G\| 190, R per block | 0.79 ms for 31·2·2400·190 = 2.8e7 GEMM flops (measured); 0.51 ms for the scan and 0.77 ms for `fit_blocks` (case 3, PR 5.5) |
+| Repair per spectrum | two passes, scans, two infills | 2 × 0.39 + 0.79 + 2 × (0.10 to 0.18) = 1.8 to 1.9 ms without flagged blocks or exclusions, and 1.5 ms more after one exclusion (computed); 1.30 ms on 2000 spectra from N(0, C), and 30.3 ms on `simulate` with `artifacts=0.4` (case 4, PR 5.5) |
+| `fit`, 60,000 × 2400, three passes | one covariance and one pixelwise pass per clipping pass | 3 × (5.1 + 0.49 + 23.4) + 5.1 = 92 s, with 6 × 0.85 = 5.1 s per covariance and 60,000 × 0.39 ms = 23.4 s per pass (computed); `rank=K` adds 1.24 s per pass; 23.5 s at 20,000 × 2400 (case 5, PR 5.5, measured) |
 
 **Benchmarks.** `benchmarks/run.py` (A27) writes JSON with the commit, machine, thread settings, library versions and load average, and reports the minimum and median of at least 5 repeats. PR 2.9 adds cases 1, 2 and 7, and PR 5.5 the rest:
 
@@ -696,20 +696,21 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 5. `fit` at 20,000 × 2400;
 6. noise models, pixelwise and infill, full rank and K = 50;
 7. legacy `gp_interp`, the 2022 code, at 4000 × 2400;
-8. the Schur route (legacy `submatrix_inv_mult` per pixel set) against `solve_pattern` at \|G\| 11, 41 and 190.
+8. the 2022 Schur route, the 2022 `gaussian_estimate`, which updates C⁻¹ with `submatrix_inv_mult`, per pixel set, against `solve_pattern` at \|G\| 11, 41 and 190.
 
 **Gated optimizations.** Each one is its own pull request, and only if the benchmark shows a gain. (a) and (c) read x_g, where an outlier can cancel, so they must also pass the oracle with 1e4σ outliers in g.
 
 - (a) Residual pixelwise for one-spectrum groups: x̂_i = x_i − (P_gg⁻¹ (Px)_g)_i, which avoids building W per spectrum for noise models.
 - (b) Infill for low-rank noise models from V and d + ν_s without forming P_s.
 - (c) Block χ² from r_G = P_GG⁻¹ (Px)_G after one product per spectrum.
-- (d) Batched small-pattern infill.
+- (d) Batched small-pattern infill. Closed by PR 5.5: a numpy-batched Cholesky was 16% to 110% slower than the solves it replaces, at |G| 11 to 100 (5 repeats).
 - (e) Full-rank noise-model infill from chol(C_s) and P_{:,G} = L⁻ᵀ(L⁻¹ E_G), without `dpotri`.
 - (f) Blockwise prediction on spectra with their own bad pixels: one factor for the shared part of G and a rank-|E_s| update for the extra bad pixels E_s of each spectrum.
-- (g) No copy of X in `solve_pattern`: a sum of products over the runs of pixels outside G, or a zeroing of G in the rows that the caller already gathered. PR 2.9 (#31) measured the sum over runs faster with one shared pattern and not faster with one spectrum per pattern.
+- (g) No copy of X in `solve_pattern`: a sum of products over the runs of O, the pixels outside G, which skips the G columns of the product. PR 5.5 measured 11.4% of a shared `infill` at |G| 1200, and −2.2% to 1.9% with one spectrum per pattern, where the pull request must show no slowdown.
 - (h) χ² only in `calibration`: an option of `solve_pattern` that skips the inverse of R_MM, which only the variances and the covariance need, passed through the private prediction core of issue #59.
 - (i) Mean only in the infills of the block pass of `repair`, with the same option of `solve_pattern` as (h). Before step 3 reused the block pass, PR #67 measured 24% of a `repair` call at npix 2400 with `artifacts=0.4`.
 - (j) The conditional mean from a Cholesky factor of C_OO where |G| > npix/2, in the infills of the block pass of `repair`, at |O|³/3 flops instead of |G|³/3 for R and |G|³/3 for its inverse. With (i), PR #67 measured 21% of the same call, with masks and flux unchanged and x_b within 3e-11 relative of the P route, at cond(C_OO) about 1e6 against 6e2 for P_GG. It changes the numerics, so it needs the direct-solve tests of CLAUDE.md up to κ 1e8.
+- (k) Lanczos (`eigsh`) for the K leading eigenpairs in `fit(rank=K)` (#93).
 
 ## 13. Packaging
 
