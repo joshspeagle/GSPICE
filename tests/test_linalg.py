@@ -7,6 +7,8 @@ from numpy.linalg import LinAlgError
 from gspice import _linalg
 from gspice._linalg import (
     group_rows,
+    guard_means,
+    guard_solutions,
     guard_weights,
     precision,
     prior_chi2,
@@ -24,6 +26,7 @@ from oracle import (
     low_rank,
     random_low_rank,
     random_spd,
+    window,
 )
 
 EPS = np.finfo(float).eps
@@ -92,32 +95,76 @@ GUARD_CASES += [("kernel5", NPIX // 3), ("spd1e5", NPIX - 2)]
 
 
 @pytest.mark.parametrize(("name", "nguard"), GUARD_CASES)
-def test_guard_weights_match_the_reference(name, nguard):
+def test_guard_weights_and_means_match_the_reference(name, nguard):
     C, P, X, tol = case(name)
-    W, var = guard_weights(P, np.diagonal(C), nguard)
+    V, var = guard_solutions(P, np.diagonal(C), nguard)
+    W = guard_weights(P, V)
     # The edges, pixels next to them and interior pixels.
     pixels = [0, 1, 7, 24, 40, 47]
     for i in pixels:
         assert np.all(W[max(0, i - nguard) : i + nguard + 1, i] == 0)
     mean, reference = guard_conditional(C, nguard, X, pixels)
-    assert np.all(np.abs(X @ W[:, pixels] - mean) <= tol * np.sqrt(reference))
+    sigma = np.sqrt(reference)
+    assert np.all(np.abs(X @ W[:, pixels] - mean) <= tol * sigma)
+    assert np.all(np.abs(guard_means(P, V, X)[:, pixels] - mean) <= tol * sigma)
     assert np.all(np.abs(var[pixels] - reference) <= tol * reference)
 
 
 @pytest.mark.parametrize("nguard", [NPIX - 2, NPIX - 1])
 def test_guard_windows_that_cover_all_pixels_give_the_exact_prior(nguard):
-    C, P, *_ = case("kernel5")
-    W, var = guard_weights(P, np.diagonal(C), nguard)
+    C, P, X, _ = case("kernel5")
+    V, var = guard_solutions(P, np.diagonal(C), nguard)
     prior = range(max(0, NPIX - 1 - nguard), nguard + 1)
-    assert np.all(W[:, prior] == 0)
+    assert np.all(guard_weights(P, V)[:, prior] == 0)
+    assert np.all(guard_means(P, V, X)[:, prior] == 0)
     np.testing.assert_array_equal(var[prior], np.diagonal(C)[prior])
 
 
-def test_guard_weights_reject_a_window_that_is_not_positive_definite():
+@pytest.mark.parametrize("nguard", [1, 5])
+@pytest.mark.parametrize("name", ["spd1e2", "spd1e8", "kernel5"])
+def test_outliers_of_1e4_sigma_in_the_guard_window_cancel_to_a_rounding_bound(
+    name, nguard
+):
+    # guard_means computes mu_i = x_i - v^T p, with v = P_gg^-1 e_i from the Cholesky
+    # factor R of P_gg and p = (P x)_g. x_g enters v^T p as v^T P_gg x_g = x_i, which
+    # cancels x_i only to rounding. v solves the computed P_gg, so the error of P does
+    # not break the cancellation. The backward errors of the product (Higham 2002,
+    # eq. 3.13), of the Cholesky solve (Thm 10.4) and of the dot product, with
+    # gamma_n = n u / (1 - n u) <= n eps for u = eps / 2, give to first order
+    #   |d mu_i| <= eps (npix |v|^T |P_g:| |x| + (3 |g| + 1) |v|^T |R| |R^T| |y|
+    #               + |g| |v|^T |p| + |mu_i|)
+    # with y = P_gg^-1 p = x_g - mu_g. It grows linearly with the outliers, and the
+    # reference does not depend on x_g. The bound adds to the 10 kappa eps sigma of
+    # design section 11 for the rest of x, drawn from N(0, C).
+    C, P, X, tol = case(name)
+    V, _ = guard_solutions(P, np.diagonal(C), nguard)
+    for i in [0, 1, 7, 24, 47]:
+        g = window(i, nguard, NPIX)
+        x = X.copy()
+        x[:, g] += 1e4 * np.sqrt(np.diagonal(C)[g]) * (-1) ** np.arange(len(g))
+        mu = guard_means(P, V, x)[:, i]
+        mean, reference = guard_conditional(C, nguard, x, [i])
+        n = len(g)
+        PGG = P[g.start : g.stop, g.start : g.stop]
+        v = np.linalg.solve(PGG, np.eye(n)[i - g.start])
+        R = np.linalg.cholesky(PGG)
+        p = x @ P[:, g.start : g.stop]
+        y = np.linalg.solve(PGG, p.T)
+        bound = EPS * (
+            NPIX * np.abs(v) @ np.abs(P[g.start : g.stop]) @ np.abs(x.T)
+            + (3 * n + 1) * np.abs(v) @ np.abs(R) @ np.abs(R.T) @ np.abs(y)
+            + n * np.abs(p) @ np.abs(v)
+            + np.abs(mu)
+        )
+        error = np.abs(mu - mean[:, 0])
+        assert np.all(error <= tol * np.sqrt(reference) + bound)
+
+
+def test_guard_solutions_reject_a_window_that_is_not_positive_definite():
     P = np.eye(NPIX)
     P[7, 7] = -1.0
     with pytest.raises(LinAlgError, match="window of pixel 7"):
-        guard_weights(P, np.ones(NPIX), 0)
+        guard_solutions(P, np.ones(NPIX), 0)
 
 
 def mask(pixels):

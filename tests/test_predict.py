@@ -352,8 +352,8 @@ def test_progress_counts_the_spectra_done_after_each_chunk(monkeypatch, name):
     assert calls == [(name, 2, 5), (name, 4, 5), (name, 5, 5)]
 
 
-# P, the guard weights of pixelwise and the call.
-@pytest.mark.parametrize(("name", "count"), [("pixelwise", 3), ("infill", 2)])
+# P, the guard solutions and weights of pixelwise, and the call.
+@pytest.mark.parametrize(("name", "count"), [("pixelwise", 4), ("infill", 2)])
 def test_a_call_on_a_new_model_logs_its_timings_at_debug(caplog, name, count):
     caplog.set_level(logging.DEBUG, logger="gspice")
     model, flux, ivar, mask = two_bins(1e2)

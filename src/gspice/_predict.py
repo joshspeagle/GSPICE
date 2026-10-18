@@ -11,6 +11,7 @@ from numpy.typing import ArrayLike, NDArray
 from ._linalg import (
     Conditional,
     group_rows,
+    guard_means,
     prior_chi2,
     prior_draws,
     solve_low_rank,
@@ -192,7 +193,9 @@ def pixelwise(
     itself next to a bad run longer than nguard, can enter the prediction of i.
     nguard >= npix - 1 gives the prior. For a noise model, x is in flux units and P is
     the inverse of the covariance C_s of the spectrum (see `Model`), which pixelwise
-    forms for each spectrum, with its guard weights.
+    forms for each spectrum. Where 2 nguard + 1 <= npix, it computes the mean as
+    x_i - (P_gg^-1 (P x)_g)_i, equal in exact arithmetic, so the values in g cancel
+    only to rounding.
 
     Parameters
     ----------
@@ -243,7 +246,9 @@ def pixelwise(
     rank K, and about npix (w^3/3 + 2 npix w) flops for the guard weights at the first
     use of a bin and after each change of nguard, w = min(2 nguard + 1, npix); then
     2 npix^2 flops per spectrum. The model keeps P and the guard weights (see
-    `Model`). A noise model costs all of these per spectrum, and keeps none.
+    `Model`). A noise model costs P per spectrum, and where 2 nguard + 1 <= npix
+    about npix (w^3/3 + 2 w^2) flops for its guard windows and 2 npix (npix + w) for
+    the mean instead of the guard weights; it keeps none.
     """
     start = time.perf_counter()
     nguard = integer(nguard, "nguard", 0)
@@ -270,7 +275,7 @@ def pixelwise(
         f, v, zs = predicted[rows], variance[rows], z[rows]
         cover = noisy(model, ivar[rows], bad[rows], rows.start)
         predict(cover, nguard, X, bins[rows], inflation, f, v, zs)
-        # Free C_s, P_s and the guard weights before the next spectrum forms its own.
+        # Free C_s, P_s and the guard solutions before the next spectrum forms its own.
         del cover
         to_flux(f, a, means(model, bins[rows]), center, out=f)
         v /= np.square(a)[:, np.newaxis]
@@ -671,7 +676,7 @@ class Filling:
 def weigh(model: Model, nguard: int, bins: NDArray[np.intp]) -> None:
     # The guard weights of the bins with spectra, before any spectrum, so that a
     # covariance that fails its check raises at once. A bin without spectra computes
-    # no P, and a noise model forms its guard weights per spectrum.
+    # no P, and a noise model forms its guard solutions per spectrum.
     if model.noise:
         return
     for b in np.unique(bins).tolist():
@@ -730,7 +735,8 @@ def predict(
     # inflation (nbin, npix) the factor of the variance, or None for 1: its mean into
     # predicted, its variance into var (working units) and z into z, at every pixel,
     # bad pixels included (design decision A12). var or z None is not computed, and z
-    # may be predicted, which then ends as z. The caller computed the guard weights.
+    # may be predicted, which then ends as z. The caller computed the guard weights of a
+    # model without noise.
     if len(model.cov) == 1:
         factor = None if inflation is None else inflation[0]
         _predict(model, 0, nguard, X, factor, predicted, var, z)
@@ -755,7 +761,8 @@ def zscores(
     model: Model, nguard: int, X: NDArray[np.float64], bins: NDArray[np.intp]
 ) -> NDArray[np.float64]:
     # z of pixelwise at every pixel of the working vectors X of a chunk of spectra,
-    # without inflation. The caller computed the guard weights.
+    # without inflation. The caller computed the guard weights of a model without
+    # noise.
     z = np.empty(X.shape)
     predict(model, nguard, X, bins, None, z, None, z)
     return z
@@ -918,10 +925,18 @@ def _predict(
     var: NDArray[np.float64] | None,
     z: NDArray[np.float64] | None,
 ) -> None:
-    W, v = model._guard_weights(b, nguard)
+    if model._label is None or 2 * nguard + 1 > X.shape[1]:
+        W, v = model._guard_weights(b, nguard)
+        np.matmul(X, W, out=predicted)
+    else:
+        # The model of one spectrum of a noise model, whose _label is set: its guard
+        # solutions serve this spectrum alone, so it skips W (design section 12,
+        # item (a)). V has 2 nguard + 1 columns, so the route needs no more memory
+        # than W where they fit in npix.
+        V, v = model._guard_solutions(b, nguard)
+        predicted[...] = guard_means(model._precision(b), V, X)
     if inflation is not None:
         v = v * inflation
-    np.matmul(X, W, out=predicted)
     if z is not None:
         np.subtract(X, predicted, out=z)
         z /= np.sqrt(v)
