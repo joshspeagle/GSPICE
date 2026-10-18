@@ -599,7 +599,8 @@ class Filling:
             M,
             T,
             normals,
-            self.covariance,
+            covariance=self.covariance,
+            variance=True,
         ):
             self.count += 1
             spectra = index[group]
@@ -755,12 +756,15 @@ def conditionals(
     T: NDArray[np.bool_],
     normals: NDArray[np.float64] | None,
     covariance: bool,
+    variance: bool,
 ) -> Iterator[tuple[NDArray[np.intp], NDArray[np.intp], Conditional | None]]:
     # The patterns of a chunk of spectra with the working vectors X, their S/N bins
     # and their rows in the caller's arrays, with T in M in G: for each pattern, its
     # spectra in X, the pixels of M, and the solution of solve_pattern, or None where
-    # M is empty. normals (nspec, npix) give the draws. The caller computed P of the
-    # bins that need it, so only a solve can raise, or for a noise model P_s.
+    # M is empty. normals (nspec, npix) give the draws. variance=False skips the var
+    # of solve_pattern, which is then NaN; the prior keeps its exact var. The caller
+    # computed P of the bins that need it, so only a solve can raise, or for a noise
+    # model P_s.
     # The bin of each spectrum, one-hot, is part of the key of its pattern.
     one_hot = np.eye(len(model.cov), dtype=bool)
     keys = np.concatenate([G, M, T, one_hot[bins]], axis=1)
@@ -772,7 +776,7 @@ def conditionals(
             z = None if normals is None else normals[np.ix_(group, pixels)]
             key = G[first], M[first], T[first]
             b, row = int(bins[first]), int(rows[first])
-            solution = _solve(model, b, *key, X[group], z, covariance, row)
+            solution = _solve(model, b, *key, X[group], z, covariance, variance, row)
         yield group, pixels, solution
 
 
@@ -789,7 +793,7 @@ def filled(
     result = X.copy()
     T = np.zeros(M.shape, dtype=bool)
     for group, pixels, solution in conditionals(
-        model, X, bins, rows, G, M, T, None, False
+        model, X, bins, rows, G, M, T, None, covariance=False, variance=True
     ):
         if solution is not None:
             result[np.ix_(group, pixels)] = solution.mean
@@ -843,6 +847,7 @@ def _solve(
     X: NDArray[np.float64],
     normals: NDArray[np.float64] | None,
     covariance: bool,
+    variance: bool,
     row: int,
 ) -> Conditional:
     # Outside the try, as the message of P names the covariance.
@@ -864,7 +869,9 @@ def _solve(
                 chi2 = prior_chi2(submatrix_of(C, np.flatnonzero(T)), X[:, T])
             mean = np.zeros((X.shape[0], pixels.size))
             return Conditional(mean, variances_of(C)[pixels], chi2, cov, draws)
-        return solve_pattern(P, G, M, T, X, normals, covariance)
+        return solve_pattern(
+            P, G, M, T, X, normals, covariance=covariance, variance=variance
+        )
     except LinAlgError as error:
         raise LinAlgError(
             f"{model._name(b)} is {error}, for the pattern of row {row}"

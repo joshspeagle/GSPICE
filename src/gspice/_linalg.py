@@ -119,7 +119,10 @@ def solve_pattern(
     X: NDArray[np.float64],
     normals: NDArray[np.float64] | None = None,
     covariance: bool = False,
+    variance: bool = True,
 ) -> Conditional:
+    # variance=False skips the inverse of R_MM, |M|^3/3 flops, and var is then NaN;
+    # covariance=True needs variance=True.
     nspec = X.shape[0]
     m = np.count_nonzero(M)
     if m == 0:
@@ -147,8 +150,11 @@ def solve_pattern(
     mean, _ = lapack.dtrtrs(RMM, -y[a:], lower=1, trans=1)
     # C_MM = (R_MM R_MM^T)^-1 = R_MM^-T R_MM^-1, whose diagonal is the column sums of
     # (R_MM^-1)^2.
-    inverse, _ = lapack.dtrtri(RMM, lower=1)
-    var = np.einsum("ij,ij->j", inverse, inverse)
+    if variance:
+        inverse, _ = lapack.dtrtri(RMM, lower=1)
+        var = np.einsum("ij,ij->j", inverse, inverse)
+    else:
+        var = np.full(m, np.nan)
     # chi2 = ||R_TT^T r_T||^2, because C_TT^-1 is the Schur complement R_TT R_TT^T.
     r = X[:, T].T - mean[t - a :]
     chi2 = np.sum((R[t:, t:].T @ r) ** 2, axis=0)

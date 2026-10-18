@@ -550,12 +550,12 @@ def calibration(
 
     Notes
     -----
-    Cost: that of `infill` for each size: npix^3 flops for P at the first use of a bin;
-    then per pattern of a chunk of max(1, 2**24 // npix) spectra, at most one per
-    spectrum, |G|^3/3 + n^3/3 flops, and per spectrum 2 |G| (npix + |G|) flops. The
-    masks of a chunk take up to len(sizes) x 2^24 bytes. A noise model forms P_s once
-    per spectrum for all sizes, npix^3 flops for a dense cov[0] or npix^2 K for a
-    `LowRank` of rank K.
+    Cost: for each size, npix^3 flops for P at the first use of a bin; then per
+    pattern of a chunk of max(1, 2**24 // npix) spectra, at most one per spectrum,
+    |G|^3/3 flops, or n^3/3 where G covers all pixels, and per spectrum
+    2 |G| (npix + |G|) flops. The masks of a chunk take up to len(sizes) x 2^24
+    bytes. A noise model forms P_s once per spectrum for all sizes, npix^3 flops for a
+    dense cov[0] or npix^2 K for a `LowRank` of rank K.
     """
     start = time.perf_counter()
     if sizes is not None:
@@ -592,8 +592,18 @@ def calibration(
         for j, M in enumerate(_masks(bad[rows], sizes, layout, rng)):
             # chi2, dof and fs of infill with replace=M. M holds only good pixels, so
             # T = M, and dof = |M| is 0, with z2 NaN, only where no mask was drawn.
+            # chi2 needs no variances (design section 12, optimization (h)).
             for group, _, solution in conditionals(
-                cover, X, bins[rows], index, M | bad[rows], M, M, None, False
+                cover,
+                X,
+                bins[rows],
+                index,
+                M | bad[rows],
+                M,
+                M,
+                None,
+                covariance=False,
+                variance=False,
             ):
                 if solution is not None:
                     z2[index[group], j] = solution.chi2
