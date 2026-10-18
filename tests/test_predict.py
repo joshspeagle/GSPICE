@@ -719,6 +719,187 @@ def test_filled_takes_the_mean_from_c_oo_only_where_g_holds_over_half_the_pixels
     assert not calls and np.isfinite(result.var).all()
 
 
+def own_bad_pixels(kappa):
+    # Spectra of 128 pixels for an (npix,) replace mask of 86 pixels and ignore mask
+    # of 4, so that |B| = 90, at least SMALLEST (1 + 2 / 5) for the 5 patterns that
+    # share, with bad pixels of their own: none (row 0), outside B (rows 1 and 2, one
+    # pattern), in M (3), both (4 and 5), and 12 outside B (6), more than
+    # |B| / SHARED.
+    npix = 128
+    C = random_spd(npix, kappa, 2)
+    model = Model(np.full((1, npix), 5.0), (C,), (100,))
+    flux = np.random.default_rng(5).standard_normal((7, npix)) @ np.linalg.cholesky(C).T
+    flux += 5.0
+    ivar = np.ones(flux.shape)
+    for s, pixels in enumerate(
+        [[], [2], [2], [10], [2, 110], [12, 120], range(100, 112)]
+    ):
+        ivar[s, list(pixels)] = 0.0
+    flux[ivar == 0] = np.nan
+    pixels = np.arange(npix)
+    replace, ignore = (pixels >= 8) & (pixels < 94), np.isin(pixels, [6, 7, 94, 95])
+    return model, flux, ivar, {"replace": replace, "ignore": ignore}
+
+
+def test_spectra_with_their_own_bad_pixels_share_one_factor_to_rounding(monkeypatch):
+    model, flux, ivar, sets = own_bad_pixels(1e8)
+    calls = []
+    solve = _predict.solve_shared
+    monkeypatch.setattr(
+        _predict,
+        "solve_shared",
+        lambda P, G, *args: calls.append(len(G)) or solve(P, G, *args),
+    )
+    result = infill(model, flux, ivar, **sets, covariance=True)
+    # Rows 0 to 5 hold 5 patterns, and row 6 takes solve_pattern.
+    assert calls == [5]
+    # One spectrum per call is one pattern, which solve_pattern solves. Each route
+    # lies within the tolerance of the reference tests, tol = 10 kappa eps, so two
+    # lie within 2 tol; flux = mu + 5 rounds once more, by eps |flux|.
+    tol = 2 * tolerance(model.cov[0], 0)
+    for s in range(len(flux)):
+        alone = infill(model, flux[[s]], ivar[[s]], **sets, covariance=True)
+        pixels, cov = result.covariance(s)
+        expected, reference = alone.covariance(0)
+        np.testing.assert_array_equal(pixels, expected)
+        if s == 6:
+            for name in ("flux", "var", "chi2"):
+                assert same(getattr(result, name)[6:], getattr(alone, name))
+            assert same(cov, reference)
+            continue
+        f, var = alone.flux[0, pixels], alone.var[0, pixels]
+        sigma = np.sqrt(var)
+        assert np.all(
+            np.abs(result.flux[s, pixels] - f) <= tol * sigma + EPS * np.abs(f)
+        )
+        assert np.all(np.abs(result.var[s, pixels] - var) <= tol * var)
+        assert np.all(np.abs(cov - reference) <= tol * np.outer(sigma, sigma))
+        chi2 = alone.chi2[0]
+        assert abs(result.chi2[s] - chi2) <= tol * (chi2 + alone.dof[0])
+
+
+def counted_shared(monkeypatch):
+    calls = []
+    solve = _predict.solve_shared
+    monkeypatch.setattr(
+        _predict, "solve_shared", lambda *args: calls.append(1) or solve(*args)
+    )
+    return calls
+
+
+@pytest.mark.parametrize(("nspec", "shares"), [(2, False), (20, True)])
+def test_mean_only_patterns_share_a_factor_only_where_it_costs_fewer_flops(
+    monkeypatch, nspec, shares
+):
+    calls = counted_shared(monkeypatch)
+    # Spectra with one M of 150 pixels and one bad pixel each outside it, so that
+    # |G| > npix / 2 and filled takes the mean from C_OO: 2 such patterns cost
+    # 2 |O|^3/3 flops, fewer than |B|^3/3 for the shared factor, and 20 more.
+    npix = 250
+    C = random_spd(npix, 1e8, 0)
+    model = Model(np.zeros((1, npix)), (C,), (100,))
+    G = np.zeros((nspec, npix), dtype=bool)
+    G[:, :150] = True
+    G[np.arange(nspec), 150 + 3 * np.arange(nspec)] = True
+    M = np.broadcast_to(np.arange(npix) < 150, G.shape)
+    X = (
+        np.random.default_rng(0).standard_normal((nspec, npix))
+        @ np.linalg.cholesky(C).T
+    )
+    result = filled(model, X, np.zeros(nspec, np.intp), np.arange(nspec), G, M)
+    assert bool(calls) == shares
+    # A direct solve: solve_shared matches the 60-digit reference in test_linalg, and
+    # here each route and the solve lie within 10 kappa eps sigma of it.
+    m, tol = M[0], 2 * tolerance(C, 0)
+    for s in range(nspec):
+        o = ~G[s]
+        mean = C[np.ix_(m, o)] @ np.linalg.solve(C[np.ix_(o, o)], X[s, o])
+        cov = C[np.ix_(m, m)] - C[np.ix_(m, o)] @ np.linalg.solve(
+            C[np.ix_(o, o)], C[np.ix_(o, m)]
+        )
+        sigma = np.sqrt(np.diagonal(cov))
+        assert np.all(np.abs(result[s, m] - mean) <= tol * sigma)
+
+
+@pytest.mark.parametrize(("ignored", "shares"), [(3, False), (4, True)])
+def test_five_patterns_share_a_factor_only_from_b_of_90_pixels(
+    monkeypatch, ignored, shares
+):
+    calls = counted_shared(monkeypatch)
+    # The case of the shared factor with 3 or 4 ignored pixels, so that |B| = 89 or
+    # 90: its 5 patterns share where |B| >= SMALLEST (1 + 2 / 5) = 89.6.
+    model, flux, ivar, sets = own_bad_pixels(1e2)
+    sets["ignore"][:] = False
+    sets["ignore"][94 : 94 + ignored] = True
+    infill(model, flux, ivar, **sets)
+    assert bool(calls) == shares
+
+
+def test_patterns_of_one_m_share_a_factor_where_their_g_sort_apart(monkeypatch):
+    calls = counted_shared(monkeypatch)
+    # Two replace masks of 110 pixels, each on 3 spectra with one bad pixel below
+    # them, at pixels that alternate between the masks: an order of the patterns by
+    # G first would interleave the masks, and leave no run of one M.
+    npix = 128
+    model = Model(np.zeros((1, npix)), (random_spd(npix, 1e2, 2),), (100,))
+    pixels = np.arange(npix)
+    replace = np.array(
+        [(pixels >= 8 + s % 2) & (pixels < 118 + s % 2) for s in range(6)]
+    )
+    flux = np.random.default_rng(5).standard_normal((6, npix))
+    ivar = np.ones(flux.shape)
+    ivar[np.arange(6), np.arange(6)] = 0.0
+    infill(model, flux, ivar, replace=replace)
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(("spectra", "shares"), [(1, True), (600, False)])
+def test_patterns_of_many_spectra_keep_their_factors_where_chi2_costs_more(
+    monkeypatch, spectra, shares
+):
+    calls = counted_shared(monkeypatch)
+    # One replace mask of 130 pixels on two patterns: 7 bad pixels inside it, so
+    # that |D| = 7, and 1 bad pixel outside it. The chi2 of the shared factor projects
+    # out D for each spectrum, which outweighs the factor saved for 600 spectra each.
+    npix = 200
+    model = Model(np.zeros((1, npix)), (random_spd(npix, 1e2, 2),), (100,))
+    pixels = np.arange(npix)
+    replace = np.broadcast_to((pixels >= 30) & (pixels < 160), (2 * spectra, npix))
+    ivar = np.ones(replace.shape)
+    ivar[:spectra, 40:47] = 0.0
+    ivar[spectra:, 170] = 0.0
+    flux = np.random.default_rng(5).standard_normal(replace.shape)
+    infill(model, flux, ivar, replace=replace)
+    assert bool(calls) == shares
+
+
+def test_draws_priors_and_a_failed_shared_factor_take_the_route_of_each_pattern(
+    monkeypatch,
+):
+    model, flux, ivar, sets = own_bad_pixels(1e2)
+
+    def fail(*args):
+        raise AssertionError
+
+    monkeypatch.setattr(_predict, "solve_shared", fail)
+    infill(model, flux, ivar, **sets, rng=np.random.default_rng(0))
+    # With ignore = ~replace, G covers all pixels, and rows 3 and 5 have their own T.
+    infill(model, flux, ivar, replace=sets["replace"], ignore=~sets["replace"])
+    monkeypatch.undo()
+    model = own_bad_pixels(1e2)[0]
+    # P_GG of the patterns of rows 1 and 4, with pixel 2, is not positive definite:
+    # the error names the first of them, as without the shared factor.
+    P = np.eye(128)
+    P[2, 2] = -1.0
+    monkeypatch.setattr(_model, "precision", lambda S: P)
+    error = (
+        r"^model: cov\[0\] is not positive definite in its precision matrix on the "
+        r"pixels G, for the pattern of row 1$"
+    )
+    with pytest.raises(LinAlgError, match=error):
+        infill(model, flux, ivar, **sets)
+
+
 def test_covariance_needs_a_result_computed_with_covariance_true():
     model, flux, ivar, mask = two_bins(1e2)
     result = infill(model, flux, ivar, mask)

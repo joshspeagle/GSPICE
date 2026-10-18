@@ -18,6 +18,7 @@ from ._linalg import (
     solve_low_rank,
     solve_mean,
     solve_pattern,
+    solve_shared,
 )
 from ._model import LowRank, Model, sample_factor, submatrix_of, variances_of
 from ._spectra import (
@@ -40,6 +41,9 @@ from ._spectra import (
 )
 
 _logger = logging.getLogger("gspice")
+# Design section 12, (f): the patterns of one M share the factor of P_BB where
+# |E| + |D| <= |B| / SHARED and, for n patterns, |B| >= SMALLEST (1 + 2 / n).
+SHARED, SMALLEST = 16, 64
 
 
 @dataclass(frozen=True, eq=False)
@@ -404,20 +408,28 @@ def infill(
     Cost: npix^3 flops for P at the first use of a bin, npix^2 K for a `LowRank` of rank
     K; then per pattern and chunk |G|^3/3 + |M|^3/3 flops, and |M|^3/3 more with
     covariance=True, and per spectrum 2 |G| (npix + |G|) flops, or 2 |G| npix where G is
-    one run. An (npix,) mask on spectra with their own bad pixels makes one pattern per
-    spectrum, with G the mask and those bad pixels, so a large mask then costs |G|^3/3
-    flops per spectrum. The model keeps P (see `Model`). With covariance=True, the
-    result keeps |M|^2 x 8 bytes per pattern and chunk. With rng, each spectrum costs
-    npix normals and |M|^2 flops more. Where G covers all pixels, it costs 2 |M|^2 flops
-    more instead, and each pattern and chunk |M|^3/3 flops for the factor of cov[b] at
-    M, which a `LowRank` forms at |M|^2 K flops. A noise model forms C_s for each
-    spectrum with a pixel to replace; every spectrum is its own pattern. Where G is also
-    short of all pixels, a dense cov[0] forms no P_s: per spectrum, npix^3/3 flops for
-    the Cholesky factor of C_s and about (npix - g0)^2 |G| + npix |G|^2 for P_GG and
-    P_{G,:} x0 from it, with g0 the first pixel of G, before the pattern costs above. A
-    `LowRank` cov[0] of rank K forms no P_s: per spectrum, npix K^2 flops for its K x K
-    system, |M| K^2 for the mean and var, and |T|^2 K + |T|^3/3 for chi2, or with rng
-    |M|^2 K + |M|^3/3 for chi2 and the draws.
+    one run. Without rng, n >= 2 patterns of a chunk with one bin and one M, and G short
+    of all pixels, share one factor where each has |E| + |D| <= |B|/16, with B the
+    pixels in the G of all of them, E the pixels of G outside B, and D the pixels of M
+    in the T of another of them but not in their own, where |B| >= 64 (1 + 2/n), and
+    where the shared factor costs fewer flops than their own factors, or than the mean
+    from C_OO. They cost |B|^3/3 + |M|^3/3 flops, and |M|^3/3 more with covariance=True,
+    each of these patterns |B|^2 |E| + |M|^2 |E| + |U| (|D| + |E|)^2 flops, with U the
+    pixels in the T of any of them, and |M|^2 |E| more with covariance=True, and each
+    spectrum 2 |G| npix + |B|^2 + |M|^2 + 2 |U|^2 + 4 (|U| + |E|) (|D| + |E|) flops. An
+    (npix,) mask on spectra with a few bad pixels of their own is such a case. The model
+    keeps P (see `Model`). With covariance=True, the result keeps |M|^2 x 8 bytes per
+    pattern and chunk. With rng, each spectrum costs npix normals and |M|^2 flops more.
+    Where G covers all pixels, it costs 2 |M|^2 flops more instead, and each pattern and
+    chunk |M|^3/3 flops for the factor of cov[b] at M, which a `LowRank` forms at |M|^2
+    K flops. A noise model forms C_s for each spectrum with a pixel to replace; every
+    spectrum is its own pattern. Where G is also short of all pixels, a dense cov[0]
+    forms no P_s: per spectrum, npix^3/3 flops for the Cholesky factor of C_s and about
+    (npix - g0)^2 |G| + npix |G|^2 for P_GG and P_{G,:} x0 from it, with g0 the first
+    pixel of G, before the pattern costs above. A `LowRank` cov[0] of rank K forms no
+    P_s: per spectrum, npix K^2 flops for its K x K system, |M| K^2 for the mean and
+    var, and |T|^2 K + |T|^3/3 for chi2, or with rng |M|^2 K + |M|^3/3 for chi2 and the
+    draws.
     """
     start = time.perf_counter()
     inflate = boolean(inflate, "inflate")
@@ -792,19 +804,122 @@ def conditionals(
     # of solve_pattern, which is then NaN; the prior and the low-rank route keep var.
     # The caller computed P of the bins that need it, so only a solve can raise, or
     # for a noise model P_s or the factor of C_s.
-    # The bin of each spectrum, one-hot, is part of the key of its pattern.
+    # The bin of each spectrum, one-hot, is part of the key of its pattern. The bin and
+    # M lead the key, so that the patterns of one bin and one M are adjacent in the
+    # order of group_rows, as _shared needs.
     one_hot = np.eye(len(model.cov), dtype=bool)
-    keys = np.concatenate([G, M, T, one_hot[bins]], axis=1)
-    for group in group_rows(keys):
-        first = group[0]
-        pixels = np.flatnonzero(M[first])
-        solution = None
-        if pixels.size:
+    keys = np.concatenate([one_hot[bins], M, G, T], axis=1)
+    patterns = group_rows(keys)
+    first = np.array([group[0] for group in patterns], dtype=np.intp)
+    g, npix = np.count_nonzero(G, axis=1)[first], G.shape[1]
+    # The mean alone, of a dense model without noise, from C_OO at |O|^3/3 flops
+    # instead of |G|^3/3 where npix/2 < |G| < npix (design section 12, (j)).
+    from_cov = (2 * g > npix) & (g < npix)
+    if variance or normals is not None or model._label is not None:
+        from_cov[:] = False
+    elif from_cov.any():
+        dense = np.array([not isinstance(C, LowRank) for C in model.cov])
+        from_cov &= dense[bins[first]] & ~T.any(axis=1)[first]
+    # The draws keep the factor of solve_pattern, and a noise model its own route.
+    shared = {}
+    if normals is None and model._label is None and len(patterns) > 1:
+        shared = _shared(
+            model, X, bins, G, M, T, patterns, first, g, from_cov, covariance, variance
+        )
+    for i, group in enumerate(patterns):
+        first_row = group[0]
+        pixels = np.flatnonzero(M[first_row])
+        solution = shared.get(i)
+        if pixels.size and solution is None:
             z = None if normals is None else normals[np.ix_(group, pixels)]
-            key = G[first], M[first], T[first]
-            b, row = int(bins[first]), int(rows[first])
-            solution = _solve(model, b, *key, X[group], z, covariance, variance, row)
+            key = G[first_row], M[first_row], T[first_row]
+            b, row = int(bins[first_row]), int(rows[first_row])
+            solution = _solve(
+                model, b, *key, X[group], z, covariance, variance, row, from_cov[i]
+            )
         yield group, pixels, solution
+
+
+def _shared(
+    model: Model,
+    X: NDArray[np.float64],
+    bins: NDArray[np.intp],
+    G: NDArray[np.bool_],
+    M: NDArray[np.bool_],
+    T: NDArray[np.bool_],
+    patterns: list[NDArray[np.intp]],
+    first: NDArray[np.intp],
+    g: NDArray[np.intp],
+    from_cov: NDArray[np.bool_],
+    covariance: bool,
+    variance: bool,
+) -> dict[int, Conditional]:
+    # The solutions of solve_shared, by position in patterns, for the runs of adjacent
+    # patterns with one bin and one M, with first their first rows, g their |G| and
+    # from_cov where they take the mean from C_OO (design section 12, (f)). A pattern
+    # joins where its E = G \ B and D = U \ T hold together at most |B| / SHARED pixels,
+    # with B the pixels in the G of all patterns of the run and U the pixels in the T of
+    # any of them. The n patterns that join share the factor where |B| >= SMALLEST (1 +
+    # 2 / n), below which the overhead of the calls outweighs the flops saved at npix
+    # 1000 to 2400 (#109), and where it costs fewer flops than their own routes.
+    solutions: dict[int, Conditional] = {}
+    npix = G.shape[1]
+    # B is in G, so a pattern with |G| < SMALLEST cannot join, and the rows of the
+    # others are gathered alone.
+    positions = np.flatnonzero((g >= SMALLEST) & (g < npix) & M.any(axis=1)[first])
+    if positions.size < 2:
+        return solutions
+    first = first[positions]
+    Mf, bf = M[first], bins[first]
+    starts = np.flatnonzero(
+        np.r_[True, (bf[1:] != bf[:-1]) | (Mf[1:] != Mf[:-1]).any(axis=1)]
+    )
+    for start, stop in zip(starts, np.r_[starts[1:], first.size]):
+        # |B| is at most the least |G| of the run, which bounds the test below.
+        run = np.arange(start, stop)
+        least = int(np.min(g[positions[run]]))
+        if run.size < 2 or least * run.size < SMALLEST * (run.size + 2):
+            continue
+        Gc, Tc = G[first[run]], T[first[run]]
+        B, U = Gc.all(axis=0), Tc.any(axis=0)
+        size = int(np.count_nonzero(B))
+        E, D = np.count_nonzero(Gc & ~B, axis=1), np.count_nonzero(U & ~Tc, axis=1)
+        keep = SHARED * (E + D) <= size
+        run, Gc, Tc, E, D = run[keep], Gc[keep], Tc[keep], E[keep], D[keep]
+        n = run.size
+        if n < 2 or size * n < SMALLEST * (n + 2):
+            continue
+        cluster = positions[run]
+        # Three times the flops of the factors: with the variances, those of R_MM
+        # and, for each pattern, the solve of W_M by R_MM. For each spectrum, the
+        # shared route also projects its chi2 residual and multiplies by the E rows of
+        # P, and its own route solves by the factor of P_GG instead of P_BB.
+        m, u = int(np.count_nonzero(Mf[start])), int(np.count_nonzero(U))
+        inverse, update = (m**3, size**2 + m**2) if variance else (0, size**2)
+        own = np.where(
+            from_cov[cluster], (npix - g[cluster]) ** 3, g[cluster] ** 3 + inverse
+        )
+        spectra = np.array([patterns[i].size for i in cluster])
+        shared = 12 * (u + E) * (D + E) + 3 * E * (2 * npix + 4 * size)
+        own += 3 * spectra * np.where(from_cov[cluster], 0, g[cluster] ** 2 - size**2)
+        cost = size**3 + inverse + 3 * update * E.sum() + np.sum(spectra * shared)
+        if cost >= own.sum():
+            continue
+        groups = [patterns[i] for i in cluster]
+        stops = np.cumsum([group.size for group in groups])
+        local = [slice(stop - group.size, stop) for group, stop in zip(groups, stops)]
+        P = model._precision(int(bf[start]))
+        Xc = X[np.concatenate(groups)]
+        try:
+            results = solve_shared(
+                P, Gc, Mf[start], Tc, Xc, local, covariance, variance
+            )
+        except LinAlgError:
+            # solve_pattern then raises for the first pattern that fails, as without
+            # the shared factor.
+            continue
+        solutions.update(zip(cluster.tolist(), results))
+    return solutions
 
 
 def filled(
@@ -876,6 +991,7 @@ def _solve(
     covariance: bool,
     variance: bool,
     row: int,
+    from_cov: bool,
 ) -> Conditional:
     C, prior = model.cov[b], G.all()
     # The model of one spectrum of a noise model, which has a label, conditions C_s
@@ -890,15 +1006,8 @@ def _solve(
     elif not (prior or noise):
         P = model._precision(b)
     try:
-        # The mean alone, of a dense model without noise, from C_OO at |O|^3/3 flops
-        # instead of |G|^3/3 (design section 12, (j)).
-        if (
-            not (variance or prior or T.any())
-            and normals is None
-            and model._label is None
-            and not isinstance(C, LowRank)
-            and 2 * np.count_nonzero(G) > G.size
-        ):
+        # The mean alone from C_OO (see conditionals); isinstance narrows C.
+        if from_cov and isinstance(C, np.ndarray):
             mean = solve_mean(C, G, M, X)
             return Conditional(
                 mean, np.full(mean.shape[1], np.nan), np.zeros(len(mean)), None, None

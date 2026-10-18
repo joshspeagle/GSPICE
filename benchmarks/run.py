@@ -121,12 +121,17 @@ def _infill(C, L, repeats):
         (100, "shared", CHUNK),
         (1200, "unique", 20),
         (1200, "shared", CHUNK),
+        # One (npix,) mask, and 3 bad pixels of each spectrum's own (design section
+        # 12, (f)).
+        (150, "own bad pixels", 1000),
+        (1200, "own bad pixels", 100),
     ]
     model = _model(C, 1)
     rng = np.random.default_rng(2)
     for size, patterns, nspec in entries:
         # The inputs exist before the clock starts: a run of size pixels per spectrum,
-        # or one (npix,) mask for all, and ivar = 1, so that G = M = T = replace.
+        # or one (npix,) mask for all, and ivar = 1, so that G = M = T = replace, but
+        # for the bad pixels of each spectrum's own.
         if patterns == "unique":
             first = rng.choice(NPIX - size + 1, nspec, replace=False)
         else:
@@ -134,6 +139,10 @@ def _infill(C, L, repeats):
         replace = _runs(first, size)
         flux = rng.standard_normal((nspec, NPIX), dtype=np.float32)
         ivar = np.ones((nspec, NPIX), dtype=np.float32)
+        own = patterns == "own bad pixels"
+        if own:
+            bad = rng.random((nspec, NPIX)).argsort(axis=1)[:, :3]
+            ivar[np.arange(nspec)[:, np.newaxis], bad] = 0.0
         infill = partial(gspice.infill, model, replace=replace)
         times = defaultdict(list)
         for _ in range(repeats + 1):
@@ -143,9 +152,12 @@ def _infill(C, L, repeats):
             "npix": NPIX,
             "G_size": size,
             "patterns": patterns,
-            "M": "G",
-            "T": "G",
+            "M": "replace" if own else "G",
+            "T": "M less bad pixels" if own else "G",
         }
+        if own:
+            # G_size is then |M|, and G also holds the bad pixels outside M.
+            parameters["bad_pixels"] = 3
         yield parameters, times
 
 
