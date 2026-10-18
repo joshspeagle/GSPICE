@@ -346,10 +346,13 @@ def calibration(model: Model, flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike 
     consecutive in the list of good pixels) or n random good pixels ("scattered");
     G = M | bad. Z^2 = r_M^T C_MM^-1 r_M with the full conditional covariance, and
     fs = f_s(N_s of the bin, npix - |G|, n) as in section 4.3. sizes=None: those of 1, 4,
-    16, 64, 256 and 1024 not above half the good pixels of any spectrum, and ValueError
-    if none is. A spectrum with fewer good pixels than n gets n = 0 and z2 NaN. rng draws
-    the masks spectrum by spectrum in row order, and size by size within a spectrum, so
-    they do not depend on chunking. Use spectra not used for training.
+    16, 64, 256 and 1024 not above half the median good-pixel count of the spectra, so
+    that a few spectra with many bad pixels do not remove a size for the others; all six
+    without a spectrum, and ValueError if none is. The spectra of a column can then differ
+    between sizes, and where=(n > 0).all(axis=1) compares sizes on the same spectra. A spectrum with fewer good pixels than
+    n gets n = 0 and z2 NaN. rng draws the masks spectrum by spectrum in row order, and
+    size by size within a spectrum, so they do not depend on chunking. Use spectra not
+    used for training.
     Returns Calibration with one column per size.
     Cost: that of infill for each size (section 12, optimization (h)).
     """

@@ -502,8 +502,11 @@ def calibration(
         As in `scale`, with the npix of model.
     sizes : iterable of int, optional
         The sizes n, one column of the result each, in this order; >= 1. None: those
-        of 1, 4, 16, 64, 256 and 1024 that are not above half the good pixels of any
-        spectrum.
+        of 1, 4, 16, 64, 256 and 1024 that are not above half the median number of
+        good pixels per spectrum (np.median), or all six without a spectrum. A
+        spectrum with fewer good pixels than a size has n = 0 there, so the spectra
+        of a column can differ between sizes; `Calibration` methods with
+        where=(result.n > 0).all(axis=1) compare all sizes on the same spectra.
     layout : {"run", "scattered"}, optional
         Whether M is a run of good pixels or good pixels scattered at random.
     rng : numpy.random.Generator
@@ -527,7 +530,7 @@ def calibration(
         If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
         has another npix than model, a spectrum has no good pixel, sizes is empty or
         holds an integer < 1, layout is neither "run" nor "scattered", or sizes is
-        None and a spectrum has a single good pixel.
+        None and the median number of good pixels per spectrum is below 2.
     numpy.linalg.LinAlgError
         Before the first chunk, if the covariance of a bin with a spectrum that has
         more good pixels than the smallest size fails its check. Otherwise as in
@@ -550,11 +553,15 @@ def calibration(
     nspec, npix = flux.shape
     count = npix - np.count_nonzero(bad, axis=1)
     if sizes is None:
-        expected = "at least 2 good pixels in every spectrum for the default sizes"
-        require(count >= 2, count, "sizes", expected, ("row",))
-        sizes = tuple(
-            size for size in (1, 4, 16, 64, 256, 1024) if np.all(2 * size <= count)
-        )
+        # Design section 5.3: the median count, so that a few spectra with many bad
+        # pixels do not remove a size for the others.
+        median = np.median(count) if nspec else np.inf
+        sizes = tuple(size for size in (1, 4, 16, 64, 256, 1024) if 2 * size <= median)
+        if not sizes:
+            raise ValueError(
+                "sizes: expected a median of at least 2 good pixels per spectrum for "
+                f"the default sizes, got {median}"
+            )
     bins = model._bins(flux, ivar, bad)
     # P of each bin with a spectrum that keeps a conditioning pixel for some size
     # (m > n), before any spectrum, so that a covariance that fails its check raises

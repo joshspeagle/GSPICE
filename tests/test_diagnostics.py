@@ -247,13 +247,22 @@ def test_calibration_is_infill_of_the_documented_masks_for_any_chunk_size(
     assert np.array_equal(np.argwhere(n == 0), [[2, 2], [4, 2]])
 
 
-@pytest.mark.parametrize(("good", "sizes"), [(7, (1,)), (8, (1, 4))])
-def test_the_default_sizes_are_at_most_half_the_good_pixels_of_every_spectrum(
-    good, sizes
-):
-    model, flux, ivar, _ = spectra()
-    mask = np.zeros(flux.shape, bool)
-    mask[3, good:] = True
+@pytest.mark.parametrize(
+    ("good", "sizes"),
+    [
+        ((12, 12, 12, 1, 7, 7, 7), (1,)),
+        ((12, 12, 12, 1, 8, 8, 8), (1, 4)),
+        ((12, 8, 7, 1), (1,)),
+        ((12, 9, 7, 1), (1, 4)),
+    ],
+    ids=["odd-median-7", "odd-median-8", "even-median-7.5", "even-median-8"],
+)
+def test_the_default_sizes_are_at_most_half_the_median_good_pixel_count(good, sizes):
+    # A row with one good pixel keeps the defaults; under a rule on the fewest good
+    # pixels it would leave none.
+    model, flux, *_ = spectra()
+    flux, ivar = flux[: len(good)], np.ones((len(good), NPIX))
+    mask = PIXELS >= np.array(good)[:, np.newaxis]
     results = [
         fields(
             calibration(
@@ -263,6 +272,22 @@ def test_the_default_sizes_are_at_most_half_the_good_pixels_of_every_spectrum(
         for given in (None, sizes)
     ]
     assert same(*results)
+
+
+def test_a_spectrum_with_few_good_pixels_leaves_the_default_sizes_of_the_others():
+    # Rows 0 to 6 have 12, 9, 8, 9, 3, 10 and 12 good pixels: the median 9 keeps size
+    # 4, which row 4 cannot fill.
+    model, flux, ivar, mask = spectra()
+    result = calibration(model, flux, ivar, mask, rng=np.random.default_rng(16))
+    assert np.array_equal(result.n, [[1, 4]] * 4 + [[1, 0]] + [[1, 4]] * 2)
+    assert np.array_equal(np.isnan(result.z2), result.n == 0)
+
+
+def test_zero_spectra_give_all_six_default_sizes():
+    model, *_ = spectra()
+    empty = np.zeros((0, NPIX))
+    result = calibration(model, empty, empty, rng=np.random.default_rng(0))
+    assert [a.shape for a in fields(result)] == [(0, 6)] * 3
 
 
 def test_progress_counts_the_spectra_done_after_each_chunk_of_calibration(
