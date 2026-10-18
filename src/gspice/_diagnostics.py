@@ -7,7 +7,6 @@ from typing import Any, Literal, overload
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from scipy import stats
 
 from ._model import Model, rebuild, sample_factor
 from ._predict import conditionals, means, predict, validated, weigh, working
@@ -265,6 +264,9 @@ class Calibration:
         if not 0 < q < 1:
             raise ValueError(f"q: expected a number strictly between 0 and 1, got {q}")
         used = self._used(where)
+        # Imported here, so that `import gspice` does not load scipy.stats.
+        from scipy import stats
+
         # The quantile of each distinct n, which is usually one per column.
         df, inverse = np.unique(self.n[used], return_inverse=True)
         above = np.zeros(used.shape, dtype=bool)
@@ -321,6 +323,9 @@ class Calibration:
             raise ValueError(
                 f"i: expected an integer < {k}, the number of columns, got {i}"
             )
+        # Imported here, so that `import gspice` does not load scipy.stats.
+        from scipy import stats
+
         used = self._used(where, i)
         x, n = self.z2[used, i] / self.fs[used, i], self.n[used, i]
         cdf = stats.chi2.cdf(x, n)

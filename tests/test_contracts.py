@@ -1,4 +1,6 @@
 import dataclasses
+import subprocess
+import sys
 from functools import partial
 
 import numpy as np
@@ -603,3 +605,14 @@ def test_a_call_validates_the_spectra_and_finds_their_bins_once(monkeypatch, fun
     monkeypatch.setattr(Model, "_bins", counted("bins", Model._bins))
     function(MODEL, np.ones((4, 3)), np.ones((4, 3)))
     assert calls == ["validate", "bins"]
+
+
+def test_importing_gspice_loads_neither_scipy_stats_nor_scipy_interpolate():
+    code = (
+        "import sys, gspice; "
+        "assert not {'scipy.stats', 'scipy.interpolate'} & set(sys.modules)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
