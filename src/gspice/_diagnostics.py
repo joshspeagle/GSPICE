@@ -553,9 +553,10 @@ def calibration(
     Cost: for each size, npix^3 flops for P at the first use of a bin; then per
     pattern of a chunk of max(1, 2**24 // npix) spectra, at most one per spectrum,
     |G|^3/3 flops, or n^3/3 where G covers all pixels, and per spectrum
-    2 |G| (npix + |G|) flops. The masks of a chunk take up to len(sizes) x 2^24
-    bytes. A noise model costs per spectrum and size as in `infill`, with M = T; a
-    dense cov[0] factors C_s once per spectrum for all sizes.
+    2 |G| (npix + |G|) flops, or 2 |G| npix where G is one run. The masks of a chunk
+    take up to len(sizes) x 2^24 bytes. A noise model costs per spectrum and size as
+    in `infill`, with M = T; a dense cov[0] factors C_s once per spectrum for all
+    sizes.
     """
     start = time.perf_counter()
     if sizes is not None:
