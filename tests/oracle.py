@@ -32,11 +32,16 @@ def conditional(C, G, X, T=()):
     # Mean (nspec, |G|) and covariance (|G|, |G|) of x_G given x_O, O the other pixels,
     # from a Cholesky solve of C_OO; and chi2 (nspec,) = r_T^T C_TT^-1 r_T over T, a
     # subset of G, with r_T = x_T - mean_T and C_TT the conditional covariance at T.
+    # C is an array, or the rows of Decimal of low_rank.
     G = list(G)
     O = [i for i in range(len(C)) if i not in G]
     t = [G.index(i) for i in T]
     with localcontext(CONTEXT):
-        c = [[Decimal(v) for v in row] for row in C.tolist()]
+        c = (
+            C
+            if isinstance(C, list)
+            else [[Decimal(v) for v in row] for row in C.tolist()]
+        )
         L = cholesky([[c[i][j] for j in O] for i in O])
         Z = [forward(L, [c[i][g] for i in O]) for g in G]
         cov = [
@@ -52,6 +57,43 @@ def conditional(C, G, X, T=()):
             chi2.append(sum(map(mul, r, r)))
     mean = np.array(mean, float).reshape(len(X), len(G))
     return mean, np.array(cov, float), np.array(chi2, float)
+
+
+def low_rank(V, values, d):
+    # C = V diag(values) V^T + diag(d) as rows of Decimal, from the float64 fields: the
+    # products are exact and the sums round to 60 digits, so C is not rounded to
+    # float64 as a dense matrix would be.
+    with localcontext(CONTEXT):
+        rows = [[Decimal(v) for v in row] for row in V.tolist()]
+        scaled = [
+            [v * Decimal(s) for v, s in zip(row, values.tolist())] for row in rows
+        ]
+        return [
+            [
+                sum(map(mul, scaled[i], rows[j])) + (Decimal(d[i]) if i == j else 0)
+                for j in range(len(rows))
+            ]
+            for i in range(len(rows))
+        ]
+
+
+def inverse(c):
+    # The inverse (float64) of the rows of Decimal c, by a 60-digit Cholesky
+    # factorization c = L L^T: P_ij = sum_k (L^-1)_ki (L^-1)_kj.
+    n = len(c)
+    with localcontext(CONTEXT):
+        L = cholesky(c)
+        Z = [forward(L, [Decimal(int(i == j)) for i in range(n)]) for j in range(n)]
+        return np.array(
+            [[sum(map(mul, Z[i], Z[j])) for j in range(n)] for i in range(n)], float
+        )
+
+
+def kappa_w(V, values, d):
+    # kappa_W of design section 4.2 (decision A28).
+    c = d + np.square(V) @ values
+    B = V * np.sqrt(values) / np.sqrt(c)[:, np.newaxis]
+    return (np.max(d / c) + np.linalg.eigvalsh(B.T @ B)[-1]) / np.min(d / c)
 
 
 def window(i, nguard, npix, width=1):
@@ -77,6 +119,23 @@ def random_spd(npix, kappa, seed):
     Q, _ = np.linalg.qr(np.random.default_rng(seed).standard_normal((npix, npix)))
     C = (Q * np.logspace(0, -np.log10(kappa), npix)) @ Q.T
     return (C + C.T) / 2
+
+
+def random_low_rank(npix, rank, kappa, seed):
+    # The fields (V, values, d) of a low-rank test matrix of design section 11, with
+    # orthonormal V, values log-spaced from 1 to 4 / kappa and d uniform on
+    # [2 / kappa, 8 / kappa]: C scaled to unit diagonal then has a condition number
+    # within a factor 4 of kappa.
+    rng = np.random.default_rng(seed)
+    V, _ = np.linalg.qr(rng.standard_normal((npix, rank)))
+    return V, np.geomspace(1, 4 / kappa, rank), rng.uniform(2, 8, npix) / kappa
+
+
+def dense(C):
+    # C as a float64 matrix, also for a LowRank.
+    if isinstance(C, np.ndarray):
+        return C
+    return (C.vectors * C.values) @ C.vectors.T + np.diag(C.diag)
 
 
 def condition(C):

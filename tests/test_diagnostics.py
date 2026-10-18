@@ -12,6 +12,7 @@ from scipy import stats
 from _golden import checked, same
 from gspice import (
     Calibration,
+    LowRank,
     Model,
     _model,
     _spectra,
@@ -23,7 +24,7 @@ from gspice import (
     pixelwise,
     simulate,
 )
-from oracle import random_spd
+from oracle import random_low_rank, random_spd
 
 EPS = np.finfo(float).eps
 # Each held-out test averages over SETS training sets, each with HELD_OUT spectra of
@@ -182,11 +183,16 @@ NPIX = 12
 PIXELS = np.arange(NPIX)
 
 
-def spectra():
-    # Seven spectra and a model. Rows 1 to 5 have bad pixels: an interior run, runs at
-    # both ends, isolated pixels, all but 3 pixels, and 2 pixels of ivar 0, so that
-    # their good pixels number 9, 8, 9, 3 and 10, and 12 in rows 0 and 6.
-    model = Model(np.zeros((1, NPIX)), (random_spd(NPIX, 1e2, 0),), (30,))
+def spectra(rank=None):
+    # Seven spectra and a model, dense or of the rank. Rows 1 to 5 have bad pixels: an
+    # interior run, runs at both ends, isolated pixels, all but 3 pixels, and 2 pixels
+    # of ivar 0, so that their good pixels number 9, 8, 9, 3 and 10, and 12 in rows 0
+    # and 6.
+    if rank is None:
+        C = random_spd(NPIX, 1e2, 0)
+    else:
+        C = LowRank(*random_low_rank(NPIX, rank, 1e2, 0))
+    model = Model(np.zeros((1, NPIX)), (C,), (30,))
     flux = np.random.default_rng(14).standard_normal((7, NPIX))
     ivar = np.ones((7, NPIX))
     mask = np.zeros((7, NPIX), bool)
@@ -220,12 +226,13 @@ def fields(result):
 
 @pytest.mark.parametrize("rows", [None, 2], ids=["one-chunk", "2-row-chunks"])
 @pytest.mark.parametrize("layout", ["run", "scattered"])
+@pytest.mark.parametrize("rank", [None, 3], ids=["dense", "low-rank"])
 def test_calibration_is_infill_of_the_documented_masks_for_any_chunk_size(
-    monkeypatch, layout, rows
+    monkeypatch, rank, layout, rows
 ):
     if rows is not None:
         monkeypatch.setattr(_spectra, "CHUNK", rows * NPIX)
-    model, flux, ivar, mask = spectra()
+    model, flux, ivar, mask = spectra(rank)
     # Size 9 covers every good pixel of rows 1 and 3, so that G covers all pixels and
     # the run crosses their bad pixels, and is above the 8 and 3 good pixels of rows 2
     # and 4.
@@ -500,14 +507,14 @@ def test_each_population_of_a_mixture_has_the_mean_z2_of_its_own_moments():
 NSPEC = 7
 
 
-def audited():
-    # A model of 40 simulated spectra, and 7 others in float32 with bad pixels: pixel 3
-    # in every spectrum, by mask in rows 0 to 3 and by ivar 0 in rows 4 to 6, and pixel
-    # 8 in every spectrum but row 2. Flux is NaN at the bad pixels and ivar inf at the
+def audited(rank=None):
+    # A model of 40 simulated spectra, of the rank, and 7 others in float32 with bad
+    # pixels: pixel 3 in every spectrum, by mask in rows 0 to 3 and by ivar 0 in rows 4
+    # to 6, and pixel 8 in every spectrum but row 2. Flux is NaN at the bad pixels and ivar inf at the
     # masked ones, so that a read of either shows.
     rng = np.random.default_rng(13)
     train = simulate(40, NPIX, rng=rng)
-    model, _ = fit(train.flux, train.ivar, nsigma=())
+    model, _ = fit(train.flux, train.ivar, nsigma=(), rank=rank)
     test = simulate(NSPEC, NPIX, rng=rng)
     flux, ivar = test.flux.astype(np.float32), test.ivar.astype(np.float32)
     mask = np.zeros(flux.shape, bool)
@@ -520,10 +527,13 @@ def audited():
 
 
 @pytest.mark.filterwarnings("error")
-def test_rho_is_the_rms_residual_in_reported_sigmas_over_the_good_spectra(monkeypatch):
+@pytest.mark.parametrize("rank", [None, 3], ids=["dense", "low-rank"])
+def test_rho_is_the_rms_residual_in_reported_sigmas_over_the_good_spectra(
+    monkeypatch, rank
+):
     # Chunks of 2 rows, the last one partial, so that the sums run over the chunks.
     monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
-    model, flux, ivar, mask = audited()
+    model, flux, ivar, mask = audited(rank)
     rho = checked(partial(noise_audit, model, nguard=2), flux, ivar, mask)
     # With the same chunks, pixelwise computes the predictions of noise_audit from the
     # same arrays, bit for bit.

@@ -482,9 +482,9 @@ def calibration(
     outside G = M | bad, and C_MM their full conditional covariance, and
     fs = f_s(N_s, npix - |G|, n) of `finite_sample_factor`, NaN where it is not
     defined, with N_s the n_train of the bin of the spectrum, or 1 for a model with a
-    constant centre or weights, for which no factor is derived. For held-out Gaussian
-    spectra of a model with a derived factor, z2 / (n fs) then has the mean 1, so use
-    spectra that the model was not fitted to.
+    constant centre, weights or a `LowRank` covariance, for which no factor is
+    derived. For held-out Gaussian spectra of a model with a derived factor,
+    z2 / (n fs) then has the mean 1, so use spectra that the model was not fitted to.
 
     Rank the m good pixels of a spectrum from 0 to m - 1 in increasing order. With
     layout="run", M holds those of ranks start to start + n - 1, with

@@ -131,11 +131,11 @@ class Blocks:
 |---|---|---|---|
 | Dense, mean-centred | default | S = Σ_s w_s (x_s − x̄_w)(x_s − x̄_w)ᵀ / (V1 − V2/V1); unweighted: X_cᵀX_c/(N_s − 1) | N_s − 1 ≥ npix (Q2); no pixel bad in every training spectrum |
 | Dense, constant centre | `center=c` | S = Σ_s w_s x_s x_sᵀ / V1 (no mean is estimated) | N_s ≥ npix; no pixel bad in every training spectrum |
-| Low rank plus diagonal | `rank=K` | (V, Λ) = leading K eigenpairs of S; d = diag(S) − Σ_k λ_k v_k² | λ_K > 0 and every d_i > 0 |
+| Low rank plus diagonal | `rank=K` | (V, Λ) = leading K eigenpairs of S; d = diag(S) − Σ_k λ_k v_k² | λ_K > 0 and every d_i > 0, so S of rank K + 1 or more: N_s − 1 ≥ K + 1 (N_s ≥ K + 1 with a constant centre); no requirement of a good pixel at every pixel |
 | S/N binned | `snr_bins=` | the chosen kind per bin, with its own m_b and N_s | per bin as above |
 | Noise-aware | `noise=True` | Σ₊ from the estimator below; with `rank=K`, (V, Λ) are its leading K eigenpairs and d_i = Σ_{k>K} max(λ_k, 0) Q_ik² | W_i > 0; every denominator below > 0; λ_K > 0 with `rank=K` |
 
-Covariances are accumulated in float64, in row chunks, and are exactly symmetric.
+Covariances are accumulated in float64, in row chunks, and are exactly symmetric. The K leading eigenpairs of S come from `eigh` of S restricted to their indices, which is exact and simple; an SVD of X or a Lanczos solver is a candidate gated optimization.
 
 **Noise-free covariance (D-63; the paper gives no estimator).** Let u_si = 1 at good pixels of the final training mask and 0 elsewhere, and let a_s use the same pixels. With w_s = a_s² ω_s the estimate is precision weighted:
 
@@ -146,7 +146,7 @@ Covariances are accumulated in float64, in row chunks, and are exactly symmetric
 
 The estimate Σ is unbiased element by element if (1) spectra are independent, with a common mean μ and a common signal covariance; (2) the noise has zero mean and variance 1/ivar; (3) the noise is uncorrelated between pixels and with the signal; and (4) masks, weights and ivar do not depend on the flux. Gaussianity is not needed. The outlier flags of the final mask break condition 4, and so does photon noise with ivar computed from the flux. The derivation goes in the pull request that implements the estimator (5.3). Σ₊ = Q max(λ, 0) Qᵀ, from `eigh` of Σ, is biased upward (trace +17% at npix 200 and N_s 5000, with the paper's S/N law and 2% bad pixels). At prediction, C_s = Σ₊ + diag(ν_s), or VΛVᵀ + diag(d + ν_s), with ν_si = 1/ivar_si at good pixels and 1/a_s² at bad pixels, so that P_s exists. Cost: three products of N_s·npix² and one `eigh`.
 
-**Clipping passes.** The passes of paper Alg. 4 use a scaled model with the requested rank and centre, and unit weights for every spectrum that `fit` uses: dense, or `LowRank(K)`, which clips when N_s − 1 < npix. With `snr_bins`, one pooled model clips all spectra (provisional, A6), and each bin fits its final covariance on the final mask. The noise-aware estimator is fitted once, on the final mask of the scaled clipping; with `rank=None` that clipping needs N_s − 1 ≥ npix. In-sample clipping has a ceiling: for a dense mean-centred model, the in-sample |Z| of an outlier of any amplitude approaches sqrt((N_s − 1)(N_s − N_k − 1)/N_s) in a spectrum of typical leverage, with N_k = max(npix − 2·nguard − 1, 0) (6.4 at N_s = npix + 1 = 2401 and nguard 20). With a constant centre, the leverage has no term for the mean, and the ceiling is sqrt(N_s − N_k). `fit` logs a WARNING naming each pass whose nsigma exceeds it.
+**Clipping passes.** The passes of paper Alg. 4 use a scaled model with the requested rank and centre, and unit weights for every spectrum that `fit` uses: dense, or `LowRank(K)`, which clips when N_s − 1 < npix. With `snr_bins`, one pooled model clips all spectra (provisional, A6), and each bin fits its final covariance on the final mask. The noise-aware estimator is fitted once, on the final mask of the scaled clipping; with `rank=None` that clipping needs N_s − 1 ≥ npix. In-sample clipping has a ceiling: for a dense mean-centred model, the in-sample |Z| of an outlier of any amplitude approaches sqrt((N_s − 1)(N_s − N_k − 1)/N_s) in a spectrum of typical leverage, with N_k = max(npix − 2·nguard − 1, 0) (6.4 at N_s = npix + 1 = 2401 and nguard 20). With a constant centre, the leverage has no term for the mean, and the ceiling is sqrt(N_s − N_k). No ceiling is derived for a low-rank model. `fit` logs a WARNING naming each pass whose nsigma exceeds it.
 
 **S/N statistic.** snr_s = median of f_si·sqrt(ivar_si) over the good pixels of section 3.1, in `fit` and at prediction; it does not depend on the flux units. `snr_bins=n` puts the interior edges at the 1/n, ..., (n − 1)/n quantiles of the unweighted snr of the spectra with at most maxbadpix bad pixels and ω_s > 0, and a sequence gives them. Spectrum s goes to bin `searchsorted(edges, snr_s, side="right")`. `fit` raises ValueError naming a bin that ties leave below its requirement.
 
@@ -180,7 +180,7 @@ Guard windows are contiguous, so slices replace gathers; this is the IDL "contig
 | Infill | replace ∪ ignore ∪ bad | never conditioned on | P (cached) | per pattern as above |
 | Block scan | {j : dist(j, A) ≤ nguard}, block A ordered last | infilled before the scan | R per block; χ²_A = ‖R_AAᵀ r_A‖²/\|A\| | 2\|G\| (npix + \|G\|) per block |
 
-A pattern is the triple (G, M, T). Spectra of one S/N bin with equal patterns share one factorization, except in noise-aware models, where each spectrum has its own P_s. Where G covers all pixels, every operation returns the exact prior from C (μ_G = 0, C_MM = C[M, M], var = diag(C)) without P; diag(P⁻¹) would err by 0.23κε to 0.29κε. Its draws are L z_M, with L the lower Cholesky factor of C_MM.
+A pattern is the triple (G, M, T). Spectra of one S/N bin with equal patterns share one factorization, except in noise-aware models, where each spectrum has its own P_s. Where G covers all pixels, every operation returns the exact prior from C (μ_G = 0, C_MM = C[M, M], var = diag(C)) without P; diag(P⁻¹) would err by 0.23κε to 0.29κε. Its draws are L z_M, with L the lower Cholesky factor of C_MM. The prior forms C only at the target pixels: C_TT for χ², and C_MM only for the covariance or the draws, so a `LowRank` C is never formed in full.
 
 **Noise-aware models.** C_s differs per spectrum, so P_s is formed per spectrum by `precision` or `woodbury`, once per call, and every operation of the call reuses it. This is the exception that CLAUDE.md (Numerics) states. Section 12 gives the cost and the gated optimizations.
 
@@ -234,7 +234,8 @@ def fit(flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | None = None, *,
     Returns the model, and the final training mask (nspec, npix) bool, all True for
     spectra not used. Raises ValueError, naming the counts or pixels, if a requirement
     of section 4.1 fails, and LinAlgError, naming the bin, N_s and rcond, if a
-    covariance fails A26, which can happen for N_s - 1 close to npix.
+    covariance fails A26, which can happen for N_s - 1 close to npix, or naming
+    kappa_W if a LowRank covariance fails A28 (kappa_W > 1e13).
     Cost per pass: N_s npix^2 (covariance) + npix^3 + 2 N_s npix^2 (pixelwise).
     """
 
@@ -508,7 +509,7 @@ The rule: legacy keeps every behaviour of the 2022 code run with its asserts ena
 | `rng` a `numpy.random.Generator` | TypeError |
 | incompatible options: `noise` with `snr_bins` or `center`; `inflate` without a derived f_s, or where it is NaN (section 4.3; `repair` checks the model kind at entry, and the NaN case before its final infill, when G is known) | ValueError |
 
-Messages name the argument and what was expected, for example `"ivar: expected shape (2000, 50) like flux, got (2000, 49)"`. A covariance that is not positive definite or fails the rcond check (A26) raises `numpy.linalg.LinAlgError` (a ValueError subclass) with the bin in the message. There is no public exception class.
+Messages name the argument and what was expected, for example `"ivar: expected shape (2000, 50) like flux, got (2000, 49)"`. A covariance that is not positive definite, fails the rcond check (A26) or, as a `LowRank`, has κ_W > 1e13 (A28) raises `numpy.linalg.LinAlgError` (a ValueError subclass) with the bin in the message. There is no public exception class.
 
 **Logging and progress.** `logging.getLogger("gspice")` with a `NullHandler`. Each fit pass logs at INFO the nsigma, fraction flagged, N_s and spectra dropped, and a weighted fit logs V1²/V2; timings go to DEBUG. No `print`. The package never sets thread counts.
 
@@ -561,7 +562,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 | Q14 | `Repaired.var` of section 6: 1/ivar at good pixels outside the replaced set, inf at bad ones | a complete flux² error array that never reads ivar at bad pixels | 0 (r26) or NaN |
 | Q15 | New API: nonzero mask means bad; flux is cast to float64 before interpolation, which changes integer flux (D-20) and float32 flux (2022 interpolates in float32: up to 5.9e-8 relative, bound 2⁻²⁴); legacy keeps D-19 and D-20. **BC-new** | consistency; legacy fidelity | none |
 | A1 | No estimator class | section 2 | `GSPICE` class |
-| A2 | Low rank uses the Woodbury precision; C is never formed | npix²K. For nearly uniform d, more accurate than a dense inverse in every measured case with \|O\| ≥ 2K, usually for K < \|O\| < 2K, and about κε like it for \|O\| ≤ K (section 12). Its error grows as ε·κ_W where some d_i ≪ c_ii, and a dense inverse can then be exact (A28) | dense S_K |
+| A2 | Low rank uses the Woodbury precision; C is never formed in full, and the prior forms it only at the target pixels (section 4.2) | npix²K. For nearly uniform d, more accurate than a dense inverse in every measured case with \|O\| ≥ 2K, usually for K < \|O\| < 2K, and about κε like it for \|O\| ≤ K (section 12). Its error grows as ε·κ_W where some d_i ≪ c_ii, and a dense inverse can then be exact (A28) | dense S_K |
 | A3 | All conditioning works on a dense P; no operator abstraction | one code path; an operator is optimization (b) | `block(g)`/`dot(Y, g)` operator |
 | A4 | Noise-free estimator of section 4.1 | the raw Σ is unbiased element by element with per-pixel masks under its conditions; Σ₊ is not | interpolate masked pixels |
 | A5 | S/N = median of f·sqrt(ivar) over the input good pixels; equal-count bins | independent of flux units; equal counts maximize the smallest N_s | refscale |

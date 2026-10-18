@@ -10,6 +10,7 @@ import gspice
 from gspice import (
     Blocks,
     Calibration,
+    LowRank,
     Model,
     Prediction,
     Repaired,
@@ -74,6 +75,13 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
         progress=progress,
     )
     assert_type(fitted, tuple[Model, NDArray[np.bool_]])
+    low = LowRank(np.ones((4, 1), np.float32), [np.int64(2)], [1, 1, 1, 1])
+    lowrank = Model(np.zeros((1, 4)), [low], [6])
+    assert_type(lowrank.cov, tuple[NDArray[np.float64] | LowRank, ...])
+    assert_type(
+        fit(flux, ivar, mask, nsigma=(), rank=np.int64(2)),
+        tuple[Model, NDArray[np.bool_]],
+    )
     save(model, tmp_path / "model.npz")
     assert_type(load(os.fsencode(tmp_path / "model.npz")), Model)
     scaled = scale(flux, ivar, mask, center=np.float32(1.0), refmean=[0.0] * 4)

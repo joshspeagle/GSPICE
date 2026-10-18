@@ -7,6 +7,8 @@ from scipy.linalg import lapack
 
 # Design decision A26.
 MIN_RCOND = 1e-13
+# Design decision A28.
+MAX_KAPPA_W = 1e13
 
 
 class Conditional(NamedTuple):
@@ -37,6 +39,47 @@ def precision(S: NDArray[np.float64]) -> NDArray[np.float64]:
     _mirror(P)
     # P is exactly symmetric, so its transpose is P as a C-contiguous view.
     return P.T
+
+
+def low_rank_variances(
+    V: NDArray[np.float64], values: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    # The diagonal of V diag(values) V^T.
+    variances: NDArray[np.float64] = np.square(V) @ values
+    return variances
+
+
+def woodbury(
+    V: NDArray[np.float64], values: NDArray[np.float64], d: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    # P = D^-1 - L L^T, L = D^-1 V R^-T, R R^T = Lambda^-1 + V^T D^-1 V: the inverse of
+    # C = V Lambda V^T + D without forming C (design section 4.2), rejected where
+    # kappa_W > 1e13 (decision A28).
+    c = d + low_rank_variances(V, values)
+    scaled = d / c
+    B = V * np.sqrt(values) / np.sqrt(c)[:, np.newaxis]
+    kappa = (np.max(scaled) + np.linalg.eigvalsh(B.T @ B)[-1]) / np.min(scaled)
+    # not <= also rejects a NaN kappa_W.
+    if not kappa <= MAX_KAPPA_W:
+        raise LinAlgError(
+            f"numerically singular: kappa_W = {kappa:.2g} for the matrix scaled to "
+            f"unit diagonal, above {MAX_KAPPA_W:.0e}"
+        )
+    E = V / np.sqrt(d)[:, np.newaxis]
+    # numpy computes E^T E and L L^T by syrk, so A and P are exactly symmetric.
+    A = E.T @ E
+    A[np.diag_indices_from(A)] += 1 / values
+    R, info = lapack.dpotrf(A, lower=1)
+    if info:
+        raise LinAlgError(
+            f"not positive definite: dpotrf failed at the leading minor of order "
+            f"{info} of Lambda^-1 + V^T D^-1 V"
+        )
+    Lt, _ = lapack.dtrtrs(R, (V / d[:, np.newaxis]).T, lower=1)
+    P: NDArray[np.float64] = Lt.T @ Lt
+    np.negative(P, out=P)
+    P[np.diag_indices_from(P)] += 1 / d
+    return P
 
 
 def guard_weights(
@@ -126,35 +169,29 @@ def solve_pattern(
     return Conditional(mean.T[:, order], var[order], chi2, cov, draws)
 
 
-def solve_prior(
-    C: NDArray[np.float64],
-    M: NDArray[np.bool_],
-    T: NDArray[np.bool_],
-    X: NDArray[np.float64],
-    normals: NDArray[np.float64] | None = None,
-    covariance: bool = False,
-) -> Conditional:
-    # Where G covers all pixels, the conditional is the prior N(0, C): exact from C, and
-    # without P, which a singular C does not have (design section 4.2).
-    nspec = X.shape[0]
-    pixels = np.flatnonzero(M)
-    chi2 = np.zeros(nspec)
-    if T.any():
-        L = factor_prior(C[np.ix_(T, T)])
-        # chi2 = ||L^-1 x_T||^2, with C_TT = L L^T and the prior mean 0.
-        r, _ = lapack.dtrtrs(L, X[:, T].T, lower=1)
-        chi2 = np.sum(r**2, axis=0)
-    cov = C[np.ix_(pixels, pixels)] if covariance else None
-    draws: NDArray[np.float64] | None = None
-    if normals is not None:
-        L, info = lapack.dpotrf(C[np.ix_(pixels, pixels)], lower=1)
-        if info:
-            raise LinAlgError("not positive definite on the pixels M")
-        # L z_M is a draw from N(0, C_MM), with C_MM = L L^T. Unlike the solve at T,
-        # the product needs no check of the condition of L.
-        draws = normals @ L.T
-    mean = np.zeros((nspec, pixels.size))
-    return Conditional(mean, np.diagonal(C)[pixels], chi2, cov, draws)
+def prior_chi2(
+    CTT: NDArray[np.float64], XT: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    # chi2 = ||L^-1 x_T||^2 of the prior N(0, C), with C_TT = L L^T, and XT the data at
+    # T (design section 4.2).
+    if not CTT.size:
+        return np.zeros(XT.shape[0])
+    L = factor_prior(CTT)
+    r, _ = lapack.dtrtrs(L, XT.T, lower=1)
+    chi2: NDArray[np.float64] = np.sum(r**2, axis=0)
+    return chi2
+
+
+def prior_draws(
+    CMM: NDArray[np.float64], normals: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    # L z_M, a draw from N(0, C_MM) with C_MM = L L^T. Unlike the solve at T, the
+    # product needs no check of the condition of L.
+    L, info = lapack.dpotrf(CMM, lower=1)
+    if info:
+        raise LinAlgError("not positive definite on the pixels M")
+    draws: NDArray[np.float64] = normals @ L.T
+    return draws
 
 
 def factor_pattern(PGG: NDArray[np.float64]) -> NDArray[np.float64]:
