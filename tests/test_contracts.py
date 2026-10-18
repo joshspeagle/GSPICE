@@ -5,7 +5,9 @@ import numpy as np
 import pytest
 
 from gspice import (
+    Calibration,
     Model,
+    calibration,
     finite_sample_factor,
     fit,
     fit_blocks,
@@ -28,6 +30,7 @@ REJECT_EMPTY = {
     "pixelwise": partial(pixelwise, MODEL),
     "infill": partial(infill, MODEL),
     "fit_blocks": partial(fit_blocks, MODEL),
+    "calibration": partial(calibration, MODEL, rng=np.random.default_rng(0)),
     "noise_audit": partial(noise_audit, MODEL),
 }
 # fit drops a spectrum without a good pixel, which the others reject.
@@ -231,6 +234,65 @@ def test_an_invalid_argument_of_simulate_is_rejected(changes, error, name):
 def test_an_invalid_argument_of_infill_is_rejected(changes, error, name):
     with pytest.raises(error, match=f"^{name}: "):
         infill(**({"model": MODEL} | SPECTRA | changes))
+
+
+# Row 1 has one good pixel, so that no default size of calibration is at most half of
+# its good pixels.
+ONE_GOOD = np.array([[False] * 3, [True, True, False]])
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "name"),
+    [
+        *MODEL_ARGUMENTS,
+        pytest.param({"sizes": 4}, TypeError, "sizes", id="sizes=4"),
+        pytest.param({"sizes": []}, ValueError, "sizes", id="sizes=[]"),
+        pytest.param({"sizes": [1, 0]}, ValueError, r"sizes\[1\]", id="sizes=[1,0]"),
+        pytest.param({"sizes": [2.0]}, TypeError, r"sizes\[0\]", id="sizes=[2.0]"),
+        pytest.param({"sizes": [True]}, TypeError, r"sizes\[0\]", id="sizes=[True]"),
+        pytest.param({"mask": ONE_GOOD}, ValueError, "sizes", id="one-good-pixel"),
+        pytest.param({"layout": "block"}, ValueError, "layout", id="layout=block"),
+        pytest.param({"layout": None}, ValueError, "layout", id="layout=None"),
+        pytest.param(
+            {"layout": np.array("run")}, ValueError, "layout", id="layout=array"
+        ),
+        pytest.param({"rng": None}, TypeError, "rng", id="rng=None"),
+        pytest.param(
+            {"rng": np.random.RandomState(0)}, TypeError, "rng", id="rng=RandomState"
+        ),
+    ],
+)
+def test_an_invalid_argument_of_calibration_is_rejected(changes, error, name):
+    arguments = {"model": MODEL, **SPECTRA, "rng": np.random.default_rng(0)}
+    with pytest.raises(error, match=f"^{name}: "):
+        calibration(**(arguments | changes))
+
+
+# Three spectra and two columns.
+CALIBRATION = Calibration(np.ones((3, 2)), 1, 1)
+
+
+@pytest.mark.parametrize(
+    ("method", "arguments", "error", "name"),
+    [
+        ("ratio", {"where": [1, 0, 1]}, TypeError, "where"),
+        ("ratio", {"where": np.ones(2, bool)}, ValueError, "where"),
+        ("tail", {"where": np.ones((3, 1), bool)}, ValueError, "where"),
+        ("tail", {"q": 0}, ValueError, "q"),
+        ("tail", {"q": 1.0}, ValueError, "q"),
+        ("tail", {"q": "0.9"}, TypeError, "q"),
+        ("qq", {"i": 1.0}, TypeError, "i"),
+        ("qq", {"i": np.True_}, TypeError, "i"),
+        ("qq", {"i": -1}, ValueError, "i"),
+        ("qq", {"i": 2}, ValueError, "i"),
+        ("qq", {"where": [True] * 4}, ValueError, "where"),
+    ],
+)
+def test_an_invalid_argument_of_a_calibration_method_is_rejected(
+    method, arguments, error, name
+):
+    with pytest.raises(error, match=f"^{name}: "):
+        getattr(CALIBRATION, method)(**arguments)
 
 
 @pytest.mark.parametrize(

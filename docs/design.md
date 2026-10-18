@@ -190,7 +190,7 @@ For a held-out Gaussian spectrum, E[Z²]/N_* = f_s with
 
   f_s(N_s, N_k, N_*) = (1 + 1/N_s) (N_s − 2)/(N_s − N_k − 2) · (N_s − 1)/(N_s − N_k − N_* − 2).
 
-N_k counts conditioning pixels only; guard and ignored pixels do not count. The formula is exact for an unweighted, mean-centred sample covariance with divisor N_s − 1, iid Gaussian working vectors, data-independent masks and Z² with the full conditional covariance (inventory section 7). With a spread of S/N the scaled vectors are a scale mixture, and f_s underestimates ⟨Z²⟩ by up to 25% at (200, 40, 1) and 5.3% at (2000, 40, 1). f_s does not hold for non-Gaussian data (D-61), nor for the Z-dependent masks of `repair`.
+N_k counts conditioning pixels only; guard and ignored pixels do not count. The formula is exact for an unweighted, mean-centred sample covariance with divisor N_s − 1, iid Gaussian working vectors, data-independent masks and Z² with the full conditional covariance (inventory section 7). With a spread of S/N the scaled vectors are a scale mixture, and f_s underestimates ⟨Z²⟩ by up to 25% at (200, 40, 1) and 5.3% at (2000, 40, 1). For the two-population mixture of the section 11 test, whose populations differ in covariance, the mean over training sets of the exact held-out ⟨Z²⟩/(N_* f_s) − 1 measured 0.695 ± 0.014% at (N_s, N_k, N_*) = (2000, 40, 1). f_s does not hold for non-Gaussian data (D-61), nor for the Z-dependent masks of `repair`.
 
 f_s is derived only for dense full-rank, unweighted, mean-centred models, binned or not (A13), with the N_s of the spectrum's bin. They report f_s, or NaN where N_s − N_k − N_* − 2 ≤ 0 or N_* = 0. Other kinds report 1, as no factor is derived, although their held-out factor reached 1.58 to 2.56 at N_s 200.
 
@@ -336,7 +336,7 @@ def finite_sample_factor(n_train: ArrayLike, n_cond: ArrayLike,
     """
 
 def calibration(model: Model, flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | None = None, *,
-                sizes: Sequence[int] | None = None,
+                sizes: Iterable[int] | None = None,
                 layout: Literal["run", "scattered"] = "run",
                 rng: np.random.Generator, progress: Progress | None = None) -> Calibration:
     """Held-out whitened residuals for masks drawn independently of the data.
@@ -345,14 +345,12 @@ def calibration(model: Model, flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike 
     consecutive in the list of good pixels) or n random good pixels ("scattered");
     G = M | bad. Z^2 = r_M^T C_MM^-1 r_M with the full conditional covariance, and
     fs = f_s(N_s of the bin, npix - |G|, n) as in section 4.3. sizes=None: those of 1, 4,
-    16, 64, 256 and 1024 not above half the good pixels of any spectrum. A spectrum with
-    fewer good pixels than n gets n = 0 and z2 NaN. rng draws the masks spectrum by
-    spectrum in row order, and size by size within a spectrum, so they do not depend on
-    chunking. Use spectra not used for training.
-    The sem of Calibration.ratio is conditional on the fitted model, and was 10 times
-    below the spread across training sets at N_s 200.
+    16, 64, 256 and 1024 not above half the good pixels of any spectrum, and ValueError
+    if none is. A spectrum with fewer good pixels than n gets n = 0 and z2 NaN. rng draws
+    the masks spectrum by spectrum in row order, and size by size within a spectrum, so
+    they do not depend on chunking. Use spectra not used for training.
     Returns Calibration with one column per size.
-    Cost: one Cholesky of P_GG per spectrum and size, |G|^3/3 flops (section 12).
+    Cost: that of infill for each size (section 12, optimization (h)).
     """
 
 def noise_audit(model: Model, flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | None = None, *,
@@ -444,7 +442,7 @@ All are frozen dataclasses with `eq=False`. Arrays are read-only.
 | | `blocks` | (nspec, nblock) bool or None | blocks flagged (repair only) |
 | | `covariance(s: int)` | method | → (pixels (m,) int64, cov (m, m) flux²) for spectrum s; ValueError naming `covariance=True` if it was not requested |
 | `Calibration` | `z2`, `n`, `fs` | (nspec, k) each | χ², pixels per prediction, f_s as in section 4.3; `n` and `fs` broadcast at construction; the methods use only entries with n > 0 and finite z2 and fs |
-| | `ratio(where=None)` | → (mean (k,), sem (k,)) | mean of z2/(n·fs) and its sem, std(ddof=1)/√m over the m entries used; the mean is NaN for m = 0 and the sem for m < 2; `where` (nspec,) bool selects spectra |
+| | `ratio(where=None)` | → (mean (k,), sem (k,)) | mean of z2/(n·fs) and its sem, std(ddof=1)/√m over the m entries used; the mean is NaN for m = 0 and the sem for m < 2; `where` (nspec,) bool selects spectra; for held-out spectra the sem is conditional on the fitted model: it falls with the number of held-out spectra, and the spread across training sets does not |
 | | `tail(q=0.99, where=None)` | → (k,) | fraction with z2/fs above the χ²_n quantile q, which is 1 − q only for N_s − N_k ≫ n (1.37% at (200, 40, 10) for q = 0.99) |
 | | `qq(i=0, where=None)` | → (expected, observed) | column i: normal scores Φ⁻¹((j − ½)/m), and the sorted scores of z2/fs under χ²_n, as Φ⁻¹(cdf) where cdf < ½ and −Φ⁻¹(sf) elsewhere |
 | `Simulation` | `flux`, `ivar`, `truth`, `artifacts` | (nspec, npix) | flux, flux⁻², noise-free flux, injected-artifact mask |
@@ -639,7 +637,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 **Statistical tests** (`slow`, seeded, inventory section 7 conditions), each in the pull request of the code it checks.
 
 - Held-out ⟨Z²⟩/N_* = f_s within 3σ, with `simulate(gaussian=True)`, at (N_s, N_k, N_*) = (30, 10, 2), (200, 40, 10) and (200, 40, 1) pixelwise, also with ignored pixels (3.7). It averages over training sets, each with `fit(nsigma=())` and its own held-out spectra, and σ is the standard error across sets (section 5.3).
-- Two-population mixture: each population's ⟨Z²⟩ matches tr(Ĉ⁻¹ E_p[r rᵀ]) from its own mean and covariance within 3σ, and the average matches f_s for N_s ≥ 50 N_k (measured 1.130 at N_s 200 and 1.004 at 2000, N_k 40) (4.4).
+- Two-population mixture: each population's ⟨Z²⟩ matches tr(Ĉ⁻¹ E_p[r rᵀ]) from its own mean and covariance within 3σ, with σ the held-out standard error given the fitted model (4.4). The mixture average of ⟨Z²⟩/N_* exceeds f_s (section 4.3), and the test does not compare it with f_s.
 - `noise_audit`: with the reported σ 1/1.2 of the true σ on 200 pixels of the training and test spectra, the means of ρ_i² − e_i over these pixels and over the others equal those of k_i within 3σ, e_i from the noise-free flux (4.5).
 - The noise-free estimator before the eigenvalue floor is unbiased with per-pixel masks, weights and per-spectrum ivar: every element within 4σ (5.3).
 
@@ -702,6 +700,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 - (e) Full-rank noise-model infill from chol(C_s) and P_{:,G} = L⁻ᵀ(L⁻¹ E_G), without `dpotri`.
 - (f) Blockwise prediction on spectra with their own bad pixels: one factor for the shared part of G and a rank-|E_s| update for the extra bad pixels E_s of each spectrum.
 - (g) No copy of X in `solve_pattern`: a sum of products over the runs of pixels outside G, or a zeroing of G in the rows that the caller already gathered. PR 2.9 (#31) measured the sum over runs faster with one shared pattern and not faster with one spectrum per pattern.
+- (h) χ² only in `calibration`: an option of `solve_pattern` that skips the inverse of R_MM, which only the variances and the covariance need, passed through the private prediction core of issue #59.
 
 ## 13. Packaging
 
