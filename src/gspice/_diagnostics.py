@@ -16,6 +16,7 @@ from ._spectra import (
     Progress,
     Real,
     as_array,
+    check_choice,
     check_progress,
     check_rng,
     chunks,
@@ -539,8 +540,7 @@ def calibration(
     start = time.perf_counter()
     if sizes is not None:
         sizes = items(sizes, "sizes", None, partial(integer, minimum=1))
-    if not isinstance(layout, str) or layout not in ("run", "scattered"):
-        raise ValueError(f"layout: expected 'run' or 'scattered', got {layout!r}")
+    check_choice(layout, "layout", ("run", "scattered"))
     check_rng(rng)
     check_progress(progress)
     flux, ivar, bad = validated(model, flux, ivar, mask, inflate=False)

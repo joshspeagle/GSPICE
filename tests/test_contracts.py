@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from gspice import (
+    Blocks,
     Calibration,
     Model,
     calibration,
@@ -15,6 +16,7 @@ from gspice import (
     legacy,
     noise_audit,
     pixelwise,
+    repair,
     scale,
     simulate,
     snr,
@@ -30,6 +32,7 @@ REJECT_EMPTY = {
     "pixelwise": partial(pixelwise, MODEL),
     "infill": partial(infill, MODEL),
     "fit_blocks": partial(fit_blocks, MODEL),
+    "repair": partial(repair, MODEL),
     "calibration": partial(calibration, MODEL, rng=np.random.default_rng(0)),
     "noise_audit": partial(noise_audit, MODEL),
 }
@@ -323,6 +326,54 @@ def test_an_invalid_argument_of_fit_blocks_is_rejected(changes, error, name):
     arguments = {"model": MODEL} | SPECTRA | {"width": 2, "percentile": 50}
     with pytest.raises(error, match=f"^{name}: "):
         fit_blocks(**(arguments | changes))
+
+
+# MODEL with one block of all pixels.
+BLOCKED = dataclasses.replace(MODEL, blocks=Blocks([0], 3, 0, [[1.0]]))
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "name"),
+    [
+        *MODEL_ARGUMENTS,
+        *INFLATE_ARGUMENTS,
+        *NGUARD_ARGUMENTS,
+        *(
+            pytest.param({name: value}, error, name, id=f"{name}={value!r}")
+            for name in ("nsigma_replace", "nsigma_ignore")
+            for value, error in ((0.0, ValueError), ("5", TypeError))
+        ),
+        pytest.param(
+            {"nsigma_ignore": 10.5}, ValueError, "nsigma_ignore", id="ignore>replace"
+        ),
+        pytest.param({"dilate": -1}, ValueError, "dilate", id="dilate=-1"),
+        pytest.param({"dilate": 1.0}, TypeError, "dilate", id="dilate=1.0"),
+        pytest.param({"blockwise": 1}, TypeError, "blockwise", id="blockwise=1"),
+        # Design decision Q6: the default needs the thresholds of fit_blocks.
+        pytest.param(
+            {"model": MODEL}, ValueError, "blockwise", id="blockwise without blocks"
+        ),
+        pytest.param({"runlength": 0}, ValueError, "runlength", id="runlength=0"),
+        pytest.param({"runlength": 5.0}, TypeError, "runlength", id="runlength=5.0"),
+        pytest.param({"halfwidth": -1}, ValueError, "halfwidth", id="halfwidth=-1"),
+        pytest.param({"minfrac": -0.1}, ValueError, "minfrac", id="minfrac=-0.1"),
+        pytest.param({"minfrac": 1.5}, ValueError, "minfrac", id="minfrac=1.5"),
+        pytest.param({"minfrac": np.nan}, ValueError, "minfrac", id="minfrac=nan"),
+        pytest.param({"minfrac": "0.5"}, TypeError, "minfrac", id="minfrac='0.5'"),
+        # A value that compares equal to "all" but is not a str.
+        *(
+            pytest.param(
+                {"count_on": value}, ValueError, "count_on", id=f"count_on={i}"
+            )
+            for i, value in enumerate(["any", None, np.array("all")])
+        ),
+        pytest.param({"covariance": 1}, TypeError, "covariance", id="covariance=1"),
+        pytest.param({"rng": 0}, TypeError, "rng", id="rng=0"),
+    ],
+)
+def test_an_invalid_argument_of_repair_is_rejected(changes, error, name):
+    with pytest.raises(error, match=f"^{name}: "):
+        repair(**({"model": BLOCKED} | SPECTRA | changes))
 
 
 @pytest.mark.parametrize(

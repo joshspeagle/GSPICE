@@ -58,8 +58,8 @@ def fit_blocks(
     bin b. A clean block then exceeds its threshold with probability
     (m (1 - p/100) + p/100)/(m + 1) when (m - 1) p/100 is an integer, and at most that
     otherwise, for a density that falls beyond the threshold: 0.20% at m = 1000 and
-    0.12% at m = 5000 for p = 99.9 (the paper used 5000). Use spectra not used for
-    training.
+    0.12% at m = 5000 for p = 99.9 (the paper used 5000). `repair` also infills
+    z-flagged pixels, which lowers the rate. Use spectra not used for training.
 
     Parameters
     ----------
@@ -150,7 +150,7 @@ def fit_blocks(
     # The factors of every bin before any spectrum, so that a covariance that fails a
     # check raises at once; infill checks P of the bins with bad pixels likewise. One
     # call on all spectra, so that its messages name the rows of the caller.
-    factors = [_factors(model, b, starts, width, nguard) for b in range(nbin)]
+    factors = [block_factors(model, b, starts, width, nguard) for b in range(nbin)]
     filled = infill(model, flux, ivar, mask).flux
     center = 0.0 if model.center is None else model.center
     thresholds = np.empty((nbin, starts.size))
@@ -163,7 +163,7 @@ def fit_blocks(
             x = filled[spectra]
             a = root_mean_ivar(ivar[spectra], bad[spectra])
             to_working(x, a, center, model.mean[b])
-            chi2[c] = _chi2(factors[b], x)
+            chi2[c] = block_chi2(factors[b], x)
             done += spectra.size
             if progress is not None:
                 progress("fit_blocks", done, nspec)
@@ -177,7 +177,7 @@ def fit_blocks(
     return model._with_blocks(Blocks(starts, width, nguard, thresholds))
 
 
-class _Factor(NamedTuple):
+class BlockFactor(NamedTuple):
     # Block A and G, the pixels within nguard of A clipped at the ends; order lists the
     # pixels of G, counted from G.start, as (G \ A, A). R is the lower Cholesky factor
     # of P_GG in that order, with P the precision matrix of the bin. Where G covers all
@@ -189,9 +189,9 @@ class _Factor(NamedTuple):
     P: NDArray[np.float64] | None
 
 
-def _factors(
+def block_factors(
     model: Model, b: int, starts: NDArray[np.int64], width: int, nguard: int
-) -> list[_Factor]:
+) -> list[BlockFactor]:
     C = model.cov[b]
     npix = len(C)
     factors = []
@@ -208,11 +208,13 @@ def _factors(
                 R = factor_pattern(P[G, G][np.ix_(order, order)])
         except LinAlgError as error:
             raise LinAlgError(f"model: cov[{b}] is {error}, for block {k}") from None
-        factors.append(_Factor(A, G, order, R, P))
+        factors.append(BlockFactor(A, G, order, R, P))
     return factors
 
 
-def _chi2(factors: list[_Factor], X: NDArray[np.float64]) -> NDArray[np.float64]:
+def block_chi2(
+    factors: list[BlockFactor], X: NDArray[np.float64]
+) -> NDArray[np.float64]:
     # chi2_A (nspec, nblock) of the working vectors X of spectra of the bin of factors.
     chi2 = np.empty((len(X), len(factors)))
     for k, (A, G, order, R, P) in enumerate(factors):

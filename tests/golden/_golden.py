@@ -1,3 +1,4 @@
+import dataclasses
 import hashlib
 import json
 import math
@@ -87,6 +88,14 @@ def select(value, spec):
     if "astype" in spec:
         value = value.astype(spec["astype"])
     return np.array(value, order="C", copy=True)
+
+
+def arrays(result):
+    # The public arrays of a Prediction or a Repaired.
+    # blocks is set only by repair.
+    fields = dataclasses.fields(result)
+    names = [f.name for f in fields if f.name[0] != "_" and f.name != "blocks"]
+    return tuple(getattr(result, name) for name in names)
 
 
 def same(a, b):
