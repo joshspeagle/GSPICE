@@ -167,8 +167,8 @@ def repair(
     of step 3.
     repair holds replaced and ignored of all spectra, and a few arrays of one chunk.
     A noise model costs P_s, npix^3 flops for a dense cov[0] or npix^2 K for a
-    `LowRank` of rank K, its guard weights and
-    its block factors for each spectrum.
+    `LowRank` of rank K, its guard weights and its block factors for each spectrum;
+    the infills of a `LowRank` cov[0] do not use P_s, and cost as in `infill`.
     """
     start = time.perf_counter()
     nguard = integer(nguard, "nguard", 0)

@@ -11,6 +11,7 @@ from gspice._linalg import (
     precision,
     prior_chi2,
     prior_draws,
+    solve_low_rank,
     solve_pattern,
     woodbury,
 )
@@ -335,3 +336,96 @@ def test_woodbury_rejects_a_factor_that_is_not_positive_definite(monkeypatch):
     V, values, d = LOW_RANK["low1e2"]
     with pytest.raises(LinAlgError, match="^not positive definite: .* order 2 of "):
         woodbury(V, values, d)
+
+
+# The patterns of solve_low_rank, which needs pixels outside G.
+LOW_RANK_PATTERNS = {name: PATTERNS[name] for name in ("run", "scattered", "replace")}
+# |O| = 3 conditioning pixels, fewer than K = 6.
+LOW_RANK_PATTERNS["few"] = (range(3, NPIX), range(3, NPIX, 2), range(3, NPIX, 4))
+
+
+@pytest.mark.parametrize("pattern", LOW_RANK_PATTERNS)
+@pytest.mark.parametrize("name", LOW_RANK)
+def test_the_low_rank_solve_matches_the_reference(name, pattern):
+    V, values, d = LOW_RANK[name]
+    G, M, T = (mask(pixels) for pixels in LOW_RANK_PATTERNS[pattern])
+    C = (V * values) @ V.T + np.diag(d)
+    X = np.random.default_rng(1).standard_normal((NSPEC, NPIX))
+    X = X @ np.linalg.cholesky(C).T
+    solve = functools.partial(solve_low_rank, V, values, d, G, M, T)
+    solution = solve(X, covariance=True)
+    mean, cov, chi2 = conditional(
+        low_rank(V, values, d), np.flatnonzero(G), X, np.flatnonzero(T)
+    )
+    at = np.flatnonzero(M[G])
+    mean, cov = mean[:, at], cov[np.ix_(at, at)]
+    # Design section 11: 10 eps kappa_W, and 1e-9 where |O| >= 2K and kappa_W <= 1e8.
+    kappa = kappa_w(V, values, d)
+    tol = 10 * EPS * kappa
+    if NPIX - np.count_nonzero(G) >= 2 * values.size and kappa <= 1e8:
+        tol = min(tol, 1e-9)
+    scale = np.sqrt(np.outer(np.diagonal(cov), np.diagonal(cov)))
+    assert np.max(np.abs(solution.mean - mean) / np.sqrt(np.diagonal(cov))) <= tol
+    assert np.max(np.abs(solution.cov - cov) / scale) <= tol
+    np.testing.assert_array_equal(solution.cov, solution.cov.T)
+    np.testing.assert_array_equal(np.diagonal(solution.cov), solution.var)
+    # chi2 comes from the factor of C_TT|O, or with draws from that of C_MM|O.
+    drawn = solve(X, np.zeros((NSPEC, np.count_nonzero(M))))
+    for result in (solution, drawn):
+        error = np.abs(result.chi2 - chi2) / (chi2 + np.count_nonzero(T))
+        assert np.max(error) <= tol
+    # Unit normals give the map U from normals to draws, as in draw_covariance. In the
+    # order (M \ T, T), U is upper triangular with U U^T = C_MM|O: the unique such
+    # factor, R_MM^-T of solve_pattern, so that both routes give the same draws.
+    m = np.count_nonzero(M)
+    unit = solve(X[[0] * m], np.eye(m))
+    order = np.concatenate([np.flatnonzero(~T[M]), np.flatnonzero(T[M])])
+    U = (unit.draws - unit.mean)[np.ix_(order, order)].T
+    np.testing.assert_array_equal(np.tril(U, -1), 0.0)
+    assert (
+        np.max(
+            np.abs(U @ U.T - cov[np.ix_(order, order)]) / scale[np.ix_(order, order)]
+        )
+        <= tol
+    )
+
+
+@pytest.mark.parametrize("G", [[0], [5]], ids=["in G", "in O"])
+@pytest.mark.parametrize(
+    ("value", "rejected"), [(1e13 - 1.5, False), (1e13 - 0.5, True)]
+)
+def test_the_low_rank_solve_rejects_kappa_k_above_1e13(value, rejected, G):
+    # V = e_0 and d = 1: E^T E = lambda, so kappa_K = 1 + lambda, 1e13 - 0.5 and
+    # 1e13 + 0.5 to the rounding of sqrt(lambda)^2, below 0.01, with pixel 0 in G or O.
+    arguments = (np.eye(NPIX, 1), np.array([value]), np.ones(NPIX))
+    pattern = mask(G), mask(G), mask([]), np.zeros((1, NPIX))
+    if not rejected:
+        solve_low_rank(*arguments, *pattern)
+        return
+    message = r"^numerically singular: kappa_K = 1e\+13 for I \+ Lambda"
+    with pytest.raises(LinAlgError, match=message):
+        solve_low_rank(*arguments, *pattern)
+
+
+@pytest.mark.parametrize(
+    ("call", "message"),
+    [(1, "^not positive definite: .* order 2 of I"), (2, "^not positive definite in")],
+    ids=["system", "conditional"],
+)
+def test_the_low_rank_solve_rejects_a_factor_that_is_not_positive_definite(
+    monkeypatch, call, message
+):
+    # kappa_K <= 1e13 keeps I + E_O^T E_O and C_TT|O positive definite in practice,
+    # so the call-th dpotrf is made to fail.
+    calls = []
+    factor = _linalg.lapack.dpotrf
+
+    def failing(A, lower):
+        calls.append(A)
+        return (A, 2) if len(calls) == call else factor(A, lower=lower)
+
+    monkeypatch.setattr(_linalg.lapack, "dpotrf", failing)
+    V, values, d = LOW_RANK["low1e2"]
+    G, M, T = (mask(pixels) for pixels in PATTERNS["run"])
+    with pytest.raises(LinAlgError, match=message):
+        solve_low_rank(V, values, d, G, M, T, np.zeros((1, NPIX)))

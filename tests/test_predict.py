@@ -969,6 +969,16 @@ def test_infill_of_a_noise_model_matches_the_60_digit_reference_of_each_c_s(
         infill(model, flux, ivar, mask, inflate=True)
 
 
+def test_infill_of_a_low_rank_noise_model_forms_no_p_s(monkeypatch):
+    # Design section 12, (b): the conditionals come from V and d + nu_s.
+    def woodbury(*args):
+        raise AssertionError("woodbury forms P_s")
+
+    monkeypatch.setattr(_model, "woodbury", woodbury)
+    model, flux, ivar, mask = noise_case(1e2, 2)
+    infill(model, flux, ivar, mask, replace=REPLACE, ignore=IGNORE, covariance=True)
+
+
 @pytest.mark.parametrize(
     "C",
     [np.ones((NPIX, NPIX)), LowRank(np.ones((NPIX, 1)), [1.0], np.zeros(NPIX))],
@@ -978,8 +988,9 @@ def test_infill_of_a_noise_model_matches_the_60_digit_reference_of_each_c_s(
 def test_a_c_s_that_fails_the_check_of_its_precision_matrix_names_its_row(name, C):
     # cov[0] = 1 at every entry: with nu_s = 1e-15, C_s scaled to unit diagonal has a
     # reciprocal condition number near 1e-15, below 1e-13 (decision A26), and the
-    # LowRank has kappa_W near NPIX / 1e-15, above 1e13 (decision A28); with
-    # nu_s = 1, both pass. Pixel 0 is bad, so that infill has a pixel to replace.
+    # LowRank has kappa_W near NPIX / 1e-15, above 1e13 (decision A28), as has the
+    # kappa_K of its infill; with nu_s = 1, all pass. Pixel 0 is bad, so that infill
+    # has a pixel to replace.
     model = Model(np.zeros((1, NPIX)), (C,), (10,), noise=True)
     ivar = np.ones((4, NPIX))
     ivar[2] = 1e15

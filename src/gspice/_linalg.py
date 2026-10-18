@@ -82,6 +82,80 @@ def woodbury(
     return P
 
 
+def solve_low_rank(
+    V: NDArray[np.float64],
+    values: NDArray[np.float64],
+    d: NDArray[np.float64],
+    G: NDArray[np.bool_],
+    M: NDArray[np.bool_],
+    T: NDArray[np.bool_],
+    X: NDArray[np.float64],
+    normals: NDArray[np.float64] | None = None,
+    covariance: bool = False,
+) -> Conditional:
+    # solve_pattern for C = V Lambda V^T + D with d > 0 and O, the pixels outside G,
+    # not empty, without P, in the latent form of design section 4.2: C_MM|O is
+    # D_M + W^T W, a sum of positive semi-definite terms that cannot cancel. kappa_K
+    # bounds the condition numbers of R R^T and of C_MM|O scaled by D_M.
+    O = ~G
+    B = V * np.sqrt(values)
+    E = B / np.sqrt(d)[:, np.newaxis]
+    EO, EG = E[O], E[G]
+    # numpy computes E^T E and W^T W by syrk, so they are exactly symmetric.
+    A = EO.T @ EO
+    kappa = 1 + np.linalg.eigvalsh(A + EG.T @ EG)[-1]
+    # not <= also rejects a NaN kappa_K.
+    if not kappa <= MAX_KAPPA_W:
+        raise LinAlgError(
+            f"numerically singular: kappa_K = {kappa:.2g} for "
+            f"I + Lambda^1/2 V^T D^-1 V Lambda^1/2, above {MAX_KAPPA_W:.0e}"
+        )
+    A[np.diag_indices_from(A)] += 1.0
+    R, info = lapack.dpotrf(A, lower=1)
+    if info:
+        raise LinAlgError(
+            f"not positive definite: dpotrf failed at the leading minor of order "
+            f"{info} of I + E_O^T E_O"
+        )
+    nspec = X.shape[0]
+    rhs = np.concatenate([EO.T @ (X[:, O] / np.sqrt(d[O])).T, B[M].T], axis=1)
+    Y, _ = lapack.dtrtrs(R, rhs, lower=1)
+    W = Y[:, nspec:]
+    mean = Y[:, :nspec].T @ W
+    var = d[M] + np.einsum("ij,ij->j", W, W)
+    # M in the order (M \ T, T) of solve_pattern, reversed. The lower Cholesky factor
+    # L of C_MM|O in this order is J R_MM^-T J, with J the reversal and R_MM^-T the
+    # factor of the draws of solve_pattern, so that the draws agree with it to
+    # rounding. Its leading block of |T| rows factors C_TT|O.
+    inner = T[M]
+    at = np.concatenate([np.flatnonzero(inner)[::-1], np.flatnonzero(~inner)[::-1]])
+    t = np.count_nonzero(inner)
+    cov: NDArray[np.float64] | None = None
+    if covariance:
+        cov = W.T @ W
+        np.fill_diagonal(cov, var)
+    # The pixels of the factor: all of M for the draws, and T alone for chi2.
+    pick = at if normals is not None else at[:t]
+    WP = W[:, pick]
+    S = WP.T @ WP
+    np.fill_diagonal(S, var[pick])
+    chi2 = np.zeros(nspec)
+    draws: NDArray[np.float64] | None = None
+    if pick.size:
+        L, info = lapack.dpotrf(S, lower=1)
+        if info:
+            raise LinAlgError(
+                "not positive definite in its conditional covariance on M, or on T without draws"
+            )
+        if t:
+            r, _ = lapack.dtrtrs(L[:t, :t], (X[:, M] - mean)[:, at[:t]].T, lower=1)
+            chi2 = np.sum(r**2, axis=0)
+        if normals is not None:
+            draws = mean.copy()
+            draws[:, at] += normals[:, at] @ L.T
+    return Conditional(mean, var, chi2, cov, draws)
+
+
 def guard_weights(
     P: NDArray[np.float64], c: NDArray[np.float64], nguard: int
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:

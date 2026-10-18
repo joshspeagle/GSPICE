@@ -8,8 +8,15 @@ import numpy as np
 from numpy.linalg import LinAlgError
 from numpy.typing import ArrayLike, NDArray
 
-from ._linalg import Conditional, group_rows, prior_chi2, prior_draws, solve_pattern
-from ._model import Model, sample_factor, submatrix_of, variances_of
+from ._linalg import (
+    Conditional,
+    group_rows,
+    prior_chi2,
+    prior_draws,
+    solve_low_rank,
+    solve_pattern,
+)
+from ._model import LowRank, Model, sample_factor, submatrix_of, variances_of
 from ._spectra import (
     Boolean,
     Integer,
@@ -377,7 +384,13 @@ def infill(
         is given and cov[b] at M is not positive definite. The message names the bin,
         and for a pattern its first spectrum. For a noise model, C_s replaces cov[b],
         and a C_s that fails the check of its precision matrix raises with its row in
-        the message.
+        the message. A `LowRank` cov[0] forms no precision matrix: its C_s raises
+        where kappa_K = 1 + lambda_max(Lambda^1/2 V^T D_s^-1 V Lambda^1/2) > 1e13, with
+        V, Lambda = diag(values) and D_s = diag(diag + nu_s) of C_s, or where the
+        factor of I + Lambda^1/2 V_O^T D_s,O^-1 V_O Lambda^1/2, or of its conditional
+        covariance at M (at T without rng), fails, with its row in the message.
+        kappa_K accepts every C_s that `woodbury` accepts, and some with kappa_W up to
+        npix kappa_K, which `pixelwise` and `repair` still reject.
 
     Notes
     -----
@@ -393,7 +406,9 @@ def infill(
     the factor of cov[b] at M, which a `LowRank` forms at |M|^2 K flops. A noise
     model forms C_s for each spectrum with a pixel to replace, and P_s, npix^3 flops
     for a dense cov[0], where G is also short of all pixels; every spectrum is its
-    own pattern.
+    own pattern. A `LowRank` cov[0] of rank K forms no P_s: per spectrum, npix K^2
+    flops for its K x K system, |M| K^2 for the mean and var, and |T|^2 K + |T|^3/3
+    for chi2, or with rng |M|^2 K + |M|^3/3 for chi2 and the draws.
     """
     start = time.perf_counter()
     inflate = boolean(inflate, "inflate")
@@ -762,7 +777,7 @@ def conditionals(
     # and their rows in the caller's arrays, with T in M in G: for each pattern, its
     # spectra in X, the pixels of M, and the solution of solve_pattern, or None where
     # M is empty. normals (nspec, npix) give the draws. variance=False skips the var
-    # of solve_pattern, which is then NaN; the prior keeps its exact var. The caller
+    # of solve_pattern, which is then NaN; the prior and the low-rank route keep var. The caller
     # computed P of the bins that need it, so only a solve can raise, or for a noise
     # model P_s.
     # The bin of each spectrum, one-hot, is part of the key of its pattern.
@@ -850,14 +865,21 @@ def _solve(
     variance: bool,
     row: int,
 ) -> Conditional:
+    C, prior = model.cov[b], G.all()
+    # The model of one spectrum of a noise model, which has a label, conditions a
+    # LowRank C_s from V and d + nu_s, without P_s (design section 12, (b)).
+    low_rank = isinstance(C, LowRank) and model._label is not None and not prior
     # Outside the try, as the message of P names the covariance.
-    P = None if G.all() else model._precision(b)
+    P = None if prior or low_rank else model._precision(b)
     try:
+        if isinstance(C, LowRank) and low_rank:
+            V, values, d = C.vectors, C.values, C.diag
+            return solve_low_rank(V, values, d, G, M, T, X, normals, covariance)
         if P is None:
             # The prior N(0, C): exact from C, and without P, which a singular C does
             # not have. It forms C at M only for the covariance or the draws, and
             # otherwise at T alone (design section 4.2).
-            C, pixels = model.cov[b], np.flatnonzero(M)
+            pixels = np.flatnonzero(M)
             cov: NDArray[np.float64] | None = None
             draws: NDArray[np.float64] | None = None
             if covariance or normals is not None:
