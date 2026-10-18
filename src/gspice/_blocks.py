@@ -114,16 +114,17 @@ def fit_blocks(
     Notes
     -----
     Cost: npix^3 flops for P at the first use of a bin, then |G|^3/3 flops per bin and
-    block, and about 2 sum_A |G| npix flops per spectrum, plus the `infill` of the bad
-    pixels. The factors of all bins take nbin sum_A |G|^2 x 8 bytes during the scan:
+    block, and about 2 npix^2 + sum_A |G|^2 flops per spectrum, plus the `infill` of the
+    bad pixels. The factors of all bins take nbin sum_A |G|^2 x 8 bytes during the scan:
     8.8 MB per bin at npix 2400 with the defaults, and 649 MB at stride 1. Beyond the
     inputs and their float64 copies if they are long double, fit_blocks holds a bool
     array of the input shape, chi2 of the spectra of one bin (nblock float64 per
-    spectrum), and a few float64 arrays of one chunk of max(1, 2**24 // npix)
-    spectra. The new model shares the arrays of model, its precision matrices and its
-    guard weights (see `Model`). A noise model forms P_s, npix^3 flops for a dense
-    cov[0] or npix^2 K for a `LowRank` of rank K, and the factors of the blocks for each spectrum, unless every block covers
-    all pixels with its guard and the spectrum has no bad pixel.
+    spectrum), and a few float64 arrays of one chunk of max(1, 2**24 // npix) spectra.
+    The new model shares the arrays of model, its precision matrices and its guard
+    weights (see `Model`). A noise model forms P_s, npix^3 flops for a dense cov[0] or
+    npix^2 K for a `LowRank` of rank K, and the factors of the blocks for each spectrum,
+    unless every block covers all pixels with its guard and the spectrum has no bad
+    pixel.
     """
     start = time.perf_counter()
     width = integer(width, "width", 1)
@@ -259,20 +260,22 @@ def block_chi2(
 ) -> NDArray[np.float64]:
     # chi2_A (nspec, nblock) of the working vectors X of spectra of the bin of factors.
     chi2 = np.empty((len(X), len(factors)))
+    Y = None
     for k, (A, G, order, R, P) in enumerate(factors):
         width = A.stop - A.start
         if P is None:
             # ||L^-1 x_A||^2 with L L^T = C_AA, the prior covariance of x_A.
             w, _ = lapack.dtrtrs(R, X[:, A].T, lower=1)
         else:
-            # y = R^-1 (P_GO x_O) in the order of R. The products over the pixels on
-            # either side of G never read a value in G, so no outlier there can cancel.
-            Y = P[G, : G.start] @ X[:, : G.start].T
-            Y += P[G, G.stop :] @ X[:, G.stop :].T
-            y, _ = lapack.dtrtrs(R, Y[order], lower=1)
-            # R_AA^T r_A = R_AA^T x_A + y_A, because R_AA^T mu_A = -y_A as in
-            # solve_pattern, and chi2_A |A| = ||R_AA^T r_A||^2.
-            w = R[-width:, -width:].T @ X[:, A].T
-            w += y[-width:]
+            if Y is None:
+                # (P x)^T of every spectrum, once for all blocks: P is symmetric.
+                Y = X @ P
+            # y = R^-1 (P x)_G in the order of R. As R R^T = P_GG and r_G = x_G - mu_G
+            # = P_GG^-1 (P x)_G, R^T r_G = y, so R_AA^T r_A = y_A (R^T is upper
+            # triangular) and chi2_A |A| = ||y_A||^2. The guard pixels enter y as R^T
+            # x_(G \ A), which is 0 in the rows of A, so an outlier there cancels to
+            # rounding (test_blocks bounds it).
+            w, _ = lapack.dtrtrs(R, np.take(Y, G.start + order, axis=1).T, lower=1)
+            w = w[-width:]
         chi2[:, k] = np.sum(w**2, axis=0) / width
     return chi2

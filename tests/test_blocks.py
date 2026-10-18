@@ -64,19 +64,54 @@ def test_the_block_chi2_matches_the_60_digit_reference(kappa, nguard):
         assert np.all(np.abs(chi2[:, k] - reference) <= tol * (reference + 1))
 
 
-def test_the_block_chi2_never_reads_the_guard_pixels():
-    # The guard pixels are marginalized, so an outlier there cannot cancel.
-    start = 14
-    C = random_spd(NPIX, 1e5, 0)
-    X = np.random.default_rng(3).standard_normal((3, NPIX)) @ np.linalg.cholesky(C).T
-    factors = block_factors(
-        Model(np.zeros((1, NPIX)), (C,), (100,)), 0, np.array([start]), WIDTH, 3
-    )
-    expected = block_chi2(factors, X)
-    X[
-        :, [i for i in window(start, 3, NPIX, WIDTH) if not start <= i < start + WIDTH]
-    ] = np.nan
-    assert same(block_chi2(factors, X), expected)
+@pytest.mark.parametrize("nguard", [3, 20])
+@pytest.mark.parametrize("kappa", [1e2, 1e8])
+def test_outliers_of_1e4_sigma_in_the_guard_pixels_cancel_to_a_rounding_bound(
+    kappa, nguard
+):
+    # block_chi2 computes y = R^-1 (P x)_G, R R^T = P_GG, and chi2_A |A| = ||y_A||^2.
+    # The guard pixels u = x_(G \ A) enter y as R^T u, which is 0 in the rows of A, so
+    # they cancel in y_A only to rounding. R factors the computed P_GG, so the error of
+    # P does not break the cancellation. The backward errors of the product (Higham
+    # 2002, eq. 3.13), the forward substitution (Thm 8.5) and the Cholesky factor (Thm
+    # 10.3), with gamma_n = n u / (1 - n u) <= n eps for u = eps / 2, give to first
+    # order
+    #   |dy| <= eps |R^-1| (npix |P_G:| |x| + |G| |R| |y| + (|G| + 1) |R| |R^T| |x_G|)
+    # and |d(chi2_A |A|)| <= 2 ||y_A|| ||dy_A|| + ||dy_A||^2. dy grows linearly with
+    # |u|, and the reference does not depend on u. The bound adds to the 10 kappa eps
+    # (chi2 + |A|) of design section 11 for the rest of x, drawn from N(0, C).
+    C = random_spd(NPIX, kappa, 0)
+    model = Model(np.zeros((1, NPIX)), (C,), (100,))
+    X = np.random.default_rng(1).standard_normal((3, NPIX)) @ np.linalg.cholesky(C).T
+    tol = 10 * condition(C) * EPS
+    factors = block_factors(model, 0, STARTS, WIDTH, nguard)
+    for factor, start in zip(factors, STARTS, strict=True):
+        g = window(start, nguard, NPIX, WIDTH)
+        if len(g) == NPIX:
+            continue
+        guard = [i for i in g if not start <= i < start + WIDTH]
+        x = X.copy()
+        x[:, guard] += (
+            1e4 * np.sqrt(np.diagonal(C)[guard]) * (-1) ** np.arange(len(guard))
+        )
+        chi2 = block_chi2([factor], x)[:, 0] * WIDTH
+        _, _, reference = conditional(C, g, x, range(start, start + WIDTH))
+        R, P, rows = factor.R, factor.P, factor.G.start + factor.order
+        y = np.linalg.solve(R, (x @ P)[:, rows].T)
+        n = len(rows)
+        dy = (
+            EPS
+            * np.abs(np.linalg.inv(R))
+            @ (
+                NPIX * np.abs(P[rows]) @ np.abs(x.T)
+                + n * np.abs(R) @ np.abs(y)
+                + (n + 1) * np.abs(R) @ (np.abs(R.T) @ np.abs(x[:, rows].T))
+            )
+        )
+        dy_A = np.linalg.norm(dy[-WIDTH:], axis=0)
+        bound = 2 * np.linalg.norm(y[-WIDTH:], axis=0) * dy_A + dy_A**2
+        error = np.abs(chi2 - reference)
+        assert np.all(error <= tol * (reference + WIDTH) + bound)
 
 
 @pytest.mark.parametrize(
