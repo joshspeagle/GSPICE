@@ -7,7 +7,7 @@ from numpy.linalg import LinAlgError
 
 from _golden import checked, same
 from gspice import Model, _model, _spectra, fit_blocks, infill, snr
-from gspice._blocks import _chi2, _factors
+from gspice._blocks import block_chi2, block_factors
 from oracle import condition, conditional, random_spd, window
 
 EPS = np.finfo(float).eps
@@ -47,8 +47,11 @@ def test_the_block_chi2_matches_the_60_digit_reference(kappa, nguard):
     # guard of the block at 14 covers all pixels: the prior.
     C = random_spd(NPIX, kappa, 0)
     X = np.random.default_rng(1).standard_normal((3, NPIX)) @ np.linalg.cholesky(C).T
-    chi2 = _chi2(
-        _factors(Model(np.zeros((1, NPIX)), (C,), (100,)), 0, STARTS, WIDTH, nguard), X
+    chi2 = block_chi2(
+        block_factors(
+            Model(np.zeros((1, NPIX)), (C,), (100,)), 0, STARTS, WIDTH, nguard
+        ),
+        X,
     )
     # Design section 11: |dchi2| <= 10 kappa eps (chi2 + |T|), with T = A, which bounds
     # chi2_A = chi2 / |A| by the same tolerance relative to chi2_A + 1.
@@ -66,14 +69,14 @@ def test_the_block_chi2_never_reads_the_guard_pixels():
     start = 14
     C = random_spd(NPIX, 1e5, 0)
     X = np.random.default_rng(3).standard_normal((3, NPIX)) @ np.linalg.cholesky(C).T
-    factors = _factors(
+    factors = block_factors(
         Model(np.zeros((1, NPIX)), (C,), (100,)), 0, np.array([start]), WIDTH, 3
     )
-    expected = _chi2(factors, X)
+    expected = block_chi2(factors, X)
     X[
         :, [i for i in window(start, 3, NPIX, WIDTH) if not start <= i < start + WIDTH]
     ] = np.nan
-    assert same(_chi2(factors, X), expected)
+    assert same(block_chi2(factors, X), expected)
 
 
 @pytest.mark.parametrize(

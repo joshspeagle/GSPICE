@@ -22,6 +22,7 @@ from gspice import (
     load,
     noise_audit,
     pixelwise,
+    repair,
     save,
     scale,
     simulate,
@@ -126,6 +127,27 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
     )
     assert_type(blocked, Model)
     assert_type(blocked.blocks, Blocks | None)
+    repaired = repair(
+        blocked,
+        flux,
+        ivar,
+        mask,
+        nguard=np.int64(1),
+        nsigma_replace=np.float32(10.0),
+        nsigma_ignore=np.int64(5),
+        dilate=np.int64(1),
+        blockwise=np.True_,
+        runlength=np.int64(5),
+        halfwidth=np.int64(2),
+        minfrac=np.float32(0.5),
+        count_on="flagged",
+        inflate=np.True_,
+        covariance=np.True_,
+        rng=rng,
+        progress=progress,
+    )
+    assert_type(repaired, Repaired)
+    assert_type(repaired.blocks, NDArray[np.bool_] | None)
     calibrated = calibration(
         centred,
         flux,

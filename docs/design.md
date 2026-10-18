@@ -198,7 +198,7 @@ f_s is derived only for dense full-rank, unweighted, mean-centred models, binned
 
 ## 5. Public API
 
-Common conventions for every function: `ArrayLike` and `NDArray` are from `numpy.typing`; `flux`, `ivar` and `mask` are as in section 3.1; outputs are float64; inputs are never modified. A parameter shown as `int` also takes numpy integers, one shown as `float` also numpy floats and integers, and one shown as `bool` also `np.bool_`. `Progress` abbreviates `Callable[[str, int, int], object]` and is not public. `progress(stage, done, total)` is optional and called once per chunk with the function name as stage; done and total count spectra over the call, once per pass of `fit` and per step of `repair`.
+Common conventions for every function: `ArrayLike` and `NDArray` are from `numpy.typing`; `flux`, `ivar` and `mask` are as in section 3.1; outputs are float64; inputs are never modified. A parameter shown as `int` also takes numpy integers, one shown as `float` also numpy floats and integers, and one shown as `bool` also `np.bool_`. `Progress` abbreviates `Callable[[str, int, int], object]` and is not public. `progress(stage, done, total)` is optional and called once per chunk with the function name as stage; done and total count spectra over the call, once per pass of `fit`, and in `repair` once for steps 1 to 4 and once for step 5 (section 5.4).
 
 ### 5.1 Fitting
 
@@ -318,7 +318,8 @@ def repair(model: Model, flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | Non
     or if nsigma_ignore > nsigma_replace. runlength=None skips the exclusion step.
     inflate, covariance and rng apply to the final infill. Nothing limits the replaced
     set; the paper measured calibration up to 1024 of 2415 replaced pixels (l.530).
-    Cost: two pixelwise passes, the block scans and three infills (section 12).
+    Cost: two pixelwise passes, the block scans and two infills: that of the final step,
+    and that of the block pass, whose last result serves step 3 (section 12).
     """
 ```
 
@@ -641,7 +642,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 - `noise_audit`: with the reported σ 1/1.2 of the true σ on 200 pixels of the training and test spectra, the means of ρ_i² − e_i over these pixels and over the others equal those of k_i within 3σ, e_i from the noise-free flux (4.5).
 - The noise-free estimator before the eigenvalue floor is unbiased with per-pixel masks, weights and per-spectrum ivar: every element within 4σ (5.3).
 
-**End to end** (4.3, `slow`). `simulate(artifacts=0.4)`, then `fit`, `fit_blocks` and `repair`: completeness ≥ 98% for peaks above 25σ, false replacements per clean spectrum, repaired-pixel Z dispersion near f_s^½, and a larger one with `runlength=None`, with thresholds from the Monte Carlo error. As a check, not an assertion, since `simulate` is not the PHOENIX mock of the paper, the report lists each statistic next to the paper value: 2.8 replaced pixels per clean spectrum, 1.7% of clean spectra affected, Z dispersion 1.02 (f_s^½ = 1.04) and 1.29 with `runlength=None` (paper l.512-514); rms (repaired − truth)/σ 0.65, calibration 0.993 to 1.004 for 1 to 1024 pixels, and 50% completeness at 12σ for cosmic rays and at a 1.9-pixel shift (kickoff specification). A fast version checks that one strong cosmic ray and one bad column are replaced.
+**End to end** (4.3, `slow`). `simulate(artifacts=0.4)`, then `fit`, `fit_blocks` and `repair`: completeness ≥ 98% for peaks above 25σ, false replacements per clean spectrum, and a repaired-pixel Z dispersion that is larger with `runlength=None`, with thresholds from the Monte Carlo error. The dispersion is not compared with f_s^½, which does not hold here: the masks depend on Z (section 4.3), `simulate` is not Gaussian (D-61), the training spectra have artifacts, and the shifted pixels that `repair` does not flag stay in the conditioning set. The last dominates: on `simulate` at npix 1000, the replaced pixels of spectra with a shifted block had a Z rms of 4.93. As a check, not an assertion, since `simulate` is not the PHOENIX mock of the paper, the report lists each statistic next to the paper value: 2.8 replaced pixels per clean spectrum, 1.7% of clean spectra affected, Z dispersion 1.02 (f_s^½ = 1.04) and 1.29 with `runlength=None` (paper l.512-514); rms (repaired − truth)/σ 0.65, calibration 0.993 to 1.004 for 1 to 1024 pixels, and 50% completeness at 12σ for cosmic rays and at a 1.9-pixel shift (kickoff specification). A fast version checks that one strong cosmic ray and one bad column are replaced.
 
 **Contracts.** One parametrized test per row of the section 8 table checks the error class and that the message names the argument. Each top-level 2022 name warns, naming its replacement and the caller's file, and the tests check that a warning is raised, not how many (the module `__getattr__` can run twice per access); `gspice.legacy` adds no warning. `from gspice import *` binds exactly `__all__`, with no 2022 name and none of the three 2022 modules, without a warning (2022: 11 functions and 3 modules). `progress` gets its stage name and ends with done == total. `finite_sample_factor(60000, 2400, 1)` equals 1.0851274682919 to 1e-12.
 
@@ -677,7 +678,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 | Noise-aware pixelwise, per spectrum | C_s, P_s and W_s per spectrum | 0.01 + 0.39 + 0.10 = 0.50 s at full rank, 0.01 + 0.04 + 0.10 = 0.15 s at K = 50: 14 h and 4.2 h per 1e5 spectra (computed) |
 | Against 2022 at 4000 × 2400 | as above | 16.1 to 16.4 s against 1.75 to 2.06 s for P, W, product and Z (measured; D-65) |
 | Block scan per spectrum | 31 blocks, \|G\| 190, R per block | 0.79 ms for 31·2·2400·190 = 2.8e7 GEMM flops (measured) |
-| Repair per spectrum | two passes, scans, three infills | 2 × 0.39 + 0.79 + 3 × (0.10 to 0.18) = 1.9 to 2.1 ms without flagged blocks or exclusions, and 1.5 ms more after one exclusion (computed) |
+| Repair per spectrum | two passes, scans, two infills | 2 × 0.39 + 0.79 + 2 × (0.10 to 0.18) = 1.8 to 1.9 ms without flagged blocks or exclusions, and 1.5 ms more after one exclusion (computed) |
 | `fit`, 60,000 × 2400, three passes | one covariance and one pixelwise pass per clipping pass | 3 × (5.1 + 0.49 + 23.4) + 5.1 = 92 s, with 6 × 0.85 = 5.1 s per covariance and 60,000 × 0.39 ms = 23.4 s per pass (computed); `rank=K` adds 1.24 s per pass |
 
 **Benchmarks.** `benchmarks/run.py` (A27) writes JSON with the commit, machine, thread settings, library versions and load average, and reports the minimum and median of at least 5 repeats. PR 2.9 adds cases 1, 2 and 7, and PR 5.5 the rest:
@@ -701,6 +702,8 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 - (f) Blockwise prediction on spectra with their own bad pixels: one factor for the shared part of G and a rank-|E_s| update for the extra bad pixels E_s of each spectrum.
 - (g) No copy of X in `solve_pattern`: a sum of products over the runs of pixels outside G, or a zeroing of G in the rows that the caller already gathered. PR 2.9 (#31) measured the sum over runs faster with one shared pattern and not faster with one spectrum per pattern.
 - (h) χ² only in `calibration`: an option of `solve_pattern` that skips the inverse of R_MM, which only the variances and the covariance need, passed through the private prediction core of issue #59.
+- (i) Mean only in the infills of the block pass of `repair`, with the same option of `solve_pattern` as (h). Before step 3 reused the block pass, PR #67 measured 24% of a `repair` call at npix 2400 with `artifacts=0.4`.
+- (j) The conditional mean from a Cholesky factor of C_OO where |G| > npix/2, in the infills of the block pass of `repair`, at |O|³/3 flops instead of |G|³/3 for R and |G|³/3 for its inverse. With (i), PR #67 measured 21% of the same call, with masks and flux unchanged and x_b within 3e-11 relative of the P route, at cond(C_OO) about 1e6 against 6e2 for P_GG. It changes the numerics, so it needs the direct-solve tests of CLAUDE.md up to κ 1e8.
 
 ## 13. Packaging
 

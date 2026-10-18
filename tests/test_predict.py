@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from numpy.linalg import LinAlgError
 
-from _golden import checked, same
+from _golden import arrays, checked, same
 from gspice import (
     Model,
     _model,
@@ -71,12 +71,6 @@ def two_bins(kappa, center=None):
     # side="right" puts the spectrum at the edge in bin 1.
     np.testing.assert_array_equal(np.searchsorted(edges, ratio, side="right"), BINS)
     return model, flux, ivar, mask
-
-
-def arrays(result):
-    # The public arrays of a Prediction or a Repaired.
-    fields = dataclasses.fields(result)
-    return tuple(getattr(result, f.name) for f in fields if f.name[0] != "_")
 
 
 def rows_of(pixels):

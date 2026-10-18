@@ -1,0 +1,122 @@
+# Vendored from gspice/matrixUtils.py of the branch revision-2026 (r26) at
+# ebbb0653f9b24848572fde4da08f0494488224a0, for tests/test_repair.py only. The
+# functions are copied unchanged. The module docstring, the functions that gp_repair
+# does not call and the imports that only they use are left out.
+
+import numpy as np
+from scipy import linalg
+from scipy.linalg import lapack
+from copy import deepcopy
+
+
+def cholesky_inv(M):
+    """
+    Returns inverse of positive-definite matrix M using Cholesky decomposition
+    """
+
+    # Lower-triangular Cholesky factorization of M    
+    L = linalg.cholesky(M, lower = True)
+
+    # Call LAPACK dpotri to get inverse (only lower triangle populated)    
+    Minv0 = lapack.dpotri(L, lower=True)[0]
+
+    # Copy lower triangle to upper triangle    
+    Minv = Minv0+Minv0.T-np.diag(Minv0.diagonal())
+    return Minv
+
+
+def submatrix_inv_mult(M, Minv, imask, Y, MinvY, pad = True, bruteforce = False):
+    """
+    Returns (inverse of submatrix of M) * Y
+
+        Parameters:
+            M (np.ndarray) N x N: symmetric and positive semi-definite matrix
+            Minv (np.ndarray) N x N: inverse of M
+            imask (np.ndarray) N: mask of rows/columns to use 
+                                      (1 == keep, 0 == remove); contains Nk ones and Nr zeros 
+            Y (np.ndarray) N x Nspec:  full-length matrix to multiply Ainv by (rows
+                                      of removed pixels need not be zero)
+            MinvY (np.ndarray) N x Nspec:  matrix Minv * Y 
+            pad (bool)        : flag for zero-padding
+            bruteforce (bool) : flag for using bruteforce approach
+
+        Returns:
+            Ainvy (np.ndarray): Inverse of A (submatrix of M) times Y (nspec X N - Nr)
+                                where Nr = number of removed rows.
+                                - If pad is True, then zero-padded to nspec X N with 
+                                0 at each removed row
+
+        Comments:
+            Let M be block matrix given by
+                |A   B|              |P   Q| 
+            M = |     | and M^{-1} = |     |
+                |B.T D|              |Q.T U|
+
+            Then inverse of A is Schur complement of U
+            A^{-1} = P - Q U^{-1} Q.T
+
+            U and M must be invertible and positive semi-definite.
+            This returns,
+            A^{-1} Y = P Y - (Q U^{-1} Q.T) Y
+
+            Y has the full N rows. The rows of Y at removed pixels enter through
+            Q.T Y = Minv Y - U Y_r, and the Y_r terms cancel in the final
+            expression, so Y need not be zero-padded at the removed rows.
+    """
+    #verify proper dimensionalities
+    assert M.shape[0] == M.shape[1], "M must be a square matrix."
+    assert imask.shape[0] == M.shape[0], "M and imask have incompatible dimensions."
+    assert Y.ndim == 2, "Y must be column vector."
+    assert MinvY.ndim == 2, "MinvY must be column vector."
+
+    #ensure imask is boolean type because will use logical operators
+    imask = imask.astype(bool)
+    
+    #rows/columns to keep (k) and remove (r)
+    k = np.where(imask)[0] 
+    #nk = len(k)
+
+    r = np.where(~imask)[0] 
+    nr = len(r)
+
+    if bruteforce:
+        A = M[np.ix_(k, k)]
+        Ainv = cholesky_inv(A)
+        Ainvy = Ainv.T @ Y[k,:]
+        return Ainvy
+    
+    if(nr == 0): #imask does not remove any rows or columns
+        return MinvY
+
+    #Use Q.T y = Minv y - U y ?? why? known result?
+    U    = Minv[np.ix_(r, r)]
+    Yr   = Y[r, :]
+    Qty  = MinvY[r, :] - U @ Yr
+    Qt = Minv[np.ix_(r, k)]
+
+    #evaluate A^{-1} Y = P Y - Q U^{-1} Q.T Y
+    #Faster for big U (and fast enough for small U)
+    if(U.shape[0] == 1):
+        UinvQtY = Qty/U[0]
+    else:
+        #Explicit inverse of the (small) block U. Appendix A of the paper describes
+        #Cholesky back-substitution (the commented lines below, as used in the IDL and
+        #Julia code); the two agree to rounding error (~1e-11 relative on the
+        #predicted variances in a conditioning-1e4 test) and the explicit inverse
+        #is kept so that results of earlier versions are reproduced.
+        #L = linalg.cho_factor(U, lower = False, check_finite = False)
+        #UinvQtY = linalg.cho_solve(L, Qty, overwrite_b = False)
+        UinvQtY = cholesky_inv(U) @ Qty
+
+    #Evaluate A^{-1} Y = P Y - Q U^{-1} Q^T Y
+    #using P Y = Minv Y - Q Y
+
+    if(pad):
+        AinvY0 = deepcopy(MinvY)
+        AinvY0[k, :] -= Qt.T @ (UinvQtY + Yr) 
+        AinvY0[r, :] = 0
+        return AinvY0
+    else:
+        #AinvY = MinvY[k,:] - ((UinvQtY + Yr).T @ Qt).T
+        AinvY = MinvY[k,:] - Qt.T @ (UinvQtY + Yr) #faster since fewer transpose
+        return AinvY

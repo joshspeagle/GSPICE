@@ -10,6 +10,7 @@ from ._datasets import Simulation, simulate
 from ._diagnostics import Calibration, calibration, finite_sample_factor, noise_audit
 from ._model import Blocks, Model, fit, load, save
 from ._predict import Prediction, Repaired, infill, pixelwise
+from ._repair import repair
 from ._spectra import scale, snr, unscale
 
 # Without a handler, Python prints the records of level WARNING and above to stderr.
@@ -34,6 +35,7 @@ __all__ = [
     "load",
     "noise_audit",
     "pixelwise",
+    "repair",
     "save",
     "scale",
     "simulate",

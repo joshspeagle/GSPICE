@@ -474,6 +474,15 @@ def boolean(value: object, name: str) -> bool:
     return bool(value)
 
 
+def check_choice(value: object, name: str, options: tuple[str, ...]) -> None:
+    # A str, so that an array or another object that compares equal to an option, such
+    # as np.array("all"), is rejected.
+    if not isinstance(value, str) or value not in options:
+        raise ValueError(
+            f"{name}: expected {' or '.join(map(repr, options))}, got {value!r}"
+        )
+
+
 def check_progress(progress: object) -> None:
     if progress is not None and not callable(progress):
         raise TypeError(

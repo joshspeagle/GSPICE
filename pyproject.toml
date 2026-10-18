@@ -66,6 +66,11 @@ precision = 2
 # The 2022 module names are API (design decision A29).
 "src/gspice/legacy/matrixUtils.py" = ["N999"]
 "src/gspice/legacy/specUtils.py" = ["N999"]
+# The code of r26 that tests/test_repair.py compares with, vendored unchanged.
+"tests/r26/*" = ["C408", "F841", "I001", "N999", "RUF059"]
+
+[tool.ruff.format]
+exclude = ["tests/r26/*"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["_golden", "oracle", "test_golden"]
