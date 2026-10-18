@@ -13,6 +13,7 @@ from _golden import checked, same
 from gspice import (
     Calibration,
     Model,
+    _model,
     _spectra,
     calibration,
     finite_sample_factor,
@@ -321,6 +322,37 @@ def test_a_covariance_that_fails_its_check_raises_before_calibration_starts(
     assert result.n[6, 0] == 1 and np.isfinite(result.z2[6, 0])
 
 
+def test_a_failed_factorization_names_the_row_of_the_caller_in_a_later_chunk(
+    monkeypatch,
+):
+    # A precision matrix that passes its check, but is not positive definite on pixels
+    # 4 and 5 together, which are bad only in row 5, in the third chunk of two rows. A
+    # mask of size 1 adds one pixel to G, so no other row holds both.
+    P = np.eye(NPIX)
+    P[4, 5] = P[5, 4] = 2.0
+    monkeypatch.setattr(_model, "precision", lambda S: P)
+    monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
+    model, flux, ivar, _ = spectra()
+    mask = np.zeros(flux.shape, bool)
+    mask[5, [4, 5]] = True
+    calls = []
+    error = (
+        r"^model: cov\[0\] is not positive definite in its precision matrix on the "
+        r"pixels G, for the pattern of row 5$"
+    )
+    with pytest.raises(LinAlgError, match=error):
+        calibration(
+            model,
+            flux,
+            ivar,
+            mask,
+            sizes=(1,),
+            rng=np.random.default_rng(0),
+            progress=lambda *args: calls.append(args),
+        )
+    assert calls == [("calibration", 2, 7), ("calibration", 4, 7)]
+
+
 def test_a_calibration_holds_read_only_copies_of_the_shape_of_z2():
     # A float32 z2 in Fortran order needs a cast and a C-ordered copy.
     z2, fs = np.asfortranarray(Z2, dtype=np.float32), FS[:, :1]
@@ -482,6 +514,23 @@ def test_rho_is_the_rms_residual_in_reported_sigmas_over_the_good_spectra(monkey
         # relative, with u = eps / 2; the division and the root round once each, and
         # the root halves a relative error. So |drho| <= (gamma_6 + 3u) rho < 5 eps rho.
         assert abs(rho[i] - np.sqrt(np.mean(terms))) <= 5 * EPS * rho[i]
+
+
+def test_rho_uses_the_prediction_of_the_bin_of_each_spectrum(monkeypatch):
+    # Two bins with other means and covariances, whose spectra share chunks of 2 rows:
+    # rows 0 to 3 at S/N 10 and rows 4 to 6 at S/N 100.
+    monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
+    cov = (random_spd(NPIX, 1e2, 0), random_spd(NPIX, 1e2, 1))
+    means = np.array([np.zeros(NPIX), np.full(NPIX, 5.0)])
+    model = Model(means, cov, (30, 30), edges=(30.0,))
+    flux = np.random.default_rng(17).standard_normal((NSPEC, NPIX))
+    flux += np.where(np.arange(NSPEC) < 4, 10.0, 100.0)[:, np.newaxis]
+    ivar = np.ones(flux.shape)
+    rho = noise_audit(model, flux, ivar, nguard=2)
+    predicted = pixelwise(model, flux, ivar, nguard=2).flux
+    # As in the test above, with every pixel good.
+    expected = np.sqrt(np.mean((flux - predicted) ** 2, axis=0))
+    assert np.all(np.abs(rho - expected) <= 5 * EPS * expected)
 
 
 def test_progress_of_noise_audit_counts_the_spectra_done_after_each_chunk(

@@ -248,17 +248,14 @@ def pixelwise(
         n_train = np.array(model.n_train)[:, np.newaxis]
         used = np.isin(range(len(model.cov)), bins)[:, np.newaxis]
         inflation = _inflation(n_train, npix - window, used, ("bin", "pixel"))
-    # The weights of the bins with spectra, before any spectrum, so that a covariance
-    # that fails its check raises at once. A bin without spectra computes no P.
-    for b in np.unique(bins).tolist():
-        model._guard_weights(b, nguard)
+    weigh(model, nguard, bins)
     center = 0.0 if model.center is None else model.center
     predicted, variance, z = (np.empty((nspec, npix)) for _ in range(3))
     for rows in chunks(nspec, npix):
         X, a = working(model, flux[rows], ivar[rows], bad[rows], bins[rows])
         f, v, zs = predicted[rows], variance[rows], z[rows]
         predict(model, nguard, X, bins[rows], inflation, f, v, zs)
-        to_flux(f, a, _means(model, bins[rows]), center, out=f)
+        to_flux(f, a, means(model, bins[rows]), center, out=f)
         v /= np.square(a)[:, np.newaxis]
         zs[bad[rows]] = np.nan
         if progress is not None:
@@ -404,11 +401,11 @@ def infill(
     )
 
 
-# The layer under pixelwise, infill, fit_blocks and repair. The public functions
-# validate the spectra with validated and find their S/N bins once per call. infilled
-# is infill after its checks, on all spectra in flux units. The other functions work on
-# one chunk of spectra at a time in working units, and name rows in messages by the
-# rows that their caller passes.
+# The layer under the public functions that predict. They validate the spectra with
+# validated and find their S/N bins once per call. infilled is infill after its
+# checks, on all spectra in flux units, and weigh computes the guard weights of the
+# bins of all spectra. The other functions work on one chunk of spectra at a time in
+# working units, and name rows in messages by the rows that their caller passes.
 
 
 def validated(
@@ -549,6 +546,14 @@ def infilled(
     )
 
 
+def weigh(model: Model, nguard: int, bins: NDArray[np.intp]) -> None:
+    # The guard weights of the bins with spectra, before any spectrum, so that a
+    # covariance that fails its check raises at once. A bin without spectra computes
+    # no P.
+    for b in np.unique(bins).tolist():
+        model._guard_weights(b, nguard)
+
+
 def working(
     model: Model,
     flux: NDArray[Any],
@@ -560,7 +565,7 @@ def working(
     # a_s (see Model).
     X = interpolate(flux, bad)
     a = root_mean_ivar(ivar, bad)
-    to_working(X, a, 0.0 if model.center is None else model.center, _means(model, bins))
+    to_working(X, a, 0.0 if model.center is None else model.center, means(model, bins))
     return X, a
 
 
@@ -572,13 +577,13 @@ def predict(
     inflation: NDArray[np.float64] | None,
     predicted: NDArray[np.float64],
     var: NDArray[np.float64] | None,
-    z: NDArray[np.float64],
+    z: NDArray[np.float64] | None,
 ) -> None:
     # The pixelwise prediction of the working vectors X of a chunk of spectra, with
     # inflation (nbin, npix) the factor of the variance, or None for 1: its mean into
     # predicted, its variance into var (working units) and z into z, at every pixel,
-    # bad pixels included (design decision A12). var None is not computed, and z may be
-    # predicted, which then ends as z. The caller computed the guard weights.
+    # bad pixels included (design decision A12). var or z None is not computed, and z
+    # may be predicted, which then ends as z. The caller computed the guard weights.
     if len(model.cov) == 1:
         factor = None if inflation is None else inflation[0]
         _predict(model, 0, nguard, X, factor, predicted, var, z)
@@ -586,14 +591,17 @@ def predict(
     # The temporaries of a bin end with its iteration.
     for b in np.unique(bins).tolist():
         at = np.flatnonzero(bins == b)
-        mean, part_z = (np.empty((at.size, X.shape[1])) for _ in range(2))
-        part_var = None if var is None else np.empty_like(mean)
+        mean = np.empty((at.size, X.shape[1]))
+        part_var, part_z = (
+            None if out is None else np.empty_like(mean) for out in (var, z)
+        )
         factor = None if inflation is None else inflation[b]
         _predict(model, b, nguard, X[at], factor, mean, part_var, part_z)
         predicted[at] = mean
-        z[at] = part_z
         if var is not None:
             var[at] = part_var
+        if z is not None:
+            z[at] = part_z
 
 
 def zscores(
@@ -716,7 +724,7 @@ def _solve(
         ) from None
 
 
-def _means(model: Model, bins: NDArray[np.intp]) -> NDArray[np.float64]:
+def means(model: Model, bins: NDArray[np.intp]) -> NDArray[np.float64]:
     # The mean of the bin of each spectrum, as one row for a model of one bin.
     means: NDArray[np.float64] = (
         model.mean[0] if len(model.cov) == 1 else model.mean[bins]
@@ -732,13 +740,14 @@ def _predict(
     inflation: NDArray[np.float64] | None,
     predicted: NDArray[np.float64],
     var: NDArray[np.float64] | None,
-    z: NDArray[np.float64],
+    z: NDArray[np.float64] | None,
 ) -> None:
     W, v = model._guard_weights(b, nguard)
     if inflation is not None:
         v = v * inflation
     np.matmul(X, W, out=predicted)
-    np.subtract(X, predicted, out=z)
-    z /= np.sqrt(v)
+    if z is not None:
+        np.subtract(X, predicted, out=z)
+        z /= np.sqrt(v)
     if var is not None:
         var[...] = v

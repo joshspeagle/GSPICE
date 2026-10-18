@@ -239,20 +239,22 @@ def test_a_scan_whose_blocks_cover_all_pixels_needs_no_precision_matrix():
 
 
 @pytest.mark.parametrize(
-    ("arguments", "message"),
+    ("arguments", "message", "chunks"),
     [
         # SINGULAR at T = A of block 0, whose G covers all pixels, is singular.
         (
             {"width": 2, "nguard": NPIX},
             "not positive definite on the pixels T, for block 0",
+            [],
         ),
         # Block 3 is the first whose G holds pixel 25.
         (
             {"width": WIDTH, "stride": STRIDE, "nguard": 0},
             "not positive definite in its precision matrix on the pixels G, for block 3",
+            [],
         ),
-        # The blocks need no P, and infill names the row of the caller, also in a
-        # later chunk.
+        # The blocks need no P, and the infill of the bad pixel of row 2, in the
+        # second chunk, names the row of the caller.
         (
             {
                 "width": 1,
@@ -264,12 +266,13 @@ def test_a_scan_whose_blocks_cover_all_pixels_needs_no_precision_matrix():
                 "not positive definite in its precision matrix on the pixels G, for "
                 "the pattern of row 2"
             ),
+            [("fit_blocks", 2, 3)],
         ),
     ],
     ids=["prior", "pattern", "infill"],
 )
-def test_a_block_whose_factorization_fails_names_the_bin_and_the_block_at_once(
-    monkeypatch, arguments, message
+def test_a_failed_factorization_names_the_block_at_once_or_the_row_of_the_caller(
+    monkeypatch, arguments, message, chunks
 ):
     # A precision matrix that passed its check, but is not positive definite at pixel
     # 25, as rounding can make it near the rcond limit.
@@ -288,8 +291,7 @@ def test_a_block_whose_factorization_fails_names_the_bin_and_the_block_at_once(
             percentile=50,
             progress=lambda *args: calls.append(args),
         )
-    # Before any spectrum.
-    assert calls == []
+    assert calls == chunks
 
 
 def test_a_covariance_that_fails_the_check_of_its_precision_matrix_raises_at_once():
@@ -310,6 +312,31 @@ def test_a_covariance_that_fails_the_check_of_its_precision_matrix_raises_at_onc
             np.ones(flux.shape),
             width=WIDTH,
             nguard=0,
+            percentile=50,
+            progress=lambda *args: calls.append(args),
+        )
+    assert calls == []
+
+
+def test_the_precision_matrix_of_a_bin_with_bad_pixels_is_checked_before_any_chunk(
+    monkeypatch,
+):
+    # The blocks need no P, but the infill of the bad pixel of row 2, in the second
+    # chunk, does, and SINGULAR has none.
+    monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
+    flux = np.random.default_rng(8).standard_normal((3, NPIX))
+    mask = (np.arange(3)[:, np.newaxis] == 2) & (PIXELS == 25)
+    calls = []
+    error = r"^model: cov\[0\] is not positive definite: dpotrf failed at its "
+    with pytest.raises(LinAlgError, match=error):
+        fit_blocks(
+            Model(np.zeros((1, NPIX)), (SINGULAR,), (10,)),
+            flux,
+            np.ones(flux.shape),
+            mask,
+            width=1,
+            stride=1,
+            nguard=NPIX,
             percentile=50,
             progress=lambda *args: calls.append(args),
         )
