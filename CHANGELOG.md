@@ -6,6 +6,7 @@
 
 - Golden tests in `tests/golden/`: the outputs of every public function of the 2022 package (commit `1fbab9f`) on synthetic inputs, and tests that compare an implementation with them.
 - Continuous integration on Linux with Python 3.11 to 3.15, on macOS and Windows with Python 3.11 and 3.15, and on the oldest supported numpy and scipy.
+- A CI job that builds the wheel and the sdist, checks that the sdist holds the sources and tests and that the wheel holds `py.typed` and no tests, and runs a smoke test of the wheel in a clean environment.
 - `pyproject.toml`: `pip install .` installs the package. It requires Python 3.11 or later, numpy 1.26 or later and scipy 1.11 or later.
 - `gspice.__version__`, which is `2.0.0.dev0`.
 - Type checks with mypy in strict mode for the code outside `gspice.legacy`.
