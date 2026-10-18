@@ -731,9 +731,10 @@ def fit(
     precision matrix, npix (w^3/3 + 2 npix w) for the guard weights,
     w = min(2 nguard + 1, npix), and 2 N_s npix^2 for z, with N_s of the bin. The
     final fit costs about N_s npix^2 + npix^3 flops per bin. With nbin > 1, the S/N
-    sorts the npix values of each spectrum once. With rank=K, each fit adds about
-    (4/3) npix^3 flops for the K leading eigenpairs of S, more than the npix^3 of a
-    dense P, and P then costs about npix^2 K flops. Each fit holds the working vectors
+    sorts the npix values of each spectrum once. With rank=K, each fit adds the K
+    leading eigenpairs of S: where K <= npix/80, Lanczos at about 2 npix^2 flops per
+    product with S, and otherwise about (4/3) npix^3 flops, more than the npix^3 of a
+    dense P; P then costs about npix^2 K flops. Each fit holds the working vectors
     of its spectra, N_s npix x 8 bytes. With noise=True, the final fit costs about
     3 N_s npix^2 flops for A^T A, D1 and D2 and a full eigendecomposition of an
     npix x npix matrix, also with rank=K, and holds a few arrays of one chunk of
@@ -1250,10 +1251,7 @@ def _noise_covariance(
 
 def _low_rank(S: NDArray[np.float64], rank: int, subject: str) -> LowRank:
     # The estimator of design section 4.1 and its requirements lambda_K > 0 and d > 0.
-    npix = len(S)
-    values, V = eigh(S, subset_by_index=(npix - rank, npix - 1))
-    # In decreasing order of the eigenvalues.
-    values, V = values[::-1], V[:, ::-1]
+    values, V = _leading(S, rank, subject)
     _require_lambda_k(values, rank, subject)
     d = np.diagonal(S) - low_rank_variances(V, values)
     nonpositive = np.flatnonzero(d <= 0)
@@ -1263,6 +1261,69 @@ def _low_rank(S: NDArray[np.float64], rank: int, subject: str) -> LowRank:
             f"pixels {listing(nonpositive, 'pixels')}"
         )
     return LowRank(V, values, d)
+
+
+def _leading(
+    S: NDArray[np.float64], rank: int, subject: str
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    # The K leading eigenpairs of S, in decreasing order of the eigenvalues (design
+    # section 4.1). At npix 2400, Lanczos (eigsh) beat eigh by 7% to 46% up to K 30,
+    # by 2% to 12% at K 48, and lost by 28% at K 48 with lambda_K in a flat noise floor
+    # (PR #107). maxiter bounds its products with S to about half the flops of eigh.
+    # The start vectors, Weyl sequences, are fixed, so that a fit is deterministic,
+    # and are not symmetric under reversal of the pixels, which would make them
+    # orthogonal to the odd eigenvectors of a stationary covariance.
+    # Imported here: it took 23 to 28 ms of an import gspice of 0.33 to 0.43 s.
+    from scipy.sparse.linalg import ArpackError, LinearOperator, eigsh
+
+    npix = len(S)
+    if rank <= npix // 80:
+        maxiter = max(1, npix // (3 * (rank + 1)))
+        try:
+            values, V = eigsh(
+                S, k=rank, which="LA", tol=0, v0=_weyl(npix, 5), maxiter=maxiter
+            )
+            # Lanczos can miss a copy of a multiple eigenvalue. If V holds K leading
+            # eigenvectors, the top eigenvalue of S - V Lambda V^T is lambda_K+1. Its
+            # own start vector keeps a component along any copy that the first one
+            # missed.
+            deflated: LinearOperator = LinearOperator(
+                S.shape,
+                matvec=lambda x: S @ x - V @ (values * (V.T @ x)),
+                dtype=S.dtype,
+            )
+            (next_value,) = eigsh(
+                deflated,
+                k=1,
+                which="LA",
+                tol=0,
+                v0=_weyl(npix, 2),
+                maxiter=maxiter,
+                return_eigenvectors=False,
+            )
+        except ArpackError:
+            pass
+        else:
+            # A multiple eigenvalue among the K + 1 leading ones also makes ARPACK
+            # restart from a random vector of its own, so the result would depend on
+            # earlier calls: the gaps must exceed the npix eps lambda_1 of rounding.
+            margin = npix * np.finfo(np.float64).eps * values.max()
+            order = np.argsort(values)[::-1]
+            if np.all(-np.diff(np.r_[values[order], next_value]) > margin):
+                return values[order], V[:, order]
+        _logger.info(
+            "%s: eigsh did not find the %d leading eigenpairs; eigh computes them",
+            subject,
+            rank,
+        )
+    values, V = eigh(S, subset_by_index=(npix - rank, npix - 1))
+    return values[::-1], V[:, ::-1]
+
+
+def _weyl(npix: int, n: int) -> NDArray[np.float64]:
+    # The Weyl sequence of sqrt(n), centred.
+    sequence: NDArray[np.float64] = np.arange(1, npix + 1) * np.sqrt(n) % 1 - 0.5
+    return sequence
 
 
 def _require_lambda_k(values: NDArray[np.float64], rank: int, subject: str) -> None:

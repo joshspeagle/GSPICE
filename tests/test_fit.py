@@ -4,6 +4,9 @@ from dataclasses import astuple
 import numpy as np
 import pytest
 from numpy.linalg import LinAlgError
+from scipy import sparse
+from scipy.linalg import eigh
+from scipy.sparse.linalg import ArpackNoConvergence, eigsh
 
 from _golden import checked, same
 from gspice import _model, _spectra, fit, pixelwise, scale, snr
@@ -403,6 +406,114 @@ def test_a_low_rank_fit_needs_no_good_pixel_at_every_pixel():
         fit(flux, ivar, mask, nguard=NGUARD, nsigma=())
     model, _ = fit(flux, ivar, mask, nguard=NGUARD, nsigma=(), rank=3)
     assert np.all(model.cov[0].diag > 0)
+
+
+def eigenpairs(S, rank):
+    # The reference of the Lanczos route: the K leading pairs of the full eigh of S.
+    values, V = np.linalg.eigh(S)
+    return values[::-1][:rank], V[:, ::-1][:, :rank]
+
+
+def with_values(values, seed=0):
+    Q, _ = np.linalg.qr(np.random.default_rng(seed).standard_normal((len(values),) * 2))
+    S = (Q * values) @ Q.T
+    return (S + S.T) / 2
+
+
+LANCZOS_NPIX, LANCZOS_RANK = 320, 4
+# lambda_1 > 1, so that S - V V^T is not a deflation of S.
+GEOMETRIC = np.logspace(2, -6, LANCZOS_NPIX)
+
+
+@pytest.mark.parametrize(
+    ("values", "lanczos"),
+    [
+        # Eigenvalues from 100 to 1e-6, with a gap at K: Lanczos finds them.
+        (GEOMETRIC, True),
+        # lambda_2 = lambda_3 = lambda_4: a cluster inside the K leading ones, where
+        # Lanczos may miss a copy or restart at random, so eigh computes them.
+        (np.r_[GEOMETRIC[0], [GEOMETRIC[3]] * 3, GEOMETRIC[4:]], False),
+        # lambda_3 to lambda_6 equal: the cluster straddles K, so lambda_K+1 = lambda_K
+        # and eigh computes the eigenpairs.
+        (np.r_[GEOMETRIC[:2], [GEOMETRIC[3]] * 4, GEOMETRIC[6:]], False),
+    ],
+    ids=["gap", "cluster-inside", "cluster-across"],
+)
+def test_the_lanczos_eigenpairs_of_a_low_rank_covariance_agree_with_eigh(
+    values, lanczos, caplog
+):
+    caplog.set_level(logging.INFO, logger="gspice")
+    S = with_values(values)
+    low = _model._low_rank(S, LANCZOS_RANK, "fit")
+    assert (caplog.messages == []) == lanczos
+    assert same(astuple(low), astuple(_model._low_rank(S, LANCZOS_RANK, "fit")))
+    V, top = low.vectors, low.values
+    reference, W = eigenpairs(S, LANCZOS_RANK)
+    # Both routes are backward stable: each eigenpair and the orthogonality err by a
+    # small multiple of npix eps |S|_2, as in the test of a low-rank fit above.
+    tol = 10 * LANCZOS_NPIX * EPS * values[0]
+    assert np.all(np.abs(top - reference) <= tol)
+    assert np.all(np.linalg.norm(S @ V - V * top, axis=0) <= tol)
+    assert np.all(np.abs(V.T @ V - np.eye(LANCZOS_RANK)) <= 10 * LANCZOS_NPIX * EPS)
+    if lanczos is not False:
+        # By Davis-Kahan, each route's leading subspace errs by at most tol / gap, so
+        # each V Lambda V^T by lambda_1 tol / gap, which twice bounds their difference.
+        gap = values[LANCZOS_RANK - 1] - values[LANCZOS_RANK]
+        difference = (V * top) @ V.T - (W * reference) @ W.T
+        assert np.max(np.abs(difference)) <= 2 * values[0] * tol / gap
+
+
+def test_a_low_rank_covariance_falls_back_to_eigh_where_lanczos_fails(
+    monkeypatch, caplog
+):
+    caplog.set_level(logging.INFO, logger="gspice")
+    S = with_values(GEOMETRIC)
+
+    def unconverged(*args, **kwargs):
+        raise ArpackNoConvergence("no convergence", np.empty(0), np.empty((0, 0)))
+
+    monkeypatch.setattr(sparse.linalg, "eigsh", unconverged)
+    low = _model._low_rank(S, LANCZOS_RANK, "fit: the final covariance")
+    # The eigh route of main, bit for bit.
+    values, V = eigh(S, subset_by_index=(LANCZOS_NPIX - LANCZOS_RANK, LANCZOS_NPIX - 1))
+    assert same((low.vectors, low.values), (V[:, ::-1], values[::-1]))
+    message = (
+        "fit: the final covariance: eigsh did not find the 4 leading eigenpairs; eigh "
+        "computes them"
+    )
+    assert caplog.messages == [message]
+
+
+def test_a_low_rank_covariance_falls_back_to_eigh_at_a_multiple_eigenvalue(
+    monkeypatch, caplog
+):
+    # lambda_2 = lambda_3 inside the K leading ones: there ARPACK can restart from a
+    # random vector of its own, so even exact Lanczos pairs, and lambda_K+1 below
+    # lambda_K, go to eigh.
+    caplog.set_level(logging.INFO, logger="gspice")
+    values = np.r_[GEOMETRIC[:2], GEOMETRIC[1], GEOMETRIC[3:]]
+    S = with_values(values)
+    exact, V = eigenpairs(S, LANCZOS_RANK)
+    results = iter([(exact[::-1], V[:, ::-1]), np.array([values[LANCZOS_RANK]])])
+    monkeypatch.setattr(sparse.linalg, "eigsh", lambda *args, **kwargs: next(results))
+    _model._low_rank(S, LANCZOS_RANK, "fit")
+    assert len(caplog.messages) == 1
+
+
+@pytest.mark.parametrize(("npix", "lanczos"), [(320, True), (319, False)])
+def test_a_low_rank_covariance_uses_lanczos_up_to_rank_npix_over_80(
+    npix, lanczos, monkeypatch
+):
+    calls = []
+
+    def spy(*args, **kwargs):
+        calls.append(kwargs["k"])
+        return eigsh(*args, **kwargs)
+
+    monkeypatch.setattr(sparse.linalg, "eigsh", spy)
+    _model._low_rank(with_values(GEOMETRIC[:npix]), 4, "fit")
+    # The K leading eigenpairs, then the top eigenvalue of the deflated S.
+    assert calls == ([4, 1] if lanczos else [])
 
 
 def test_snr_bins_puts_the_edges_at_quantiles_of_the_used_spectra_and_assigns_them():

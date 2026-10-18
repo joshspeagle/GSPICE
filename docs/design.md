@@ -135,7 +135,7 @@ class Blocks:
 | S/N binned | `snr_bins=` | the chosen kind per bin, with its own m_b and N_s | per bin as above |
 | Noise-aware | `noise=True` | Σ₊ from the estimator below; with `rank=K`, (V, Λ) are its leading K eigenpairs and d_i = Σ_{k>K} max(λ_k, 0) Q_ik² | two spectra good at every pixel, so W_i > 0; every denominator below > 0; λ_K > 0 with `rank=K` |
 
-Covariances are accumulated in float64, in row chunks, and are exactly symmetric. The K leading eigenpairs of S come from `eigh` of S restricted to their indices, which is exact and simple; an SVD of X or a Lanczos solver is a candidate gated optimization.
+Covariances are accumulated in float64, in row chunks, and are exactly symmetric. The K leading eigenpairs of S come from `eigsh` (Lanczos) with tol 0 and a fixed start vector where K ≤ npix/80, and otherwise from `eigh` of S restricted to their indices. Lanczos can miss a copy of a multiple eigenvalue, and ARPACK restarts from a random vector of its own at one, so `fit` accepts its result only if the K eigenvalues and the top eigenvalue of S − VΛVᵀ, λ_K+1, are each apart by more than npix·ε·λ_1; otherwise, or if `eigsh` does not converge, `eigh` computes the eigenpairs, and `fit` logs this at INFO.
 
 **Noise-free covariance (D-63; the paper gives no estimator).** Let u_si = 1 at good pixels of the final training mask and 0 elsewhere, and let a_s use the same pixels. With w_s = a_s² ω_s the estimate is precision weighted:
 
@@ -716,7 +716,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 - (h) χ² only in `calibration`: an option of `solve_pattern` that skips the inverse of R_MM, which only the variances and the covariance need, passed through the private prediction core of issue #59. Done in #85 as `variance=False`.
 - (i) Mean only in the infills of the block pass of `repair`, with the same option of `solve_pattern` as (h). Done in #86 as `variance=False` in `filled`.
 - (j) The conditional mean from a Cholesky factor of C_OO where |G| > npix/2, in the infills of the block pass of `repair`, at |O|³/3 flops instead of |G|³/3 for R. Done in #87 as `solve_mean`, in `filled`.
-- (k) Lanczos (`eigsh`) for the K leading eigenpairs in `fit(rank=K)` (#93).
+- (k) Lanczos (`eigsh`) for the K leading eigenpairs in `fit(rank=K)`. Done in #93 as `eigsh` with a deflated check where K ≤ npix/80 (section 4.1).
 
 ## 13. Packaging
 
