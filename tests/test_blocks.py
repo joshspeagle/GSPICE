@@ -6,9 +6,9 @@ import pytest
 from numpy.linalg import LinAlgError
 
 from _golden import checked, same
-from gspice import Model, _model, _spectra, fit_blocks, infill, snr
+from gspice import LowRank, Model, _model, _spectra, fit_blocks, infill, snr
 from gspice._blocks import block_chi2, block_factors
-from oracle import condition, conditional, random_spd, window
+from oracle import condition, conditional, dense, random_spd, window
 
 EPS = np.finfo(float).eps
 NPIX = 40
@@ -341,3 +341,32 @@ def test_the_precision_matrix_of_a_bin_with_bad_pixels_is_checked_before_any_chu
             progress=lambda *args: calls.append(args),
         )
     assert calls == []
+
+
+@pytest.mark.parametrize("nguard", [3, NPIX])
+def test_a_low_rank_model_gives_the_thresholds_of_its_dense_covariance(nguard):
+    # V of entries -1, 0 and 1, and values and d powers of 2: C = V diag(values) V^T +
+    # diag(d) is exact in float64, so the two models hold the same C. With nguard NPIX,
+    # every G covers all pixels: the prior, from C at A. Row 0 has a bad pixel, which
+    # the infill before the scan replaces.
+    rng = np.random.default_rng(7)
+    V = rng.integers(-1, 2, (NPIX, 3)).astype(float)
+    low = LowRank(V, [4.0, 2.0, 1.0], np.full(NPIX, 0.5))
+    C = dense(low)
+    flux = rng.standard_normal((20, NPIX)) @ np.linalg.cholesky(C).T
+    mask = np.zeros(flux.shape, bool)
+    mask[0, 12] = True
+    options = {"width": WIDTH, "stride": STRIDE, "nguard": nguard, "percentile": 50}
+    ivar = np.ones(flux.shape)
+    reference = fit_blocks(
+        Model(np.zeros((1, NPIX)), (C,), (100,)), flux, ivar, mask, **options
+    ).blocks.thresholds
+    thresholds = fit_blocks(
+        Model(np.zeros((1, NPIX)), (low,), (100,)), flux, ivar, mask, **options
+    ).blocks.thresholds
+    # Each chi2_A errs by at most 10 kappa eps (chi2_A + 1) on either route (design
+    # section 11), so the two differ by tol (chi2_A + 1). That bound grows with chi2_A,
+    # so it bounds each order statistic alike, and the percentile 50 of 20 spectra is
+    # the mean of two of them.
+    tol = 20 * condition(C) * EPS
+    assert np.all(np.abs(thresholds - reference) <= tol * (reference + 1))

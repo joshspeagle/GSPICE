@@ -12,7 +12,7 @@ from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 
 from _golden import same
-from gspice import Blocks, Model, __version__, load, save
+from gspice import Blocks, LowRank, Model, __version__, load, save
 
 NBIN, NPIX = 3, 4
 
@@ -31,18 +31,25 @@ def block_arguments():
     return {"starts": [0, 2], "width": 2, "nguard": 1, "thresholds": np.ones((NBIN, 2))}
 
 
+def low_rank_arguments():
+    # Rank 2 of NPIX pixels.
+    return {"vectors": np.eye(NPIX, 2), "values": [2.0, 1.0], "diag": np.ones(NPIX)}
+
+
 def with_cov(matrix):
     cov = list(arguments()["cov"])
     cov[1] = matrix
     return cov
 
 
-def contents(instance):
-    # The fields of a Model or a Blocks, with the fields of a Blocks in its place.
-    return tuple(
-        contents(value) if isinstance(value, Blocks) else value
-        for value in (getattr(instance, f.name) for f in fields(instance) if f.init)
-    )
+def contents(value):
+    # The fields of a Model, a LowRank or a Blocks, with the fields of each LowRank and
+    # Blocks in its place.
+    if isinstance(value, tuple):
+        return tuple(map(contents, value))
+    if isinstance(value, Model | LowRank | Blocks):
+        return tuple(contents(getattr(value, f.name)) for f in fields(value) if f.init)
+    return value
 
 
 def same_fields(a, b):
@@ -73,6 +80,44 @@ NAN_MATRIX[0, 3] = NAN_MATRIX[3, 0] = np.nan
         ("cov", with_cov(ASYMMETRIC), ValueError, r"^cov\[1\]: "),
         ("cov", with_cov(np.diag([1.0, 0.0, 1.0, 1.0])), ValueError, r"^cov\[1\]: "),
         ("cov", with_cov(np.eye(NPIX, dtype=complex)), TypeError, r"^cov\[1\]: "),
+        (
+            "cov",
+            with_cov(LowRank(np.eye(3, 2), [2.0, 1.0], np.ones(3))),
+            ValueError,
+            r"^cov\[1\]: expected a LowRank of 4 pixels like mean, got vectors of ",
+        ),
+        # The bins of a model hold covariances of one kind.
+        (
+            "cov",
+            with_cov(LowRank(**low_rank_arguments())),
+            ValueError,
+            (
+                r"^cov: expected covariances of one kind, all dense or all LowRank, "
+                r"got a dense cov\[0\] and a LowRank cov\[1\]$"
+            ),
+        ),
+        (
+            "cov",
+            [LowRank(**low_rank_arguments())] * 2 + [np.eye(NPIX)],
+            ValueError,
+            r"^cov: .*, got a LowRank cov\[0\] and a dense cov\[2\]$",
+        ),
+        # Finite fields whose variances overflow.
+        (
+            "cov",
+            with_cov(LowRank(np.full((NPIX, 1), 1e160), [1e10], np.ones(NPIX))),
+            ValueError,
+            r"^cov\[1\]: expected finite variances, got inf at pixel 0$",
+        ),
+        # Design section 3.3: a LowRank needs diag > 0 in a model.
+        (
+            "cov",
+            with_cov(
+                LowRank(**(low_rank_arguments() | {"diag": [1.0, 0.0, 1.0, 1.0]}))
+            ),
+            ValueError,
+            r"^cov\[1\]: expected diag > 0, got 0.0 at pixel 1$",
+        ),
         ("cov", 5, TypeError, r"^cov: "),
         ("n_train", (10, 20), ValueError, r"^n_train: "),
         ("n_train", (10, 0, 30), ValueError, r"^n_train\[1\]: "),
@@ -169,6 +214,46 @@ def test_an_invalid_field_of_blocks_is_rejected_with_a_message_that_starts_with_
         Blocks(**(block_arguments() | {field: value}))
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "error", "message"),
+    [
+        ("vectors", np.ones(NPIX), ValueError, r"^vectors: "),
+        ("vectors", np.ones((NPIX, 0)), ValueError, r"^vectors: "),
+        ("vectors", np.ones((0, 2)), ValueError, r"^vectors: "),
+        ("vectors", np.full((NPIX, 2), np.nan), ValueError, r"^vectors: expected fin"),
+        ("vectors", np.ones((NPIX, 2), complex), TypeError, r"^vectors: "),
+        ("values", [2.0], ValueError, r"^values: "),
+        ("values", [2.0, 0.0], ValueError, r"^values: expected values > 0"),
+        ("values", [2.0, np.inf], ValueError, r"^values: expected finite"),
+        ("diag", np.ones(NPIX + 1), ValueError, r"^diag: "),
+        ("diag", [1.0, -1.0, 1.0, 1.0], ValueError, r"^diag: expected diag >= 0"),
+        ("diag", [1.0, np.nan, 1.0, 1.0], ValueError, r"^diag: expected finite"),
+    ],
+)
+def test_an_invalid_field_of_a_low_rank_is_rejected_with_its_name(
+    field, value, error, message
+):
+    with pytest.raises(error, match=message):
+        LowRank(**(low_rank_arguments() | {field: value}))
+
+
+def test_a_low_rank_holds_read_only_float64_copies_and_equals_only_itself():
+    # diag 0 is allowed outside a model.
+    vectors = np.asfortranarray(np.eye(NPIX, 2, dtype=np.float32))
+    diag = np.zeros(NPIX, np.int64)
+    low = LowRank(vectors, [2, 1], diag)
+    expected = (vectors.astype(np.float64), np.array([2.0, 1.0]), np.zeros(NPIX))
+    assert same(contents(low), expected)
+    for array, original in ((low.vectors, vectors), (low.diag, diag)):
+        assert not array.flags.writeable
+        assert not np.shares_memory(array, original)
+    assert low.vectors.flags.c_contiguous
+    assert not low.values.flags.writeable
+    with pytest.raises(FrozenInstanceError):
+        low.diag = np.ones(NPIX)
+    assert low != LowRank(vectors, [2, 1], diag)
+
+
 def test_blocks_hold_read_only_copies_and_python_scalars_and_equal_only_themselves():
     starts, thresholds = np.array([0, 2], np.int32), np.ones((NBIN, 2), np.float32)
     blocks = Blocks(starts, np.int64(2), np.uint8(1), thresholds)
@@ -248,7 +333,10 @@ DUPLICATES = {
 @pytest.mark.parametrize("duplicate", DUPLICATES.values(), ids=list(DUPLICATES))
 def test_pickle_and_copy_rebuild_a_model_through_its_checks(duplicate):
     blocks = Blocks(**block_arguments())
-    model = Model(**arguments(), center=0.95, weighted=True, blocks=blocks)
+    cov = [LowRank(**low_rank_arguments()) for _ in range(NBIN)]
+    model = Model(
+        **(arguments() | {"cov": cov}), center=0.95, weighted=True, blocks=blocks
+    )
     model._precision(0)
     copy = duplicate(model)
     assert same_fields(copy, model)
@@ -260,6 +348,18 @@ def test_pickle_and_copy_rebuild_a_model_through_its_checks(duplicate):
     with pytest.raises(ValueError, match=r"^width: "):
         duplicate(model)
     object.__setattr__(model.blocks, "width", 2)
+    # Also in a LowRank, where Model requires diag > 0.
+    low = model.cov[1]
+    object.__setattr__(low, "values", np.zeros(2))
+    with pytest.raises(ValueError, match=r"^values: "):
+        duplicate(model)
+    with pytest.raises(ValueError, match=r"^values: "):
+        duplicate(low)
+    object.__setattr__(low, "values", np.ones(2))
+    object.__setattr__(low, "diag", np.zeros(NPIX))
+    with pytest.raises(ValueError, match=r"^cov\[1\]: expected diag > 0"):
+        duplicate(model)
+    object.__setattr__(low, "diag", np.ones(NPIX))
     object.__setattr__(model, "n_train", (10, 0, 30))
     with pytest.raises(ValueError, match=r"^n_train\[1\]: "):
         duplicate(model)
@@ -276,8 +376,17 @@ def models(draw):
     values = st.floats(-1e100, 1e100)
     positive = st.floats(1e-100, 1e100)
     mean = draw(hnp.arrays(np.float64, (nbin, npix), elements=values))
+    # The bins of a model hold covariances of one kind.
+    low_rank = draw(st.booleans())
     cov = []
     for _ in range(nbin):
+        if low_rank:
+            rank = draw(st.integers(1, 3))
+            vectors = draw(hnp.arrays(np.float64, (npix, rank), elements=values))
+            scales = draw(hnp.arrays(np.float64, rank, elements=positive))
+            diag = draw(hnp.arrays(np.float64, npix, elements=positive))
+            cov.append(LowRank(vectors, scales, diag))
+            continue
         A = draw(hnp.arrays(np.float64, (npix, npix), elements=values))
         # A + A.T is exactly symmetric, because float addition commutes.
         C = (A + A.T) / 2
@@ -320,11 +429,16 @@ def test_save_writes_exactly_the_given_path_for_a_str_bytes_or_a_path(tmp_path, 
     assert same_fields(load(path), model)
 
 
-@pytest.mark.parametrize("with_blocks", [False, True], ids=["without", "blocks"])
-def test_save_writes_the_keys_and_dtypes_of_the_format(tmp_path, with_blocks):
+@pytest.mark.parametrize(
+    ("with_blocks", "low_rank"),
+    [(False, False), (True, False), (False, True)],
+    ids=["without", "blocks", "low-rank"],
+)
+def test_save_writes_the_keys_and_dtypes_of_the_format(tmp_path, with_blocks, low_rank):
     # Without blocks, none of their arrays (design section 9).
     blocks = Blocks([0, 1], 1, 0, np.ones((1, 2))) if with_blocks else None
-    model = Model(np.zeros((1, 2)), (np.eye(2),), (5,), blocks=blocks)
+    C = LowRank(np.ones((2, 1)), [1.0], [1.0, 2.0]) if low_rank else np.eye(2)
+    model = Model(np.zeros((1, 2)), (C,), (5,), blocks=blocks)
     save(model, tmp_path / "model.npz")
     with np.load(tmp_path / "model.npz") as archive:
         stored = dict(archive)
@@ -337,8 +451,15 @@ def test_save_writes_the_keys_and_dtypes_of_the_format(tmp_path, with_blocks):
         "edges": (np.float64, (0,)),
         "center": (np.float64, ()),
         "weighted": (np.bool_, ()),
-        "cov0": (np.float64, (2, 2)),
     }
+    if low_rank:
+        expected |= {
+            "vectors0": (np.float64, (2, 1)),
+            "values0": (np.float64, (1,)),
+            "diag0": (np.float64, (2,)),
+        }
+    else:
+        expected["cov0"] = (np.float64, (2, 2))
     if with_blocks:
         expected |= {
             "block_starts": (np.int64, (2,)),
@@ -371,15 +492,27 @@ def test_load_rejects_an_archive_whose_schema_is_not_the_integer_1(tmp_path, sch
     ("extra", "drop", "message"),
     [
         ({"noise": np.True_}, (), r"^path: .* got noise, written by gspice .*, in "),
-        # The arrays of a low-rank bin in place of its covariance.
+        # Some of the arrays of a low-rank bin in place of its covariance.
+        (
+            {"vectors0": np.eye(NPIX), "diag0": np.ones(NPIX)},
+            ("cov0",),
+            r"^path: .* got no values0 in ",
+        ),
+        # Those of a low-rank bin beside its covariance.
+        (
+            {"vectors1": np.eye(NPIX), "values1": np.ones(NPIX), "diag1": np.ones(4)},
+            (),
+            r"^path: .* got diag1, values1, vectors1, ",
+        ),
+        # An invalid field of a LowRank names its bin.
         (
             {
-                "vectors0": np.eye(NPIX),
-                "values0": np.ones(NPIX),
+                "vectors0": np.eye(NPIX, 2),
+                "values0": [1.0, 0.0],
                 "diag0": np.ones(NPIX),
             },
-            ("cov0", "cov1", "cov2"),
-            r"^path: .* got diag0, values0, vectors0, ",
+            ("cov0",),
+            r"^cov\[0\]: values: expected values > 0",
         ),
         ({}, ("center",), r"^path: .* got no center in "),
         ({"cov3": np.eye(NPIX)}, (), r"^cov: "),

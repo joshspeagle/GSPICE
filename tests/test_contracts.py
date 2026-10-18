@@ -9,6 +9,7 @@ import pytest
 from gspice import (
     Blocks,
     Calibration,
+    LowRank,
     Model,
     _predict,
     _spectra,
@@ -148,6 +149,7 @@ INFLATE_ARGUMENTS = [
         for name, kind in (
             ("center", {"center": 0.9}),
             ("weighted", {"weighted": True}),
+            ("low-rank", {"cov": (LowRank(np.eye(3, 1), [1.0], np.ones(3)),)}),
         )
     ),
 ]
@@ -417,6 +419,11 @@ def test_an_invalid_spectrum_of_repaired_covariance_is_rejected(s, error):
         pytest.param(
             {"weights": np.ones(2, complex)}, TypeError, "weights", id="weights=complex"
         ),
+        pytest.param({"rank": 0}, ValueError, "rank", id="rank=0"),
+        # rank < npix, the 3 pixels of SPECTRA.
+        pytest.param({"rank": 3}, ValueError, "rank", id="rank=3"),
+        pytest.param({"rank": 1.0}, TypeError, "rank", id="rank=1.0"),
+        pytest.param({"rank": True}, TypeError, "rank", id="rank=True"),
         pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
     ],
 )

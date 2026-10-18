@@ -103,7 +103,8 @@ def repair(
     count_on : {"all", "flagged"}, optional
         The counting set K of step 4.
     inflate, covariance : bool, optional
-        As in `infill`, for step 5. inflate needs a mean-centred, unweighted model.
+        As in `infill`, for step 5. inflate needs a dense, mean-centred, unweighted
+        model.
     rng : numpy.random.Generator, optional
         As in `infill`, for step 5: the source of Repaired.draws. None: no draws.
     progress : callable, optional
@@ -130,8 +131,9 @@ def repair(
         has another npix than model, a spectrum has no good pixel, an argument is
         outside its range above, count_on is neither "all" nor "flagged", or blockwise
         is True and model has no blocks. If inflate is True and model has a constant
-        centre or weights, or, before step 5, N_s - N_k - 3 <= 0 for a spectrum with a
-        replaced pixel, with N_k = npix - |M | I|; the message names N_s and N_k.
+        centre, weights or a `LowRank` covariance, or, before step 5,
+        N_s - N_k - 3 <= 0 for a spectrum with a replaced pixel, with
+        N_k = npix - |M | I|; the message names N_s and N_k.
     numpy.linalg.LinAlgError
         If the covariance of a bin with spectra fails the check of its precision
         matrix, as in `pixelwise`; repair checks P of every bin with spectra before

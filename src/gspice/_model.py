@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from numpy.linalg import LinAlgError
 from numpy.typing import ArrayLike, NDArray
-from scipy.linalg import issymmetric
+from scipy.linalg import eigh, issymmetric
 
-from ._linalg import guard_weights, precision
+from ._linalg import guard_weights, low_rank_variances, precision, woodbury
 from ._spectra import (
     Boolean,
     Integer,
@@ -42,9 +42,11 @@ from ._spectra import (
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
-# The arrays that load reads. save also writes gspice_version and cov0, cov1, ...,
-# and the arrays of _BLOCKS for a model with blocks.
+# The arrays that load reads. save also writes gspice_version, cov{b} or the arrays
+# of _LOW_RANK with the suffix b for each bin b, and the arrays of _BLOCKS for a model
+# with blocks.
 _REQUIRED = ("schema", "mean", "n_train", "edges", "center", "weighted")
+_LOW_RANK = ("vectors", "values", "diag")
 _BLOCKS = ("block_starts", "block_width", "block_nguard", "block_thresholds")
 
 _logger = logging.getLogger("gspice")
@@ -149,6 +151,67 @@ class Blocks:
 
 
 @dataclass(frozen=True, eq=False)
+class LowRank:
+    """Low-rank plus diagonal covariance C = V diag(values) V^T + diag(diag).
+
+    `fit` with rank=K returns a `Model` with a LowRank covariance. A model computes its
+    precision matrix by the Woodbury identity, without forming C, and
+    rejects it where kappa_W > 1e13, with c_i = diag_i + sum_k values_k V_ik^2 the
+    variances of C, dtilde = diag / c, Vtilde = diag(c)^-1/2 V and
+
+        kappa_W = (max dtilde + lambda_max(diag(values)^1/2 Vtilde^T Vtilde
+                   diag(values)^1/2)) / min dtilde,
+
+    a bound on the condition number of C scaled to unit diagonal and on max c_i/diag_i.
+    The constructor takes array_like values and stores read-only float64 copies. Two
+    LowRank are equal only if they are the same object.
+
+    Attributes
+    ----------
+    vectors : ndarray, shape (npix, K)
+        The K >= 1 columns of V, for npix >= 1 pixels: finite. `fit` returns
+        orthonormal columns (unit-free), in decreasing order of values.
+    values : ndarray, shape (K,)
+        The variance of each column (scaled^2): finite and > 0.
+    diag : ndarray, shape (npix,)
+        The diagonal term (scaled^2): finite and >= 0; `Model` requires > 0.
+
+    Raises
+    ------
+    TypeError
+        If a field has a dtype that is not integer or floating. The message starts
+        with the name of the field.
+    ValueError
+        If a field has a shape or a value that is not allowed above. The message
+        starts with the name of the field.
+    """
+
+    vectors: NDArray[np.float64]
+    values: NDArray[np.float64]
+    diag: NDArray[np.float64]
+
+    # Written by hand, as in Model.
+    def __init__(self, vectors: ArrayLike, values: ArrayLike, diag: ArrayLike) -> None:
+        vectors = numeric(vectors, "vectors")
+        if vectors.ndim != 2 or 0 in vectors.shape:
+            raise ValueError(
+                f"vectors: expected a 2-D array of shape (npix, K) with npix >= 1 and "
+                f"K >= 1, got shape {vectors.shape}"
+            )
+        vectors = finite_array(vectors, "vectors", ("pixel", "vector"))
+        npix, rank = vectors.shape
+        values = vector(values, "values", rank, "vector")
+        require(values > 0, values, "values", "values > 0", ("vector",))
+        diag = vector(diag, "diag", npix, "pixel")
+        require(diag >= 0, diag, "diag", "diag >= 0", ("pixel",))
+        for name, array in (("vectors", vectors), ("values", values), ("diag", diag)):
+            array.flags.writeable = False
+            object.__setattr__(self, name, array)
+
+    __reduce__ = rebuild
+
+
+@dataclass(frozen=True, eq=False)
 class Model:
     """Fitted Gaussian model of spectra on a common pixel grid.
 
@@ -160,23 +223,25 @@ class Model:
 
     The constructor takes the attributes below as array_like values, iterables and
     numpy scalars, and stores them as the types given here, with read-only float64
-    copies of the arrays. The attributes after n_train are keyword-only. The
-    constructor does not check that a covariance is positive definite, which costs
-    npix^3. Two models are equal only if they are the same object.
+    copies of the arrays and new `LowRank` covariances. The attributes after n_train
+    are keyword-only. The constructor does not check that a covariance is positive
+    definite, which costs npix^3. Two models are equal only if they are the same
+    object.
 
     A model computes the precision matrix of a bin at its first use and keeps it, with
     the guard weights of the latest nguard of each bin (see `pixelwise`). Each matrix
-    takes npix^2 x 8 bytes, 46 MB at npix 2400. Pickle, copy and deepcopy start
-    without them.
+    takes npix^2 x 8 bytes, 46 MB at npix 2400, also for a `LowRank` covariance.
+    Pickle, copy and deepcopy start without them.
 
     Attributes
     ----------
     mean : ndarray, shape (nbin, npix)
         The vector mean[b] of each of the nbin >= 1 S/N bins (scaled), subtracted to
         give x. npix >= 1 is the number of pixels. Finite.
-    cov : tuple of ndarray, each shape (npix, npix)
+    cov : tuple of ndarray, each shape (npix, npix), or LowRank
         The covariance of x in each bin (scaled^2): nbin finite, exactly symmetric
-        matrices with a positive diagonal.
+        matrices with a positive diagonal, or nbin `LowRank` covariances of npix pixels
+        with diag > 0. All bins hold one kind.
     n_train : tuple of int
         The number N_s >= 1 of training spectra in each bin (nbin integers).
     edges : tuple of float
@@ -202,7 +267,7 @@ class Model:
     """
 
     mean: NDArray[np.float64]
-    cov: tuple[NDArray[np.float64], ...]
+    cov: tuple[NDArray[np.float64] | LowRank, ...]
     n_train: tuple[int, ...]
     _: KW_ONLY
     edges: tuple[float, ...]
@@ -219,7 +284,7 @@ class Model:
     def __init__(
         self,
         mean: ArrayLike,
-        cov: Iterable[ArrayLike],
+        cov: Iterable[ArrayLike | LowRank],
         n_train: Iterable[Integer],
         *,
         edges: Iterable[Real] = (),
@@ -236,6 +301,14 @@ class Model:
         mean = finite_array(mean, "mean", ("bin", "pixel"))
         nbin, npix = mean.shape
         cov = items(cov, "cov", nbin, partial(_covariance, npix=npix))
+        low = [isinstance(C, LowRank) for C in cov]
+        if not all(low) and any(low):
+            other = low.index(not low[0])
+            kind = ["dense", "LowRank"]
+            raise ValueError(
+                f"cov: expected covariances of one kind, all dense or all LowRank, got "
+                f"a {kind[low[0]]} cov[0] and a {kind[low[other]]} cov[{other}]"
+            )
         n_train = items(n_train, "n_train", nbin, partial(integer, minimum=1))
         edges = items(edges, "edges", nbin - 1, real)
         _increasing(edges, "edges")
@@ -243,9 +316,7 @@ class Model:
         weighted = boolean(weighted, "weighted")
         if blocks is not None:
             blocks = _check_blocks(blocks, nbin, npix)
-        # After the checks, because issymmetric of scipy 1.11 rejects read-only arrays.
-        for array in (mean, *cov):
-            array.flags.writeable = False
+        mean.flags.writeable = False
         for name, value in (
             ("mean", mean),
             ("cov", cov),
@@ -259,9 +330,14 @@ class Model:
             object.__setattr__(self, name, value)
 
     @property
+    def _dense(self) -> bool:
+        # All covariances are of one kind.
+        return not isinstance(self.cov[0], LowRank)
+
+    @property
     def _derived(self) -> bool:
         # The kinds of model for which f_s is derived (design section 4.3, A13).
-        return self.center is None and not self.weighted
+        return self._dense and self.center is None and not self.weighted
 
     __reduce__ = rebuild
 
@@ -281,7 +357,11 @@ class Model:
         if P is None:
             start = time.perf_counter()
             try:
-                P = precision(self.cov[b])
+                C = self.cov[b]
+                if isinstance(C, LowRank):
+                    P = woodbury(C.vectors, C.values, C.diag)
+                else:
+                    P = precision(C)
             except LinAlgError as error:
                 where = f"model: cov[{b}]" if subject is None else subject
                 raise LinAlgError(f"{where} is {error}") from None
@@ -310,13 +390,12 @@ class Model:
         cached = self._cache.get(("guard", b))
         if cached is not None and cached[0] == nguard:
             return cached[1], cached[2]
-        C = self.cov[b]
-        npix = len(C)
+        npix = self.mean.shape[1]
         if nguard < npix - 1:
             P = self._precision(b, subject=subject)
             start = time.perf_counter()
             try:
-                W, var = guard_weights(P, np.diagonal(C), nguard)
+                W, var = guard_weights(P, variances_of(self.cov[b]), nguard)
             except LinAlgError as error:
                 where = f"model: cov[{b}]" if subject is None else subject
                 raise LinAlgError(f"{where} is {error}") from None
@@ -324,7 +403,7 @@ class Model:
             # Every window covers all pixels: the exact prior, without P (design
             # section 4.2).
             start = time.perf_counter()
-            W, var = np.zeros((npix, npix)), np.diagonal(C).copy()
+            W, var = np.zeros((npix, npix)), variances_of(self.cov[b])
         _logger.debug(
             "cov[%d]: guard weights for nguard %d in %.3f s",
             b,
@@ -335,6 +414,30 @@ class Model:
             array.flags.writeable = False
         self._cache["guard", b] = nguard, W, var
         return W, var
+
+
+# The operations on a covariance C of a model, dense or LowRank.
+
+
+def variances_of(C: NDArray[np.float64] | LowRank) -> NDArray[np.float64]:
+    # The diagonal of C, a new array.
+    if isinstance(C, LowRank):
+        return C.diag + low_rank_variances(C.vectors, C.values)
+    return np.diagonal(C).copy()
+
+
+def submatrix_of(
+    C: NDArray[np.float64] | LowRank, pixels: NDArray[np.intp]
+) -> NDArray[np.float64]:
+    # C at the pixels, a new array, without forming a LowRank C elsewhere.
+    if not isinstance(C, LowRank):
+        return C[np.ix_(pixels, pixels)]
+    B = C.vectors[pixels] * np.sqrt(C.values)
+    # numpy computes B B^T by syrk, so the block is exactly symmetric. Its diagonal
+    # is that of variances_of, which the guard weights use.
+    S: NDArray[np.float64] = B @ B.T
+    np.fill_diagonal(S, variances_of(C)[pixels])
+    return S
 
 
 def sample_factor(
@@ -369,6 +472,7 @@ def fit(
     cumulative: Boolean = True,
     center: Real | None = None,
     weights: ArrayLike | None = None,
+    rank: Integer | None = None,
     progress: Progress | None = None,
 ) -> tuple[Model, NDArray[np.bool_]]:
     """Fit a model to training spectra with iterative outlier clipping (paper Alg. 4).
@@ -383,20 +487,24 @@ def fit(
 
     where x_s = a_s ftilde_s, V1 = sum_s w_s and V2 = sum_s w_s^2; with unit weights,
     m is the column mean and the divisor is N_s - 1. With a constant centre c, m = 0,
-    x_s = a_s (ftilde_s - c) and S = sum_s w_s x_s x_s^T / V1.
+    x_s = a_s (ftilde_s - c) and S = sum_s w_s x_s x_s^T / V1. With rank=K, the
+    covariance is the `LowRank` C = V diag(lambda) V^T + diag(d), with (V, lambda) the
+    K leading eigenpairs of S and d = diag(S) - sum_k lambda_k V_k^2, so that C and S
+    have the same diagonal.
 
-    Pass n of N = len(nsigma) fits on its mask M_n with unit weights, computes the
-    in-sample z of `pixelwise` with nguard at every pixel, interpolated ones included,
-    and flags F_n: each pixel with |z| > nsigma[n - 1] and its two neighbours.
-    M_1 = bad. With cumulative=True (paper Alg. 4), M_{n+1} = M_n | F_n and the final
-    mask is M_{N+1}; with cumulative=False (2022), M_{n+1} = bad | F_n and the final
-    mask is bad | F_{N-1} | F_N. nsigma=() fits on the mask bad, without clipping.
+    Pass n of N = len(nsigma) fits on its mask M_n with unit weights and the rank,
+    computes the in-sample z of `pixelwise` with nguard at every pixel, interpolated
+    ones included, and flags F_n: each pixel with |z| > nsigma[n - 1] and its two
+    neighbours. M_1 = bad. With cumulative=True (paper Alg. 4), M_{n+1} = M_n | F_n
+    and the final mask is M_{N+1}; with cumulative=False (2022), M_{n+1} = bad | F_n
+    and the final mask is bad | F_{N-1} | F_N. nsigma=() fits on the mask bad, without
+    clipping.
     The final fit uses the final mask and the weights w_s; reweighting the clipping
     raised false flags in the paper (l.548).
 
     With cumulative=False, fit equals legacy covar_iter_mask, the covariance to
-    rounding and the mask exactly, if nguard is 20, center and weights are None, flux
-    is float64, ivar == 0 only at pixels in mask, nsigma is not empty, no |z| lies
+    rounding and the mask exactly, if nguard is 20, center, weights and rank are None,
+    flux is float64, ivar == 0 only at pixels in mask, nsigma is not empty, no |z| lies
     within the error of the 2022 Schur updates of a threshold, no pass mask or final
     mask covers completely a spectrum with at most maxbadpix bad pixels, and fit
     raises no error.
@@ -419,6 +527,9 @@ def fit(
     weights : array_like, shape (nspec,), optional
         The weights w_s of the final fit, of an integer or floating dtype; finite and
         >= 0. None: equal weights.
+    rank : int, optional
+        The rank K of a low-rank model, used by every pass; from 1 to npix - 1. None:
+        a dense model.
     progress : callable, optional
         progress(stage, done, total), called after each chunk of spectra of each pass
         and of the final fit, with the stage "fit", the number of spectra of that fit
@@ -427,9 +538,9 @@ def fit(
     Returns
     -------
     model : Model
-        The model, of one bin, with n_train (N_s,), the centre, and weighted True if
-        the weights of the spectra of the final fit are not all equal. It holds its
-        precision matrix (see `Model`).
+        The model, of one bin, with n_train (N_s,), the centre, weighted True if the
+        weights of the spectra of the final fit are not all equal, and a `LowRank`
+        covariance with rank=K. It holds its precision matrix (see `Model`).
     mask : ndarray of bool, shape (nspec, npix)
         The final mask, and True at every pixel of a spectrum that is not used.
 
@@ -439,22 +550,28 @@ def fit(
         If an argument has a type or a dtype that is not allowed above.
     ValueError
         If an argument has a shape or a value that is not allowed above, or if a fit
-        lacks the spectra it needs: N_s - 1 >= npix for a mean-centred model, N_s >=
-        npix for a constant centre, and a good pixel in one of them at every pixel.
-        The message names the counts or the first such pixels.
+        lacks the spectra it needs: for a dense model, N_s - 1 >= npix if it is
+        mean-centred, N_s >= npix for a constant centre, and a good pixel in one of
+        them at every pixel; with rank=K, N_s - 1 >= K + 1 if it is mean-centred and
+        N_s >= K + 1 for a constant centre, for S of rank K + 1 or more. With rank=K,
+        also if lambda_K <= 0 or a d_i <= 0. The message names the counts, the first
+        such pixels, or lambda_K.
     numpy.linalg.LinAlgError
         If a covariance has a variance of 0, or fails the check of its precision
         matrix: it is not positive definite, or the reciprocal condition number of the
         covariance scaled to unit diagonal is below 1e-13, which can happen for N_s - 1
-        close to npix. Clipping checks P only if nguard < npix - 1. The message names
-        the pass or the final fit and N_s, and the pixel of variance 0 or the
-        reciprocal condition number below 1e-13.
+        close to npix; with rank=K, kappa_W of `LowRank` is above 1e13. Clipping checks
+        P only if nguard < npix - 1. The message names the pass or the final fit and
+        N_s, and the pixel of variance 0, the reciprocal condition number below 1e-13
+        or kappa_W.
 
     Notes
     -----
     Cost per pass: about N_s npix^2 flops for the covariance, npix^3 for its precision
     matrix, npix (w^3/3 + 2 npix w) for the guard weights, w = min(2 nguard + 1, npix),
-    and 2 N_s npix^2 for z. The final fit costs about N_s npix^2 + npix^3 flops. Each
+    and 2 N_s npix^2 for z. The final fit costs about N_s npix^2 + npix^3 flops. With
+    rank=K, each fit adds about (4/3) npix^3 flops for the K leading eigenpairs of S,
+    more than the npix^3 of a dense P, and P then costs about npix^2 K flops. Each
     fit holds the working vectors of its spectra, N_s npix x 8 bytes.
     """
     start = time.perf_counter()
@@ -464,9 +581,15 @@ def fit(
     cumulative = boolean(cumulative, "cumulative")
     if center is not None:
         center = real(center, "center")
+    if rank is not None:
+        rank = integer(rank, "rank", 1)
     check_progress(progress)
     flux, ivar, bad = validate(flux, ivar, mask)
     nspec, npix = flux.shape
+    if rank is not None and rank >= npix:
+        raise ValueError(
+            f"rank: expected an integer < {npix}, the pixels of flux, got {rank}"
+        )
     if weights is None:
         weights = np.ones(nspec)
     else:
@@ -479,25 +602,27 @@ def fit(
     M = bad[rows]
     n_cond = max(npix - 2 * nguard - 1, 0)
     for n, threshold in enumerate(thresholds, 1):
-        _check(M, center, f"pass {n}", removed)
+        _check(M, center, rank, f"pass {n}", removed)
         n_train = rows.size
         # In a spectrum of typical leverage, the in-sample |z| of an outlier of any
-        # amplitude approaches this ceiling (design section 4.1).
-        if center is None:
-            ceiling = math.sqrt((n_train - 1) * (n_train - n_cond - 1) / n_train)
-        else:
-            ceiling = math.sqrt(n_train - n_cond)
-        if threshold > ceiling:
-            _logger.warning(
-                "fit: pass %d has nsigma %g above %.3g, the in-sample ceiling of |z| "
-                "at N_s = %d",
-                n,
-                threshold,
-                ceiling,
-                n_train,
-            )
+        # amplitude approaches this ceiling of a dense model (design section 4.1). No
+        # ceiling is derived for a low-rank model.
+        if rank is None:
+            if center is None:
+                ceiling = math.sqrt((n_train - 1) * (n_train - n_cond - 1) / n_train)
+            else:
+                ceiling = math.sqrt(n_train - n_cond)
+            if threshold > ceiling:
+                _logger.warning(
+                    "fit: pass %d has nsigma %g above %.3g, the in-sample ceiling of "
+                    "|z| at N_s = %d",
+                    n,
+                    threshold,
+                    ceiling,
+                    n_train,
+                )
         subject = f"fit: the clipping covariance of pass {n} (N_s = {n_train})"
-        z = _clipping_z(flux, ivar, rows, M, center, nguard, subject, progress)
+        z = _clipping_z(flux, ivar, rows, M, center, rank, nguard, subject, progress)
         flagged = dilate(np.abs(z, out=z) > threshold, 1)
         # Free z before the next fit allocates its working vectors.
         del z
@@ -517,13 +642,13 @@ def fit(
             n_train - np.count_nonzero(keep),
         )
         rows, M = rows[keep], M[keep]
-    _check(M, center, "the final fit", removed)
+    _check(M, center, rank, "the final fit", removed)
     n_train = rows.size
     # Only the ratios of the weights matter. In units of the largest, V2 neither
     # overflows nor underflows, and equal weights are exactly 1.
     w = weights[rows] / np.max(weights[rows])
     subject = f"fit: the final covariance (N_s = {n_train})"
-    _, model = _fitted(flux, ivar, rows, M, center, w, subject, progress)
+    _, model = _fitted(flux, ivar, rows, M, center, rank, w, subject, progress)
     if model.weighted:
         _logger.info(
             "fit: the final fit of %d spectra is weighted, with V1^2/V2 = %.4g "
@@ -554,21 +679,31 @@ def _thresholds(value: object) -> tuple[float, ...]:
 def _check(
     M: NDArray[np.bool_],
     center: float | None,
+    rank: int | None,
     fitted: str,
     removed: tuple[int, int, int],
 ) -> None:
-    # The requirements of design section 4.1 for the fit whose mask is M.
+    # The requirements of design section 4.1 for the fit whose mask is M, before its
+    # covariance. S has rank N_s - 1 or less (N_s for a constant centre). With rank K,
+    # lambda_K > 0 and d > 0 need S of rank K + 1 or more, because S = V Lambda V^T and
+    # d = 0 where its rank is K; _low_rank checks them.
     n_train, npix = M.shape
-    needed = npix + 1 if center is None else npix
+    size = npix if rank is None else rank + 1
+    needed = size + 1 if center is None else size
     if n_train < needed:
         nspec, over, zero = removed
         full = nspec - over - zero - n_train
         kind = "a mean-centred" if center is None else "a constant-centre"
+        of = f"{npix} pixels" if rank is None else f"rank {rank}"
         raise ValueError(
             f"fit: {fitted} needs at least {needed} spectra for {kind} model of "
-            f"{npix} pixels, got {n_train}: of {nspec} spectra, maxbadpix removed "
+            f"{of}, got {n_train}: of {nspec} spectra, maxbadpix removed "
             f"{over}, weight 0 removed {zero} and full masks removed {full}"
         )
+    # A pixel bad in every spectrum makes a dense S singular. The low-rank estimator
+    # has no such requirement (design section 4.1).
+    if rank is not None:
+        return
     empty = np.flatnonzero(M.all(axis=0))
     if empty.size:
         raise ValueError(
@@ -583,14 +718,16 @@ def _clipping_z(
     rows: NDArray[np.intp],
     M: NDArray[np.bool_],
     center: float | None,
+    rank: int | None,
     nguard: int,
     subject: str,
     progress: Progress | None,
 ) -> NDArray[np.float64]:
     # The in-sample z of the spectra rows, whose mask is M, at every pixel under the
-    # clipping model with unit weights (design decisions A12 and A23). With unit
-    # weights, X holds the working vectors.
-    X, model = _fitted(flux, ivar, rows, M, center, np.ones(rows.size), subject, None)
+    # clipping model of the rank with unit weights (design section 4.1, decisions A12
+    # and A23). With unit weights, X holds the working vectors.
+    w = np.ones(rows.size)
+    X, model = _fitted(flux, ivar, rows, M, center, rank, w, subject, None)
     W, var = model._guard_weights(0, nguard, subject=subject)
     sigma = np.sqrt(var)
     nspec, npix = X.shape
@@ -609,12 +746,13 @@ def _fitted(
     rows: NDArray[np.intp],
     M: NDArray[np.bool_],
     center: float | None,
+    rank: int | None,
     w: NDArray[np.float64],
     subject: str,
     progress: Progress | None,
 ) -> tuple[NDArray[np.float64], Model]:
     # The model of design section 4.1 on the spectra rows, whose mask is M, with the
-    # weights w, and the working vectors x_s times sqrt(w_s).
+    # rank and the weights w, and the working vectors x_s times sqrt(w_s).
     X = np.empty(M.shape)
     a = np.empty(rows.size)
     for c in chunks(*M.shape):
@@ -650,19 +788,41 @@ def _fitted(
             f"{subject} is not positive definite: its variance at pixel {constant[0]} "
             "is 0"
         )
+    C = S if rank is None else _low_rank(S, rank, subject)
     weighted = np.any(w != 1)
-    model = Model(mean[np.newaxis], (S,), (nspec,), center=center, weighted=weighted)
+    model = Model(mean[np.newaxis], (C,), (nspec,), center=center, weighted=weighted)
     return X, model
+
+
+def _low_rank(S: NDArray[np.float64], rank: int, subject: str) -> LowRank:
+    # The estimator of design section 4.1 and its requirements lambda_K > 0 and d > 0.
+    npix = len(S)
+    values, V = eigh(S, subset_by_index=(npix - rank, npix - 1))
+    # In decreasing order of the eigenvalues.
+    values, V = values[::-1], V[:, ::-1]
+    if not values[-1] > 0:
+        raise ValueError(
+            f"{subject} needs lambda_K > 0 for rank {rank}, got lambda_{rank} = "
+            f"{values[-1]:.3g}"
+        )
+    d = np.diagonal(S) - low_rank_variances(V, values)
+    nonpositive = np.flatnonzero(d <= 0)
+    if nonpositive.size:
+        raise ValueError(
+            f"{subject} needs d_i > 0 at every pixel for rank {rank}, got d_i <= 0 at "
+            f"pixels {listing(nonpositive, 'pixels')}"
+        )
+    return LowRank(V, values, d)
 
 
 def save(model: Model, path: FilePath) -> None:
     """Write model to the .npz file path.
 
     The archive is not compressed. It holds the arrays schema (the integer 1),
-    gspice_version, mean, n_train, edges, center (NaN if None) and weighted, cov0,
-    cov1, ... for the covariance of each bin, and, if model.blocks is not None,
-    block_starts, block_width, block_nguard and block_thresholds for its fields.
-    `load` reads it.
+    gspice_version, mean, n_train, edges, center (NaN if None) and weighted; for the
+    covariance of each bin b, cov{b}, or vectors{b}, values{b} and diag{b} for the
+    fields of a `LowRank`; and, if model.blocks is not None, block_starts,
+    block_width, block_nguard and block_thresholds for its fields. `load` reads it.
 
     Parameters
     ----------
@@ -706,11 +866,13 @@ def load(path: FilePath) -> Model:
         If the file is not a zip archive, is a damaged one, has no schema or a schema
         other than the 0-d integer 1, lacks one of the arrays schema, mean, n_train,
         edges, center and weighted, holds some but not all of the four block arrays,
-        or holds an array that `save` does not write; the message names path. Also if
-        `Model` or `Blocks` rejects a field, for example a count of covariances other
-        than the number of bins; the message names the field.
+        holds vectors{b} without values{b} or diag{b}, or holds an array that `save`
+        does not write; the message names path. Also if `Model`, `LowRank` or
+        `Blocks` rejects a field, for example a count of covariances other than the
+        number of bins; the message names the field.
     TypeError
-        If path is not a str or path-like, or if `Model` or `Blocks` rejects a field.
+        If path is not a str or path-like, or if `Model`, `LowRank` or `Blocks`
+        rejects a field.
     OSError
         If the file cannot be read, and for some damaged archives.
     """
@@ -753,22 +915,25 @@ def _from_archive(archive: Any, path: str) -> Model:
             f"{path}"
         )
     with_blocks = any(key in archive for key in _BLOCKS)
-    required = (*_REQUIRED, *_BLOCKS) if with_blocks else _REQUIRED
+    required = [*_REQUIRED, *_BLOCKS] if with_blocks else list(_REQUIRED)
+    # The covariance of bin b: cov{b}, or the fields of a LowRank.
+    bins: list[list[str]] = []
+    while True:
+        b = len(bins)
+        if f"cov{b}" in archive:
+            bins.append([f"cov{b}"])
+        elif f"vectors{b}" in archive:
+            bins.append([f"{name}{b}" for name in _LOW_RANK])
+        else:
+            break
+        required += bins[-1]
     missing = [key for key in required if key not in archive]
     if missing:
         raise ValueError(
             f"path: expected the arrays that save writes, got no {', '.join(missing)} "
             f"in {path}"
         )
-    cov: list[NDArray[Any]] = []
-    while f"cov{len(cov)}" in archive:
-        cov.append(archive[f"cov{len(cov)}"])
-    known = {
-        *_REQUIRED,
-        *_BLOCKS,
-        "gspice_version",
-        *(f"cov{b}" for b in range(len(cov))),
-    }
+    known = {*required, *_BLOCKS, "gspice_version"}
     unknown = sorted(set(archive.files) - known)
     if unknown:
         writer = archive.get("gspice_version")
@@ -777,6 +942,16 @@ def _from_archive(archive: Any, path: str) -> Model:
             f"path: expected only the arrays that save writes, got "
             f"{', '.join(unknown)}{by} in {path}"
         )
+    cov = []
+    for b, keys in enumerate(bins):
+        if len(keys) == 1:
+            cov.append(archive[keys[0]])
+            continue
+        arrays = [archive[key] for key in keys]
+        try:
+            cov.append(LowRank(*arrays))
+        except (TypeError, ValueError) as error:
+            raise type(error)(f"cov[{b}]: {error}") from None
     # [()] returns a 0-d array as a scalar and other arrays as they are.
     blocks = Blocks(*(archive[key][()] for key in _BLOCKS)) if with_blocks else None
     center = archive["center"][()]
@@ -803,7 +978,12 @@ def _arrays(model: Model) -> dict[str, Any]:
         "edges": np.array(model.edges),
         "center": np.nan if model.center is None else model.center,
         "weighted": model.weighted,
-    } | {f"cov{b}": C for b, C in enumerate(model.cov)}
+    }
+    for b, C in enumerate(model.cov):
+        if isinstance(C, LowRank):
+            arrays |= {f"{name}{b}": getattr(C, name) for name in _LOW_RANK}
+        else:
+            arrays[f"cov{b}"] = C
     # Without blocks, none of their arrays, so that a version without blocks reads the
     # file (design section 9).
     if model.blocks is not None:
@@ -816,7 +996,24 @@ def _arrays(model: Model) -> dict[str, Any]:
     return arrays
 
 
-def _covariance(value: ArrayLike, name: str, npix: int) -> NDArray[np.float64]:
+def _covariance(
+    value: ArrayLike | LowRank, name: str, npix: int
+) -> NDArray[np.float64] | LowRank:
+    if isinstance(value, LowRank):
+        # A new LowRank, so that copy and deepcopy of a model check its fields again.
+        low = LowRank(value.vectors, value.values, value.diag)
+        if low.diag.size != npix:
+            raise ValueError(
+                f"{name}: expected a LowRank of {npix} pixels like mean, got vectors "
+                f"of shape {low.vectors.shape}"
+            )
+        # P = D^-1 - L L^T needs d > 0 (design section 3.3).
+        require(low.diag > 0, low.diag, name, "diag > 0", ("pixel",))
+        # Finite fields can give infinite variances, as a dense C cannot.
+        with np.errstate(over="ignore"):
+            variances = variances_of(low)
+        require(np.isfinite(variances), variances, name, "finite variances", ("pixel",))
+        return low
     C = numeric(value, name)
     if C.shape != (npix, npix):
         raise ValueError(
@@ -834,6 +1031,8 @@ def _covariance(value: ArrayLike, name: str, npix: int) -> NDArray[np.float64]:
     # diagonal, without the factorization that would reject it (design section 4.2).
     diagonal = np.diagonal(C)
     require(diagonal > 0, diagonal, name, "a positive diagonal", ("pixel",))
+    # After the checks, because issymmetric of scipy 1.11 rejects read-only arrays.
+    C.flags.writeable = False
     return C
 
 

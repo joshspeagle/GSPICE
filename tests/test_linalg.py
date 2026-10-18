@@ -9,10 +9,21 @@ from gspice._linalg import (
     group_rows,
     guard_weights,
     precision,
+    prior_chi2,
+    prior_draws,
     solve_pattern,
-    solve_prior,
+    woodbury,
 )
-from oracle import condition, conditional, guard_conditional, random_spd
+from oracle import (
+    condition,
+    conditional,
+    guard_conditional,
+    inverse,
+    kappa_w,
+    low_rank,
+    random_low_rank,
+    random_spd,
+)
 
 EPS = np.finfo(float).eps
 NPIX = 48
@@ -205,15 +216,14 @@ def test_pattern_solve_rejects_a_pattern_on_which_P_is_not_positive_definite():
 def test_the_prior_is_exact_and_its_chi2_matches_the_reference(name):
     C, _, X, tol = case(name)
     _, M, T = (mask(pixels) for pixels in PATTERNS["prior"])
-    solution = solve_prior(C, M, T, X, covariance=True)
+    CMM, var = C[np.ix_(M, M)], np.diagonal(C)[M]
     _, _, chi2 = conditional(C, range(NPIX), X, np.flatnonzero(T))
-    np.testing.assert_array_equal(solution.mean, np.zeros((NSPEC, np.sum(M))))
-    np.testing.assert_array_equal(solution.var, np.diagonal(C)[M])
-    np.testing.assert_array_equal(solution.cov, C[np.ix_(M, M)])
-    assert np.max(np.abs(solution.chi2 - chi2) / (chi2 + np.sum(T))) <= tol
-    draws = draw_covariance(functools.partial(solve_prior, C, M, T), M, X)
-    scale = np.sqrt(np.outer(solution.var, solution.var))
-    assert np.max(np.abs(draws - solution.cov) / scale) <= tol
+    result = prior_chi2(C[np.ix_(T, T)], X[:, T])
+    assert np.max(np.abs(result - chi2) / (chi2 + np.sum(T))) <= tol
+    # Unit normals at the pixels of M give the rows of L^T, so D^T D = C_MM.
+    D = prior_draws(CMM, np.eye(len(CMM)))
+    scale = np.sqrt(np.outer(var, var))
+    assert np.max(np.abs(D.T @ D - CMM) / scale) <= tol
 
 
 def test_the_prior_rejects_a_covariance_that_is_numerically_singular_at_t():
@@ -221,17 +231,17 @@ def test_the_prior_rejects_a_covariance_that_is_numerically_singular_at_t():
     # rcond near 1e-14, below the limit of decision A26.
     v = 2.0 ** (np.arange(NPIX) % 3 - 1)
     C = np.outer(v, v) + 1e-14 * np.eye(NPIX)
-    T = mask([0, 1, 2])
     with pytest.raises(LinAlgError, match="^numerically singular on the pixels T: "):
-        solve_prior(C, T, T, np.zeros((1, NPIX)))
+        prior_chi2(C[:3, :3], np.zeros((1, 3)))
 
 
 def test_the_prior_without_t_skips_lapack_and_gives_chi2_0(monkeypatch):
-    C, _, X, _ = case("spd1e5")
+    _, _, X, _ = case("spd1e5")
     # LAPACK rejects an empty triangular solve, with a message on stderr.
     monkeypatch.setattr(_linalg, "lapack", None)
-    solution = solve_prior(C, mask([3, 4]), mask([]), X)
-    np.testing.assert_array_equal(solution.chi2, np.zeros(NSPEC))
+    np.testing.assert_array_equal(
+        prior_chi2(np.zeros((0, 0)), X[:, :0]), np.zeros(NSPEC)
+    )
 
 
 def test_rows_with_equal_keys_share_a_group_in_increasing_row_order():
@@ -255,3 +265,57 @@ def test_f_ordered_keys_give_the_same_groups():
 
 def test_no_rows_give_no_groups():
     assert group_rows(np.zeros((0, 5), bool)) == []
+
+
+def low_rank_case(kappa, spread=False):
+    V, values, d = random_low_rank(NPIX, 6, kappa, 0)
+    if spread:
+        # Pixels with d_i much smaller than c_ii, where kappa_W exceeds kappa.
+        d[::7] *= 1e-6
+    return V, values, d
+
+
+# kappa of C scaled to unit diagonal and kappa_W: 43 and 54, 1.0e5 and 1.3e5, 1.2e8
+# and 1.6e8, and 4.0e6 and 1.7e7 for the spread d, where max c_ii/d_i is 1.5e6.
+LOW_RANK = {
+    "low1e2": low_rank_case(1e2),
+    "low1e5": low_rank_case(1e5),
+    "low1e8": low_rank_case(1e8),
+    "spread": low_rank_case(1e2, spread=True),
+}
+
+
+@pytest.mark.parametrize("name", LOW_RANK)
+def test_the_woodbury_precision_matches_the_reference(name):
+    V, values, d = LOW_RANK[name]
+    P = woodbury(V, values, d)
+    reference = inverse(low_rank(V, values, d))
+    # P_ii = 1/d_i - (L L^T)_ii cancels by c_ii/d_i at most, and an entry P_ij by
+    # (c_ii c_jj / (d_i d_j))^1/2 in units of (P_ii P_jj)^1/2 >= 1 / (c_ii c_jj)^1/2;
+    # kappa_W bounds both (decision A28), so the error is within 10 eps kappa_W.
+    scale = np.sqrt(np.outer(np.diagonal(reference), np.diagonal(reference)))
+    assert np.max(np.abs(P - reference) / scale) <= 10 * EPS * kappa_w(V, values, d)
+    assert P.flags.c_contiguous
+    np.testing.assert_array_equal(P, P.T)
+
+
+@pytest.mark.parametrize(("value", "rejected"), [(5e12 - 1, False), (5e12, True)])
+def test_woodbury_rejects_kappa_w_above_1e13(value, rejected):
+    # V = e_0 and d = 1: c_0 = 1 + lambda, dtilde_0 = 1/c_0 and the largest eigenvalue
+    # is lambda/c_0, so kappa_W = 1 + 2 lambda: 1e13 - 1 and 1e13 + 1.
+    V = np.eye(NPIX, 1)
+    if not rejected:
+        woodbury(V, np.array([value]), np.ones(NPIX))
+        return
+    message = r"^numerically singular: kappa_W = 1e\+13 for the matrix scaled to "
+    with pytest.raises(LinAlgError, match=message):
+        woodbury(V, np.array([value]), np.ones(NPIX))
+
+
+def test_woodbury_rejects_a_factor_that_is_not_positive_definite(monkeypatch):
+    # kappa_W <= 1e13 keeps Lambda^-1 + V^T D^-1 V positive definite in practice, so
+    # dpotrf is made to fail.
+    monkeypatch.setattr(_linalg.lapack, "dpotrf", lambda A, lower: (A, 2))
+    V, values, d = LOW_RANK["low1e2"]
+    with pytest.raises(LinAlgError, match="^not positive definite: .* order 2 of "):
+        woodbury(V, values, d)

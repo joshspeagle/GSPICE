@@ -1,4 +1,5 @@
 import logging
+from dataclasses import astuple
 
 import numpy as np
 import pytest
@@ -286,3 +287,98 @@ def test_inputs_are_unchanged_and_outputs_are_not_shared():
         return model.mean, model.cov[0], training
 
     checked(outputs, flux, ivar, mask, np.linspace(1, 2, NSPEC))
+
+
+def test_a_low_rank_fit_holds_the_leading_eigenpairs_of_s_and_its_variances():
+    flux, ivar, mask = spectra()
+    dense, training = fit(flux, ivar, mask, nguard=NGUARD, nsigma=())
+    model, low_mask = fit(flux, ivar, mask, nguard=NGUARD, nsigma=(), rank=4)
+    S, low = dense.cov[0], model.cov[0]
+    assert same(
+        (model.mean, low_mask, model.n_train), (dense.mean, training, dense.n_train)
+    )
+    V, values = low.vectors, low.values
+    assert V.shape == (NPIX, 4)
+    # eigh is backward stable: each eigenpair and the orthogonality err by a small
+    # multiple of npix eps |S|_2.
+    top = np.linalg.eigvalsh(S)[::-1]
+    tol = 10 * NPIX * EPS * top[0]
+    assert np.all(np.abs(values - top[:4]) <= tol)
+    assert np.all(np.linalg.norm(S @ V - V * values, axis=0) <= tol)
+    assert np.all(np.abs(V.T @ V - np.eye(4)) <= 10 * NPIX * EPS)
+    # d = diag(S) - t and c = d + t, with t = sum_k lambda_k V_ik^2 <= S_ii to
+    # rounding, round twice each.
+    c = low.diag + np.square(V) @ values
+    assert np.all(np.abs(c - np.diagonal(S)) <= 4 * EPS * np.diagonal(S))
+
+
+def test_the_clipping_passes_of_a_low_rank_fit_use_its_rank_below_npix_spectra():
+    # 10 spectra without bad pixels, too few for a dense model of 12 pixels. A pass of
+    # the fit flags what pixelwise z of the low-rank model fitted on bad flags.
+    flux, ivar, mask = spectra(10)
+    options = {"nguard": NGUARD, "rank": 3}
+    first, _ = fit(flux, ivar, mask, **options, nsigma=())
+    z = pixelwise(first, flux, ivar, mask, nguard=NGUARD).z
+    flagged = _spectra.dilate(np.abs(z) > 2, 1)
+    assert 0 < np.count_nonzero(flagged) < flagged.size
+    model, training = fit(flux, ivar, mask, **options, nsigma=(2,))
+    np.testing.assert_array_equal(training, flagged)
+    final, _ = fit(flux, ivar, training, **options, nsigma=())
+    assert same(
+        (model.mean, astuple(model.cov[0])), (final.mean, astuple(final.cov[0]))
+    )
+
+
+@pytest.mark.parametrize(("center", "needed"), [(None, 5), (0.9, 4)])
+def test_a_low_rank_fit_needs_k_plus_1_spectra_and_one_more_for_a_mean(
+    center, needed, caplog
+):
+    # Rank 3 needs S of rank 4, so that lambda_3 > 0 and d > 0 can hold.
+    caplog.set_level(logging.WARNING, logger="gspice")
+    flux, ivar, mask = spectra(needed)
+    options = {"nguard": NGUARD, "nsigma": (), "center": center, "rank": 3}
+    # A clipping pass too: N_s - N_k - 1 < 0 with N_k = 12 - 5, so the ceiling of a
+    # dense model is not defined, and no ceiling is derived for a low-rank one.
+    model, _ = fit(flux, ivar, mask, **(options | {"nsigma": (20,)}))
+    assert model.n_train == (needed,)
+    assert caplog.records == []
+    message = (
+        rf"^fit: the final fit needs at least {needed} spectra for a \S+ model of "
+        rf"rank 3, got {needed - 1}: of {needed - 1} spectra, maxbadpix removed 0, "
+        r"weight 0 removed 0 and full masks removed 0$"
+    )
+    with pytest.raises(ValueError, match=message):
+        fit(flux[1:], ivar[1:], mask[1:], **options)
+
+
+@pytest.mark.parametrize(
+    ("S", "rank", "message"),
+    [
+        # Indefinite, as rounding can make a sample covariance of rank below K.
+        (
+            np.diag([3.0, 2.0, -1.0]),
+            3,
+            r"needs lambda_K > 0 for rank 3, got lambda_3 = -1$",
+        ),
+        # The first eigenpair is exactly (3, e_0), so d_0 = 3 - 3 = 0.
+        (
+            np.diag([3.0, 2.0, 1.0]),
+            1,
+            r"needs d_i > 0 at every pixel for rank 1, got d_i <= 0 at pixels 0$",
+        ),
+    ],
+)
+def test_a_low_rank_covariance_needs_lambda_k_and_every_d_i_positive(S, rank, message):
+    with pytest.raises(ValueError, match=f"^fit: the final covariance {message}"):
+        _model._low_rank(S, rank, "fit: the final covariance")
+
+
+def test_a_low_rank_fit_needs_no_good_pixel_at_every_pixel():
+    # Design section 4.1 sets no such requirement for rank=K: pixel 6 is interpolated in
+    # every spectrum.
+    flux, ivar, mask = spectra()
+    mask[:, 6] = True
+    with pytest.raises(ValueError, match="needs a good pixel in one of its"):
+        fit(flux, ivar, mask, nguard=NGUARD, nsigma=())
+    model, _ = fit(flux, ivar, mask, nguard=NGUARD, nsigma=(), rank=3)
+    assert np.all(model.cov[0].diag > 0)

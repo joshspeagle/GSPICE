@@ -8,8 +8,8 @@ import numpy as np
 from numpy.linalg import LinAlgError
 from numpy.typing import ArrayLike, NDArray
 
-from ._linalg import Conditional, group_rows, solve_pattern, solve_prior
-from ._model import Model, sample_factor
+from ._linalg import Conditional, group_rows, prior_chi2, prior_draws, solve_pattern
+from ._model import Model, sample_factor, submatrix_of, variances_of
 from ._spectra import (
     Boolean,
     Integer,
@@ -93,10 +93,11 @@ class Repaired:
         f_s(N_s, N_k, dof) of `finite_sample_factor`, with N_s the n_train of the bin
         of the spectrum and N_k = npix - |G| its conditioning pixels, divided by
         f_s(N_s, N_k, 1) with inflate=True. NaN where dof is 0 or
-        N_s - N_k - dof - 2 <= 0. 1 for a model with a constant centre or with
-        weights, for which no factor is derived (unit-free). For the other models and
-        replace and ignore masks that do not depend on the data, chi2 / (dof fs) has
-        the mean 1 for held-out Gaussian spectra, with or without inflate.
+        N_s - N_k - dof - 2 <= 0. 1 for a model with a constant centre, weights or a
+        `LowRank` covariance, for which no factor is derived (unit-free). For the
+        other models and replace and ignore masks that do not depend on the data,
+        chi2 / (dof fs) has the mean 1 for held-out Gaussian spectra, with or without
+        inflate.
     draws : ndarray, shape (nspec, npix), or None
         A draw from the conditional distribution at the replaced pixels, with the
         covariance of `covariance`, and the input flux elsewhere (flux); None if
@@ -196,7 +197,8 @@ def pixelwise(
         If True, multiply var by f_s(N_s, N_k, 1) of `finite_sample_factor`, with N_s
         the n_train of the bin of the spectrum and N_k = npix - |g| the conditioning
         pixels of each pixel, more near the ends, where g is clipped. z^2 then has the
-        mean 1 for held-out Gaussian spectra. Needs a mean-centred, unweighted model.
+        mean 1 for held-out Gaussian spectra. Needs a dense, mean-centred, unweighted
+        model.
     progress : callable, optional
         progress(stage, done, total), called after each chunk of spectra with the
         stage "pixelwise", the number of spectra done and their total.
@@ -215,19 +217,19 @@ def pixelwise(
     ValueError
         If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
         has another npix than model, nguard < 0, or a spectrum has no good pixel. If
-        inflate is True and model has a constant centre or weights, or
-        N_s - N_k - 3 <= 0 at a pixel of a bin with spectra, where f_s(N_s, N_k, 1)
-        is not defined; the message names N_s and N_k.
+        inflate is True and model has a constant centre, weights or a `LowRank`
+        covariance, or N_s - N_k - 3 <= 0 at a pixel of a bin with spectra, where
+        f_s(N_s, N_k, 1) is not defined; the message names N_s and N_k.
     numpy.linalg.LinAlgError
         If nguard < npix - 1 and the covariance of a bin with spectra fails the check
         of its precision matrix: it is not positive definite, or the reciprocal
-        condition number of the covariance scaled to unit diagonal is below 1e-13.
-        The message names the bin.
+        condition number of the covariance scaled to unit diagonal is below 1e-13, or
+        kappa_W of a `LowRank` covariance is above 1e13. The message names the bin.
 
     Notes
     -----
-    Cost: npix^3 flops for P at the first use of a bin, and about
-    npix (w^3/3 + 2 npix w) flops for the guard weights at the first use of a bin and
+    Cost: npix^3 flops for P at the first use of a bin, npix^2 K for a `LowRank` of
+    rank K, and about npix (w^3/3 + 2 npix w) flops for the guard weights at the first use of a bin and
     after each change of nguard, w = min(2 nguard + 1, npix); then 2 npix^2 flops per
     spectrum. The model keeps P and the guard weights (see `Model`).
     """
@@ -320,7 +322,8 @@ def infill(
         and multiply the deviation F z_M of each draw from the mean by its square
         root. For held-out Gaussian spectra, the squared residual of every fixed
         linear combination of the replaced pixels, divided by its variance from the
-        covariance, then has the mean 1. Needs a mean-centred, unweighted model.
+        covariance, then has the mean 1. Needs a dense, mean-centred, unweighted
+        model.
     covariance : bool, optional
         If True, keep the conditional covariance of each pattern for
         `Repaired.covariance`.
@@ -352,9 +355,9 @@ def infill(
         If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
         has another npix than model, a spectrum has no good pixel, or replace or
         ignore has another shape than (nspec, npix) or (npix,). If inflate is True and
-        model has a constant centre or weights, or N_s - N_k - 3 <= 0 for a spectrum
-        with a pixel to replace, where f_s(N_s, N_k, 1) is not defined; the message
-        names N_s and N_k.
+        model has a constant centre, weights or a `LowRank` covariance, or
+        N_s - N_k - 3 <= 0 for a spectrum with a pixel to replace, where
+        f_s(N_s, N_k, 1) is not defined; the message names N_s and N_k.
     numpy.linalg.LinAlgError
         If the covariance of a bin fails the check of its precision matrix, as in
         `pixelwise`, where a spectrum of the bin has a pixel to replace and G does not
@@ -365,7 +368,8 @@ def infill(
 
     Notes
     -----
-    Cost: npix^3 flops for P at the first use of a bin; then per pattern and chunk
+    Cost: npix^3 flops for P at the first use of a bin, npix^2 K for a `LowRank` of
+    rank K; then per pattern and chunk
     |G|^3/3 + |M|^3/3 flops, and |M|^3/3 more with covariance=True, and per spectrum
     2 |G| (npix + |G|) flops. An (npix,) mask on spectra with their own bad pixels
     makes one pattern per spectrum, with G the mask and those bad pixels, so a large
@@ -373,7 +377,7 @@ def infill(
     covariance=True, the result keeps |M|^2 x 8 bytes per pattern and chunk. With rng,
     each spectrum costs npix normals and |M|^2 flops more. Where G covers all pixels,
     it costs 2 |M|^2 flops more instead, and each pattern and chunk |M|^3/3 flops for
-    the factor of cov[b] at M.
+    the factor of cov[b] at M, which a `LowRank` forms at |M|^2 K flops.
     """
     start = time.perf_counter()
     inflate = boolean(inflate, "inflate")
@@ -418,9 +422,11 @@ def validated(
     if not isinstance(model, Model):
         raise TypeError(f"model: expected a Model, got {type(model).__name__}")
     if inflate and not model._derived:
+        kind = "dense" if model._dense else "low-rank"
         raise ValueError(
-            f"inflate: expected a mean-centred, unweighted model, for which f_s is "
-            f"derived, got center {model.center} and weighted {model.weighted}"
+            f"inflate: expected a dense, mean-centred, unweighted model, for which f_s "
+            f"is derived, got a {kind} model with center {model.center} and weighted "
+            f"{model.weighted}"
         )
     flux, ivar, bad = validate(flux, ivar, mask)
     if flux.shape[1] != model.mean.shape[1]:
@@ -716,7 +722,21 @@ def _solve(
 ) -> Conditional:
     try:
         if G.all():
-            return solve_prior(model.cov[b], M, T, X, normals, covariance)
+            # The prior N(0, C): exact from C, and without P, which a singular C does
+            # not have. It forms C at M only for the covariance or the draws, and
+            # otherwise at T alone (design section 4.2).
+            C, pixels = model.cov[b], np.flatnonzero(M)
+            cov: NDArray[np.float64] | None = None
+            draws: NDArray[np.float64] | None = None
+            if covariance or normals is not None:
+                CMM = submatrix_of(C, pixels)
+                chi2 = prior_chi2(CMM[np.ix_(T[M], T[M])], X[:, T])
+                cov = CMM if covariance else None
+                draws = None if normals is None else prior_draws(CMM, normals)
+            else:
+                chi2 = prior_chi2(submatrix_of(C, np.flatnonzero(T)), X[:, T])
+            mean = np.zeros((X.shape[0], pixels.size))
+            return Conditional(mean, variances_of(C)[pixels], chi2, cov, draws)
         return solve_pattern(model._precision(b), G, M, T, X, normals, covariance)
     except LinAlgError as error:
         raise LinAlgError(

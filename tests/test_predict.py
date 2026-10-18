@@ -8,6 +8,7 @@ from numpy.linalg import LinAlgError
 
 from _golden import arrays, checked, same
 from gspice import (
+    LowRank,
     Model,
     _model,
     _spectra,
@@ -24,7 +25,11 @@ from oracle import (
     assert_gaussian,
     condition,
     conditional,
+    dense,
     guard_conditional,
+    kappa_w,
+    low_rank,
+    random_low_rank,
     random_spd,
     window,
 )
@@ -48,10 +53,14 @@ BAD = [
 ]
 
 
-def two_bins(kappa, center=None):
+def two_bins(kappa, center=None, rank=None):
     # Spectra whose working vectors are drawn from N(0, cov[b]) at good pixels, and a
-    # model whose edge is the S/N of a spectrum of bin 1.
-    cov = (random_spd(NPIX, kappa, 0), random_spd(NPIX, kappa, 1))
+    # model whose edge is the S/N of a spectrum of bin 1. With a rank, the covariances
+    # are LowRank, with kappa_W 53 and 37 at kappa 1e2 and 9.5e7 and 5.9e7 at 1e8.
+    if rank is None:
+        cov = (random_spd(NPIX, kappa, 0), random_spd(NPIX, kappa, 1))
+    else:
+        cov = tuple(LowRank(*random_low_rank(NPIX, rank, kappa, b)) for b in (0, 1))
     rng = np.random.default_rng(4)
     ivar = np.outer(rng.uniform(1, 16, BINS.size), 1 + 0.5 * np.sin(PIXELS))
     mask = np.zeros(ivar.shape, bool)
@@ -61,7 +70,8 @@ def two_bins(kappa, center=None):
         else:
             ivar[s, pixels] = 0.0
     a = scale(np.ones(ivar.shape), ivar, mask)[1]
-    x = np.array([np.linalg.cholesky(cov[b]) @ rng.standard_normal(NPIX) for b in BINS])
+    roots = [np.linalg.cholesky(dense(C)) for C in cov]
+    x = np.array([roots[b] @ rng.standard_normal(NPIX) for b in BINS])
     flux = (x + MEANS[BINS]) / a[:, np.newaxis] + (0.0 if center is None else center)
     flux[mask | (ivar == 0)] = np.nan
     ivar[mask] = np.inf
@@ -71,6 +81,22 @@ def two_bins(kappa, center=None):
     # side="right" puts the spectrum at the edge in bin 1.
     np.testing.assert_array_equal(np.searchsorted(edges, ratio, side="right"), BINS)
     return model, flux, ivar, mask
+
+
+def exact(C):
+    # The reference covariance: C, or the 60-digit rows of a LowRank, which a dense
+    # float64 matrix would round by about kappa eps in the conditionals.
+    return C if isinstance(C, np.ndarray) else low_rank(C.vectors, C.values, C.diag)
+
+
+def tolerance(C, n_cond):
+    # Design section 11: 10 kappa eps for the dense route, and 10 eps kappa_W for the
+    # Woodbury route, but 1e-9 where n_cond >= 2 K and kappa_W <= 1e8.
+    if isinstance(C, np.ndarray):
+        return 10 * condition(C) * EPS
+    kappa = kappa_w(C.vectors, C.values, C.diag)
+    tight = (np.asarray(n_cond) >= 2 * C.values.size) & (kappa <= 1e8)
+    return np.where(tight, np.minimum(10 * EPS * kappa, 1e-9), 10 * EPS * kappa)
 
 
 def rows_of(pixels):
@@ -119,7 +145,7 @@ def reference(model, b, nguard, flux, ivar, mask):
     # pixelwise of the spectra of bin b, from the 60-digit conditional of each window.
     center = 0.0 if model.center is None else model.center
     X, a, _ = scale(flux, ivar, mask, center=center, refmean=model.mean[b])
-    xhat, var = guard_conditional(model.cov[b], nguard, X, range(NPIX))
+    xhat, var = guard_conditional(exact(model.cov[b]), nguard, X, range(NPIX))
     f, v = unscale(xhat, a, model.mean[b], center=center, var=var)
     return X, f, v, (X - xhat) / np.sqrt(var)
 
@@ -128,8 +154,9 @@ def reference(model, b, nguard, flux, ivar, mask):
 @pytest.mark.parametrize("nguard", [0, 2, NPIX - 2, NPIX - 1])
 @pytest.mark.parametrize("kappa", [1e2, 1e8])
 @pytest.mark.parametrize("center", [None, 0.9])
-def test_pixelwise_matches_the_60_digit_reference(center, kappa, nguard):
-    model, flux, ivar, mask = two_bins(kappa, center)
+@pytest.mark.parametrize("rank", [None, 2], ids=["dense", "low-rank"])
+def test_pixelwise_matches_the_60_digit_reference(rank, center, kappa, nguard):
+    model, flux, ivar, mask = two_bins(kappa, center, rank)
     result = pixelwise(model, flux, ivar, mask, nguard=nguard)
     bad = mask | (ivar == 0)
     c = 0.0 if center is None else center
@@ -144,8 +171,9 @@ def test_pixelwise_matches_the_60_digit_reference(center, kappa, nguard):
         # with the same a^2; and z = (x - xhat)/sqrt(var) moves by |dxhat|/sigma +
         # |z| |dvar|/(2 var) and three roundings of each evaluation, within
         # tol (D + |z|).
-        tol = 10 * condition(model.cov[b]) * EPS
-        L = np.linalg.cholesky(model.cov[b])
+        n_cond = [NPIX - len(window(i, nguard, NPIX)) for i in range(NPIX)]
+        tol = tolerance(model.cov[b], n_cond)
+        L = np.linalg.cholesky(dense(model.cov[b]))
         M = np.linalg.norm(np.linalg.solve(L, X.T), axis=0)
         D = np.maximum(1, M / np.sqrt(NPIX))[:, np.newaxis]
         rounding = 4 * EPS * (np.abs(f) + abs(c))
@@ -228,20 +256,30 @@ def test_the_prior_needs_no_precision_matrix():
         pixelwise(prior, flux, ivar, mask, nguard=0)
 
 
+# A LowRank whose kappa_W is 1 + 2 x 5e12, above the limit of decision A28.
+ILL = LowRank(np.eye(NPIX, 1), [5e12], np.ones(NPIX))
+
+
 @pytest.mark.parametrize("name", FUNCTIONS)
-@pytest.mark.parametrize("inflate", [False, True], ids=["singular", "inflate"])
-def test_a_bin_that_fails_a_check_raises_before_any_chunk(monkeypatch, name, inflate):
+@pytest.mark.parametrize("failure", ["singular", "kappa_W", "inflate"])
+def test_a_bin_that_fails_a_check_raises_before_any_chunk(monkeypatch, name, failure):
     monkeypatch.setattr(_spectra, "CHUNK", 2 * NPIX)
-    model, flux, ivar, mask = two_bins(1e2)
+    # The bins of a model hold covariances of one kind.
+    model, flux, ivar, mask = two_bins(1e2, rank=2 if failure == "kappa_W" else None)
+    inflate = failure == "inflate"
     if inflate:
         # With N_s 5 in bin 1, N_s - N_k - 3 <= 0 for N_k >= 2: pixel 0 of pixelwise
         # has N_k 12 - 3, and row 1, row 4 below, replaces its 3 bad pixels.
         model = dataclasses.replace(model, n_train=(100, 5))
         where = {"pixelwise": "bin 1, pixel 0", "infill": "row 4"}[name]
         error, message = ValueError, rf"^inflate: .* N_s = 5 and N_k = 9 at {where}$"
-    else:
+    elif failure == "singular":
         model = dataclasses.replace(model, cov=(model.cov[0], SINGULAR))
         error, message = LinAlgError, r"^model: cov\[1\] is not positive definite"
+    else:
+        model = dataclasses.replace(model, cov=(model.cov[0], ILL))
+        error = LinAlgError
+        message = r"^model: cov\[1\] is numerically singular: kappa_W = 1e\+13 "
     # The spectra of bin 0 first, so that the chunks of bin 1 come last.
     rows = np.argsort(BINS, kind="stable")
     calls = []
@@ -348,8 +386,9 @@ def test_zero_spectra_give_empty_arrays_without_a_precision_matrix(function, exp
 @pytest.mark.parametrize("given", [False, True], ids=["default", "given"])
 @pytest.mark.parametrize("kappa", [1e2, 1e8])
 @pytest.mark.parametrize("center", [None, 0.9])
-def test_infill_matches_the_60_digit_reference(center, kappa, given):
-    model, flux, ivar, mask = two_bins(kappa, center)
+@pytest.mark.parametrize("rank", [None, 2], ids=["dense", "low-rank"])
+def test_infill_matches_the_60_digit_reference(rank, center, kappa, given):
+    model, flux, ivar, mask = two_bins(kappa, center, rank)
     sets = {"replace": REPLACE, "ignore": IGNORE} if given else {}
     result = infill(model, flux, ivar, mask, **sets, covariance=True)
     bad = mask | (ivar == 0)
@@ -373,7 +412,7 @@ def test_infill_matches_the_60_digit_reference(center, kappa, given):
             continue
         X, a, _ = scale(flux[[s]], ivar[[s]], mask[[s]], center=c, refmean=MEANS[b])
         g, t = np.flatnonzero(G[s]), np.flatnonzero(T[s])
-        mean, reference, chi2 = conditional(model.cov[b], g, X, t)
+        mean, reference, chi2 = conditional(exact(model.cov[b]), g, X, t)
         at = np.flatnonzero(M[s, g])
         reference = reference[np.ix_(at, at)]
         f, v = unscale(
@@ -387,7 +426,7 @@ def test_infill_matches_the_60_digit_reference(center, kappa, given):
         # The two evaluations of (mu + m)/a + c round three times each, by at most
         # eps (3|f| + 2|c|) in all to first order; those of var/a^2 and cov/a^2 round
         # once each, with the same a^2, and |cov_ij| <= sigma_i sigma_j.
-        tol = 10 * condition(model.cov[b]) * EPS
+        tol = tolerance(model.cov[b], NPIX - g.size)
         sigma = np.sqrt(v[0])
         rounding = 4 * EPS * (np.abs(f[0]) + abs(c))
         assert np.all(np.abs(result.flux[s, pixels] - f[0]) <= tol * sigma + rounding)
@@ -768,7 +807,11 @@ def test_fs_is_f_s_of_each_spectrum_over_its_inflation_factor_with_inflate():
     np.testing.assert_array_equal(inflated.fs, factor(dof) / factor(np.ones(8, int)))
 
 
-@pytest.mark.parametrize("kind", [{"center": 0.9}, {"weighted": True}])
+@pytest.mark.parametrize(
+    "kind",
+    [{"center": 0.9}, {"weighted": True}, {"cov": two_bins(1e2, rank=2)[0].cov}],
+    ids=["center", "weighted", "low-rank"],
+)
 def test_fs_is_1_for_a_model_without_a_derived_factor(kind):
     model, flux, ivar, mask = two_bins(1e2)
     # As in the test above, with rows of dof 0 and an undefined f_s(N_s, N_k, dof).

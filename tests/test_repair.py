@@ -14,6 +14,7 @@ from scipy.optimize import minimize_scalar
 from _golden import arrays, checked, same
 from gspice import (
     Blocks,
+    LowRank,
     Model,
     _model,
     _repair,
@@ -851,3 +852,21 @@ def test_repair_of_simulated_spectra_replaces_the_artifacts():
         f"blocks with a replaced pixel at 1.9 +- 0.25 pixels "
         f"{mean_near(replaced_any[shifts], shift[shifts], 1.9, 0.25):.2f} (0.5)"
     )
+
+
+def test_a_low_rank_model_repairs_as_the_dense_model_of_its_covariance():
+    # C - I of artifact_case has rank 60 to rounding: the eigenvalues after the 60th
+    # sum to 7e-14 in magnitude. The masks then agree, as assert_margins checks for
+    # the dense model in the test of the steps, and the flux to rounding.
+    model, flux, ivar, mask = artifact_case()
+    values, V = np.linalg.eigh(model.cov[0] - np.eye(NPIX))
+    cov = (LowRank(V[:, -60:], values[-60:], np.ones(NPIX)),)
+    low = dataclasses.replace(model, cov=cov)
+    expected = repair(model, flux, ivar, mask, **OPTIONS)
+    result = repair(low, flux, ivar, mask, **OPTIONS)
+    for name in ("replaced", "ignored", "blocks"):
+        assert same(getattr(result, name), getattr(expected, name))
+    # C has kappa 135, so a change of 1e-13 in C moves the conditional means by about
+    # 1e-11 sigma at most; measured 1.5e-13 sigma.
+    sigma = np.sqrt(expected.var)
+    assert np.all(np.abs(result.flux - expected.flux) <= 1e-9 * sigma)

@@ -10,7 +10,7 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.linalg import lapack
 
 from ._linalg import factor_pattern, factor_prior
-from ._model import NGUARD_MAX, Blocks, Model
+from ._model import NGUARD_MAX, Blocks, Model, submatrix_of
 from ._predict import filled, validated, working
 from ._spectra import (
     Integer,
@@ -214,8 +214,7 @@ class BlockFactor(NamedTuple):
 def block_factors(
     model: Model, b: int, starts: NDArray[np.int64], width: int, nguard: int
 ) -> list[BlockFactor]:
-    C = model.cov[b]
-    npix = len(C)
+    npix = model.mean.shape[1]
     factors = []
     # Python integers, so that a large nguard cannot overflow.
     for k, start in enumerate(starts.tolist()):
@@ -225,7 +224,7 @@ def block_factors(
         P = None if G.stop - G.start == npix else model._precision(b)
         try:
             if P is None:
-                R = factor_prior(C[A, A])
+                R = factor_prior(submatrix_of(model.cov[b], np.arange(A.start, A.stop)))
             else:
                 R = factor_pattern(P[G, G][np.ix_(order, order)])
         except LinAlgError as error:

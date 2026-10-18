@@ -228,7 +228,9 @@ def test_fit_flags_a_pixel_whose_z_exceeds_nsigma_but_not_one_that_equals_it():
     # A tie exists only bit for bit, so |z| comes from the function that computes z in
     # fit, here for pass 1: fit uses every spectrum of D1, and M_1 = bad.
     bad = (mask != 0) | (ivar == 0)
-    z = _model._clipping_z(flux, ivar, np.arange(len(flux)), bad, None, 20, "", None)
+    z = _model._clipping_z(
+        flux, ivar, np.arange(len(flux)), bad, None, None, 20, "", None
+    )
     tie = abs(float(z[index]))
     for nsigma, flagged in ((tie, False), (np.nextafter(tie, 0), True)):
         _, training = gspice.fit(flux, ivar, mask, nsigma=(nsigma,))
