@@ -133,6 +133,9 @@ NAN_MATRIX[0, 3] = NAN_MATRIX[3, 0] = np.nan
         ("center", np.nan, ValueError, r"^center: "),
         ("center", True, TypeError, r"^center: "),
         ("weighted", 1, TypeError, r"^weighted: "),
+        ("noise", 1, TypeError, r"^noise: "),
+        # A noise model has one bin.
+        ("noise", True, ValueError, r"^noise: expected a model of one bin "),
         ("weighted", "yes", TypeError, r"^weighted: "),
         ("blocks", block_arguments(), TypeError, r"^blocks: "),
         (
@@ -318,6 +321,26 @@ def test_a_model_is_frozen_and_equals_only_itself():
     assert len({model, other}) == 2
 
 
+def test_a_noise_model_has_one_bin_no_centre_and_a_diagonal_that_may_be_0():
+    # Design section 3.3: nu_s > 0 makes C_s positive definite where cov[0] is only
+    # positive semi-definite, as the eigenvalue floor of fit makes it.
+    zero = np.diag([1.0, 0.0, 1.0, 1.0])
+    low = LowRank(**(low_rank_arguments() | {"diag": [1.0, 0.0, 1.0, 1.0]}))
+    for C in (zero, low):
+        model = Model(np.zeros((1, NPIX)), (C,), (5,), noise=True)
+        assert model.noise is True
+        for duplicate in DUPLICATES.values():
+            assert duplicate(model).noise is True
+        with pytest.raises(ValueError, match=r"^cov\[0\]: expected "):
+            Model(np.zeros((1, NPIX)), (C,), (5,))
+    negative = np.diag([1.0, -1.0, 1.0, 1.0])
+    with pytest.raises(ValueError, match=r"^cov\[0\]: expected a diagonal >= 0, "):
+        Model(np.zeros((1, NPIX)), (negative,), (5,), noise=True)
+    with pytest.raises(ValueError, match=r"^noise: .*, got nbin 1 and center 0\.9$"):
+        Model(np.zeros((1, NPIX)), (zero,), (5,), center=0.9, noise=True)
+    assert Model(**arguments()).noise is False
+
+
 def test_edges_center_and_weighted_are_keyword_only():
     with pytest.raises(TypeError, match="positional"):
         Model(*arguments().values())
@@ -395,6 +418,8 @@ def models(draw):
     n_train = draw(st.lists(st.integers(1, 10**6), min_size=nbin, max_size=nbin))
     edges = st.sets(st.floats(-1e6, 1e6), min_size=nbin - 1, max_size=nbin - 1)
     center = draw(st.none() | values)
+    # A noise model has one bin and no centre.
+    noise = nbin == 1 and center is None and draw(st.booleans())
     blocks = None
     if draw(st.booleans()):
         width = draw(st.integers(1, npix))
@@ -408,6 +433,7 @@ def models(draw):
         n_train,
         edges=sorted(draw(edges)),
         center=center,
+        noise=noise,
         weighted=draw(st.booleans()),
         blocks=blocks,
     )
@@ -430,15 +456,23 @@ def test_save_writes_exactly_the_given_path_for_a_str_bytes_or_a_path(tmp_path, 
 
 
 @pytest.mark.parametrize(
-    ("with_blocks", "low_rank"),
-    [(False, False), (True, False), (False, True)],
-    ids=["without", "blocks", "low-rank"],
+    ("with_blocks", "low_rank", "noise"),
+    [
+        (False, False, False),
+        (True, False, False),
+        (False, True, False),
+        (False, False, True),
+    ],
+    ids=["without", "blocks", "low-rank", "noise"],
 )
-def test_save_writes_the_keys_and_dtypes_of_the_format(tmp_path, with_blocks, low_rank):
-    # Without blocks, none of their arrays (design section 9).
+def test_save_writes_the_keys_and_dtypes_of_the_format(
+    tmp_path, with_blocks, low_rank, noise
+):
+    # Without blocks, none of their arrays, and noise only if it is True (design
+    # section 9).
     blocks = Blocks([0, 1], 1, 0, np.ones((1, 2))) if with_blocks else None
     C = LowRank(np.ones((2, 1)), [1.0], [1.0, 2.0]) if low_rank else np.eye(2)
-    model = Model(np.zeros((1, 2)), (C,), (5,), blocks=blocks)
+    model = Model(np.zeros((1, 2)), (C,), (5,), noise=noise, blocks=blocks)
     save(model, tmp_path / "model.npz")
     with np.load(tmp_path / "model.npz") as archive:
         stored = dict(archive)
@@ -460,6 +494,8 @@ def test_save_writes_the_keys_and_dtypes_of_the_format(tmp_path, with_blocks, lo
         }
     else:
         expected["cov0"] = (np.float64, (2, 2))
+    if noise:
+        expected["noise"] = (np.bool_, ())
     if with_blocks:
         expected |= {
             "block_starts": (np.int64, (2,)),
@@ -491,7 +527,7 @@ def test_load_rejects_an_archive_whose_schema_is_not_the_integer_1(tmp_path, sch
 @pytest.mark.parametrize(
     ("extra", "drop", "message"),
     [
-        ({"noise": np.True_}, (), r"^path: .* got noise, written by gspice .*, in "),
+        ({"other": np.True_}, (), r"^path: .* got other, written by gspice .*, in "),
         # Some of the arrays of a low-rank bin in place of its covariance.
         (
             {"vectors0": np.eye(NPIX), "diag0": np.ones(NPIX)},

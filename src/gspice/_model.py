@@ -174,7 +174,8 @@ class LowRank:
     values : ndarray, shape (K,)
         The variance of each column (scaled^2): finite and > 0.
     diag : ndarray, shape (npix,)
-        The diagonal term (scaled^2): finite and >= 0; `Model` requires > 0.
+        The diagonal term (scaled^2): finite and >= 0; `Model` requires > 0, except
+        for a noise model.
 
     Raises
     ------
@@ -221,6 +222,15 @@ class Model:
     x = a (ftilde - center) - mean[b] for a constant centre, and
     x = a ftilde - mean[b] otherwise.
 
+    A noise model (noise=True) has one bin and works in flux units: spectrum s has
+
+        x = ftilde - mean[0] ~ N(0, C_s),  C_s = cov[0] + diag(nu_s),
+
+    where cov[0] is the covariance of the noise-free flux, and nu_si = 1/ivar_si at the
+    good pixels and 1/a^2 at the bad pixels of the spectrum. The constructor checks only
+    the diagonal of cov[0]; prediction rejects a C_s that is not positive definite
+    where it factors C_s, and the prior factors only C_s at the target pixels.
+
     The constructor takes the attributes below as array_like values, iterables and
     numpy scalars, and stores them as the types given here, with read-only float64
     copies of the arrays and new `LowRank` covariances. The attributes after n_train
@@ -236,12 +246,14 @@ class Model:
     Attributes
     ----------
     mean : ndarray, shape (nbin, npix)
-        The vector mean[b] of each of the nbin >= 1 S/N bins (scaled), subtracted to
-        give x. npix >= 1 is the number of pixels. Finite.
+        The vector mean[b] of each of the nbin >= 1 S/N bins (scaled; flux for a noise
+        model), subtracted to give x. npix >= 1 is the number of pixels. Finite.
     cov : tuple of ndarray, each shape (npix, npix), or LowRank
-        The covariance of x in each bin (scaled^2): nbin finite, exactly symmetric
-        matrices with a positive diagonal, or nbin `LowRank` covariances of npix pixels
-        with diag > 0. All bins hold one kind.
+        The covariance of x in each bin (scaled^2), or of the noise-free flux of a
+        noise model (flux^2): nbin finite, exactly symmetric matrices with a positive
+        diagonal, or nbin `LowRank` covariances of npix pixels with diag > 0. All bins
+        hold one kind. For a noise model, a diagonal >= 0, or a `LowRank` with
+        diag >= 0; a positive semi-definite cov[0] makes every C_s positive definite.
     n_train : tuple of int
         The number N_s >= 1 of training spectra in each bin (nbin integers).
     edges : tuple of float
@@ -249,7 +261,10 @@ class Model:
         increasing. Spectrum s with signal-to-noise ratio snr_s (see `snr`) is in the
         bin np.searchsorted(edges, snr_s, side="right").
     center : float or None
-        None for a mean-centred model, or the constant centre c (flux).
+        None for a mean-centred model, or the constant centre c (flux); None for a
+        noise model.
+    noise : bool
+        True for a noise model, which has one bin and center None.
     weighted : bool
         True if the model was fitted with positive weights that are not all equal in
         a bin.
@@ -273,9 +288,12 @@ class Model:
     _: KW_ONLY
     edges: tuple[float, ...]
     center: float | None
+    noise: bool
     weighted: bool
     blocks: Blocks | None
     _cache: dict[tuple[str, int], Any] = field(init=False, repr=False)
+    # The name of cov[0] in messages, for the model of one spectrum of a noise model.
+    _label: str | None = field(init=False, repr=False)
 
     # Written by hand because the parameters take more than the fields store: any
     # iterable, array_like values and numpy scalars. The fields have no defaults, so
@@ -290,6 +308,7 @@ class Model:
         *,
         edges: Iterable[Real] = (),
         center: Real | None = None,
+        noise: Boolean = False,
         weighted: Boolean = False,
         blocks: Blocks | None = None,
     ) -> None:
@@ -301,7 +320,8 @@ class Model:
             )
         mean = finite_array(mean, "mean", ("bin", "pixel"))
         nbin, npix = mean.shape
-        cov = items(cov, "cov", nbin, partial(_covariance, npix=npix))
+        noise = boolean(noise, "noise")
+        cov = items(cov, "cov", nbin, partial(_covariance, npix=npix, noise=noise))
         low = [isinstance(C, LowRank) for C in cov]
         if not all(low) and any(low):
             other = low.index(not low[0])
@@ -314,6 +334,11 @@ class Model:
         edges = items(edges, "edges", nbin - 1, real)
         _increasing(edges, "edges")
         center = None if center is None else real(center, "center")
+        if noise and (nbin > 1 or center is not None):
+            raise ValueError(
+                f"noise: expected a model of one bin and center None for True, got nbin "
+                f"{nbin} and center {center}"
+            )
         weighted = boolean(weighted, "weighted")
         if blocks is not None:
             blocks = _check_blocks(blocks, nbin, npix)
@@ -324,9 +349,11 @@ class Model:
             ("n_train", n_train),
             ("edges", edges),
             ("center", center),
+            ("noise", noise),
             ("weighted", weighted),
             ("blocks", blocks),
             ("_cache", {}),
+            ("_label", None),
         ):
             object.__setattr__(self, name, value)
 
@@ -338,20 +365,47 @@ class Model:
     @property
     def _derived(self) -> bool:
         # The kinds of model for which f_s is derived (design section 4.3, A13).
-        return self._dense and self.center is None and not self.weighted
+        return (
+            self._dense and self.center is None and not self.weighted and not self.noise
+        )
 
     __reduce__ = rebuild
 
-    def _with_blocks(self, blocks: Blocks) -> "Model":
-        # This model with the blocks of fit_blocks, which fit it. It shares the
-        # read-only fields and starts with a copy of the cache, because P and the guard
-        # weights depend only on cov.
+    def _copy(self, **changes: Any) -> "Model":
+        # This model with the fields in changes, without the checks of __init__; it
+        # shares the other fields, read-only, and starts with an empty cache unless
+        # changes gives one.
         model = object.__new__(Model)
         for f in fields(self):
             object.__setattr__(model, f.name, getattr(self, f.name))
-        object.__setattr__(model, "blocks", blocks)
-        object.__setattr__(model, "_cache", dict(self._cache))
+        for name, value in ({"_cache": {}} | changes).items():
+            object.__setattr__(model, name, value)
         return model
+
+    def _with_blocks(self, blocks: Blocks) -> "Model":
+        # This model with the blocks of fit_blocks, which fit it, and a copy of the
+        # cache, because P and the guard weights depend only on cov.
+        return self._copy(blocks=blocks, _cache=dict(self._cache))
+
+    def _with_noise(self, nu: NDArray[np.float64], label: str) -> "Model":
+        # The model of C_s = cov[0] + diag(nu) for one spectrum of a noise model
+        # (design section 4.1), which label names in messages. It goes only to the
+        # functions that condition, never to working, validated or the factor f_s:
+        # with noise False it would pass for a mean-centred model in scaled units.
+        # nu > 0 keeps the diagonal positive, as __init__ requires.
+        C = self.cov[0]
+        noisy: NDArray[np.float64] | LowRank
+        if isinstance(C, LowRank):
+            noisy = LowRank(C.vectors, C.values, C.diag + nu)
+        else:
+            noisy = C.copy()
+            noisy.flat[:: len(nu) + 1] += nu
+            noisy.flags.writeable = False
+        return self._copy(cov=(noisy,), noise=False, _label=label)
+
+    def _name(self, b: int) -> str:
+        # cov[b] in messages.
+        return f"model: cov[{b}]" if self._label is None else self._label
 
     def _precision(self, b: int, *, subject: str | None = None) -> NDArray[np.float64]:
         P: NDArray[np.float64] | None = self._cache.get(("precision", b))
@@ -364,7 +418,7 @@ class Model:
                 else:
                     P = precision(C)
             except LinAlgError as error:
-                where = f"model: cov[{b}]" if subject is None else subject
+                where = self._name(b) if subject is None else subject
                 raise LinAlgError(f"{where} is {error}") from None
             _logger.debug(
                 "cov[%d]: precision matrix in %.3f s", b, time.perf_counter() - start
@@ -395,7 +449,7 @@ class Model:
             try:
                 W, var = guard_weights(P, variances_of(self.cov[b]), nguard)
             except LinAlgError as error:
-                where = f"model: cov[{b}]" if subject is None else subject
+                where = self._name(b) if subject is None else subject
                 raise LinAlgError(f"{where} is {error}") from None
         else:
             # Every window covers all pixels: the exact prior, without P (design
@@ -471,6 +525,7 @@ def fit(
     center: Real | None = None,
     weights: ArrayLike | None = None,
     rank: Integer | None = None,
+    noise: Boolean = False,
     snr_bins: Integer | Iterable[Real] | None = None,
     progress: Progress | None = None,
 ) -> tuple[Model, NDArray[np.bool_]]:
@@ -500,6 +555,23 @@ def fit(
     clipping.
     The final fit uses the final mask and the weights w_s; reweighting the clipping
     raised false flags in the paper (l.548).
+
+    With noise=True, the passes clip as above, and the final fit estimates the
+    covariance of the noise-free flux in flux units (design section 4.1). Let u_si be
+    1 at the pixels outside the final mask and 0 elsewhere, and v_s = a_s^2 w_s. Then
+
+        W_i = sum_s v_s u_si,  mu_i = sum_s v_s u_si f_si / W_i,
+        A_si = v_s^1/2 u_si (f_si - mu_i),  D1_ij = sum_s v_s u_si u_sj,
+        D2_ij = sum_s v_s^2 u_si u_sj,  N_i = sum_s v_s u_si (1 - v_s / W_i) / ivar_si,
+        Sigma_ij = ((A^T A)_ij - delta_ij N_i)
+                   / (D1_ij - D2_ij (1/W_i + 1/W_j - D1_ij / (W_i W_j))).
+
+    Sigma is unbiased element by element if the spectra are independent with a common
+    mean and signal covariance, the noise has zero mean and variance 1/ivar and is
+    uncorrelated between pixels and with the signal, and the masks, weights and ivar
+    do not depend on the flux; the outlier flags of the final mask break the last
+    condition. The model holds mean[0] = mu and cov[0] = Q max(Lambda, 0) Q^T, with
+    Sigma = Q Lambda Q^T its eigendecomposition, which is biased upward.
 
     With snr_bins, spectrum s goes to the S/N bin np.searchsorted(edges, snr_s,
     side="right"), with snr_s from `snr` on flux, ivar and mask. Each bin runs the
@@ -536,6 +608,8 @@ def fit(
     rank : int, optional
         The rank K of a low-rank model, used by every pass; from 1 to npix - 1. None:
         a dense model.
+    noise : bool, optional
+        If True, fit a noise model (see `Model`), with center, rank and snr_bins None.
     snr_bins : int or sequence of float, optional
         The S/N bins: their number n >= 1, with the interior edges at the 1/n, ...,
         (n - 1)/n quantiles (np.quantile, linear) of snr_s of the spectra that fit uses
@@ -553,7 +627,9 @@ def fit(
         The model, with the edges, N_s of each bin in n_train, the centre, weighted
         True if the weights of the spectra of a bin in the final fit are not all equal,
         and `LowRank` covariances with rank=K. It holds its precision matrices (see
-        `Model`).
+        `Model`), except a noise model, whose prediction forms one per spectrum. For a
+        noise model, weighted is True if the weights w_s are not all equal, whatever
+        a_s.
     mask : ndarray of bool, shape (nspec, npix)
         The final mask, and True at every pixel of a spectrum that is not used.
 
@@ -567,10 +643,14 @@ def fit(
         N_s - 1 >= npix if it is mean-centred, N_s >= npix for a constant centre, and
         a good pixel in one of them at every pixel; with rank=K, N_s - 1 >= K + 1 if
         it is mean-centred and N_s >= K + 1 for a constant centre, for S of rank
-        K + 1 or more. With rank=K, also if lambda_K <= 0 or a d_i <= 0. The message
-        names the pass or the final fit, the bin and its edges, the counts, the first
-        such pixels, or lambda_K. fit checks the counts of every bin before any bin
-        clips.
+        K + 1 or more. With rank=K, also if lambda_K <= 0 or a d_i <= 0. If noise is
+        True with a centre, a rank or snr_bins. With noise=True, for the final fit, if
+        fewer than two spectra are good at a pixel, or if a denominator of Sigma is
+        <= 0: with two spectra at each pixel, that happens where no spectrum is good
+        at both pixels of a pair, or by rounding near 0. The message names the pass
+        or the final fit, the bin and its edges, the counts, the first such pixels or
+        pairs of pixels, or lambda_K. fit checks the counts of every bin before any
+        bin clips.
     numpy.linalg.LinAlgError
         If a covariance has a variance of 0, or fails the check of its precision
         matrix: it is not positive definite, or the reciprocal condition number of the
@@ -578,7 +658,7 @@ def fit(
         close to npix; with rank=K, kappa_W of `LowRank` is above 1e13. Clipping checks
         P only if nguard < npix - 1. The message names the pass or the final fit, the
         bin and N_s, and the pixel of variance 0, the reciprocal condition number below
-        1e-13 or kappa_W.
+        1e-13 or kappa_W. With noise=True, only for the clipping covariances.
 
     Notes
     -----
@@ -589,7 +669,10 @@ def fit(
     sorts the npix values of each spectrum once. With rank=K, each fit adds about
     (4/3) npix^3 flops for the K leading eigenpairs of S, more than the npix^3 of a
     dense P, and P then costs about npix^2 K flops. Each fit holds the working vectors
-    of its spectra, N_s npix x 8 bytes.
+    of its spectra, N_s npix x 8 bytes. With noise=True, the final fit costs about
+    3 N_s npix^2 flops for A^T A, D1 and D2 and an eigendecomposition of an
+    npix x npix matrix, and holds a few arrays of one chunk of max(1, 2**24 // npix)
+    spectra instead of the working vectors.
     """
     start = time.perf_counter()
     thresholds = _thresholds(nsigma)
@@ -600,8 +683,14 @@ def fit(
         center = real(center, "center")
     if rank is not None:
         rank = integer(rank, "rank", 1)
+    noise = boolean(noise, "noise")
     if snr_bins is not None:
         snr_bins = _snr_bins(snr_bins)
+    if noise and (center is not None or snr_bins is not None or rank is not None):
+        raise ValueError(
+            f"noise: expected center, rank and snr_bins None for True, got center "
+            f"{center}, rank {rank} and snr_bins {snr_bins}"
+        )
     check_progress(progress)
     flux, ivar, bad = validate(flux, ivar, mask)
     nspec, npix = flux.shape
@@ -625,8 +714,10 @@ def fit(
     removed = [_removed(bins == b, over, zero) for b in range(nbin)]
     # The check of pass 1 of every bin before any bin clips, as validation.
     first = "pass 1" if thresholds else "the final fit"
-    for group, of, counts in zip(spectra, names, removed, strict=True):
-        _check(bad[group], center, rank, first + of, counts)
+    # The noise-free estimator checks its own requirements.
+    if thresholds or not noise:
+        for group, of, counts in zip(spectra, names, removed, strict=True):
+            _check(bad[group], center, rank, first + of, counts)
     clip = partial(
         _clip,
         flux,
@@ -652,6 +743,7 @@ def fit(
                 weights=weights,
                 center=center,
                 rank=rank,
+                noise=noise,
                 removed=counts,
                 of=of,
                 progress=progress,
@@ -753,28 +845,57 @@ def _final(
     weights: NDArray[np.float64],
     center: float | None,
     rank: int | None,
+    noise: bool,
     removed: tuple[int, int, int],
     of: str,
     progress: Progress | None,
 ) -> Model:
     # The final fit of the spectra rows on their final mask M, with the weights: a
-    # model of one bin that holds its checked P. of names the bin.
+    # model of one bin that holds its checked P, except a noise model, which never
+    # uses the P of its noise-free covariance. of names the bin.
     fitted = f"the final fit{of}"
-    _check(M, center, rank, fitted, removed)
+    if noise:
+        # The requirement of a denominator > 0 on the diagonal of _noise_free, before
+        # np.max of the weights, which needs a spectrum.
+        few = np.flatnonzero(np.count_nonzero(~M, axis=0) < 2)
+        if few.size:
+            raise ValueError(
+                f"fit: {fitted} needs two spectra good at every pixel for the "
+                f"noise-free covariance, got fewer than two of its {rows.size} "
+                f"spectra, on the final mask, at pixels {listing(few, 'pixels')}: "
+                f"{_counts(removed, rows.size)}"
+            )
+    else:
+        _check(M, center, rank, fitted, removed)
     n_train = rows.size
     # Only the ratios of the weights matter. In units of the largest, V2 neither
     # overflows nor underflows, and equal weights are exactly 1.
     w = weights[rows] / np.max(weights[rows])
     subject = f"fit: the final covariance{of} (N_s = {n_train})"
-    _, model = _fitted(flux, ivar, rows, M, center, rank, w, subject, progress)
-    if model.weighted:
+    estimator = ""
+    if noise:
+        mean, S, v = _noise_free(flux, ivar, rows, M, w, fitted, progress)
+        model = Model(
+            mean[np.newaxis],
+            (_floored(S),),
+            (n_train,),
+            noise=True,
+            weighted=np.any(w != 1),
+        )
+        # The weights of the estimator, a_s^2 w_s, set the effective count, also
+        # where the weights of the user are equal.
+        w, estimator = v, " for the weights a_s^2 w_s of the noise-free estimator"
+    else:
+        _, model = _fitted(flux, ivar, rows, M, center, rank, w, subject, progress)
+        model._precision(0, subject=subject)
+    if np.any(w != w[0]):
         _logger.info(
-            "fit: %s of %d spectra is weighted, with V1^2/V2 = %.4g effective spectra",
+            "fit: %s of %d spectra is weighted, with V1^2/V2 = %.4g effective spectra%s",
             fitted,
             n_train,
             w.sum() ** 2 / np.vdot(w, w),
+            estimator,
         )
-    model._precision(0, subject=subject)
     return model
 
 
@@ -862,14 +983,11 @@ def _check(
     size = npix if rank is None else rank + 1
     needed = size + 1 if center is None else size
     if n_train < needed:
-        nspec, over, zero = removed
-        full = nspec - over - zero - n_train
         kind = "a mean-centred" if center is None else "a constant-centre"
         of = f"{npix} pixels" if rank is None else f"rank {rank}"
         raise ValueError(
             f"fit: {fitted} needs at least {needed} spectra for {kind} model of "
-            f"{of}, got {n_train}: of {nspec} spectra, maxbadpix removed "
-            f"{over}, weight 0 removed {zero} and full masks removed {full}"
+            f"{of}, got {n_train}: {_counts(removed, n_train)}"
         )
     # A pixel bad in every spectrum makes a dense S singular. The low-rank estimator
     # has no such requirement (design section 4.1).
@@ -881,6 +999,16 @@ def _check(
             f"fit: {fitted} needs a good pixel in one of its {n_train} spectra at "
             f"every pixel, got none at pixels {listing(empty, 'pixels')}"
         )
+
+
+def _counts(removed: tuple[int, int, int], n_train: int) -> str:
+    # The spectra that a fit of n_train spectra lost, for messages.
+    nspec, over, zero = removed
+    full = nspec - over - zero - n_train
+    return (
+        f"of {nspec} spectra, maxbadpix removed {over}, weight 0 removed {zero} and "
+        f"full masks removed {full}"
+    )
 
 
 def _clipping_z(
@@ -965,6 +1093,87 @@ def _fitted(
     return X, model
 
 
+def _noise_free(
+    flux: NDArray[Any],
+    ivar: NDArray[Any],
+    rows: NDArray[np.intp],
+    M: NDArray[np.bool_],
+    weights: NDArray[np.float64],
+    fitted: str,
+    progress: Progress | None,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    # The noise-free estimator of design section 4.1 (D-63) on the spectra rows, whose
+    # mask is M, with the weights of the user: mu and Sigma before the eigenvalue
+    # floor, in flux units, and the weights w_s = a_s^2 weights_s in units of the
+    # largest. u_si = 1 where M_si is False.
+    nspec, npix = M.shape
+    w = np.empty(nspec)
+    for c in chunks(nspec, npix):
+        w[c] = np.square(root_mean_ivar(ivar[rows[c]], M[c]))
+    w *= weights
+    # Sigma does not change when w is scaled; in units of the largest, w^2 cannot
+    # overflow.
+    w /= np.max(w)
+    W, total = np.zeros(npix), np.zeros(npix)
+    for c in chunks(nspec, npix):
+        u = ~M[c]
+        W += w[c] @ u
+        # The flux at bad pixels is never read.
+        total += w[c] @ np.where(u, flux[rows[c]].astype(np.float64, copy=False), 0)
+    mean = total / W
+    AtA, D1, D2 = (np.zeros((npix, npix)) for _ in range(3))
+    # sum_s w_s u_si / ivar_si and sum_s w_s^2 u_si / ivar_si, for N_i.
+    first, second = np.zeros(npix), np.zeros(npix)
+    for c in chunks(nspec, npix):
+        u = ~M[c]
+        root = np.sqrt(w[c])[:, np.newaxis]
+        # One buffer per chunk holds A, B, E and 1/ivar in turn. numpy computes
+        # Y^T Y by syrk, so each product is exactly symmetric.
+        Y = np.subtract(flux[rows[c]], mean, dtype=np.float64)
+        Y[~u] = 0.0
+        Y *= root
+        AtA += Y.T @ Y
+        np.multiply(u, root, out=Y)
+        D1 += Y.T @ Y
+        np.multiply(u, w[c][:, np.newaxis], out=Y)
+        D2 += Y.T @ Y
+        # E is 0 at the bad pixels, where 1/ivar is never read.
+        np.divide(1.0, ivar[rows[c]], out=Y, where=u, dtype=np.float64)
+        first += w[c] @ Y
+        second += np.square(w[c]) @ Y
+        if progress is not None:
+            progress("fit", c.stop, nspec)
+    # Float addition and multiplication commute, so the denominators are exactly
+    # symmetric. In exact arithmetic, a denominator is > 0 if a spectrum is good at
+    # both pixels and two spectra are good at each, and 0 otherwise; the caller
+    # checked the second kind of 0, which rounding moves off 0, because D1_ii is not
+    # exactly W_i. Rounding can also take a denominator near 0, at weights that
+    # differ by a factor near 1/eps, to <= 0 or to a small value that passes.
+    r = 1 / W
+    denominator = D1 - D2 * (r[:, np.newaxis] + r - D1 * np.outer(r, r))
+    pairs = np.argwhere(np.triu(~(denominator > 0)))
+    if pairs.size:
+        named = ", ".join(f"({i}, {j})" for i, j in pairs[:10].tolist())
+        more = f", ... ({len(pairs)} pairs)" if len(pairs) > 10 else ""
+        raise ValueError(
+            f"fit: {fitted} needs a denominator of the noise-free covariance > 0 at "
+            f"every pair of pixels, got <= 0 at the pairs {named}{more}, where no "
+            f"spectrum is good at both pixels, or where weights differ by a factor "
+            f"near 1/eps"
+        )
+    AtA[np.diag_indices(npix)] -= first - second * r
+    return mean, AtA / denominator, w
+
+
+def _floored(S: NDArray[np.float64]) -> NDArray[np.float64]:
+    # Sigma_+ = Q max(lambda, 0) Q^T of design section 4.1, as B B^T, which numpy
+    # computes by syrk, so that it is exactly symmetric.
+    values, Q = eigh(S)
+    B = Q * np.sqrt(np.maximum(values, 0))
+    floored: NDArray[np.float64] = B @ B.T
+    return floored
+
+
 def _low_rank(S: NDArray[np.float64], rank: int, subject: str) -> LowRank:
     # The estimator of design section 4.1 and its requirements lambda_K > 0 and d > 0.
     npix = len(S)
@@ -990,7 +1199,8 @@ def save(model: Model, path: FilePath) -> None:
     """Write model to the .npz file path.
 
     The archive is not compressed. It holds the arrays schema (the integer 1),
-    gspice_version, mean, n_train, edges, center (NaN if None) and weighted; for the
+    gspice_version, mean, n_train, edges, center (NaN if None), weighted and, for a
+    noise model, noise (True); for the
     covariance of each bin b, cov{b}, or vectors{b}, values{b} and diag{b} for the
     fields of a `LowRank`; and, if model.blocks is not None, block_starts,
     block_width, block_nguard and block_thresholds for its fields. `load` reads it.
@@ -1104,7 +1314,7 @@ def _from_archive(archive: Any, path: str) -> Model:
             f"path: expected the arrays that save writes, got no {', '.join(missing)} "
             f"in {path}"
         )
-    known = {*required, *_BLOCKS, "gspice_version"}
+    known = {*required, *_BLOCKS, "gspice_version", "noise"}
     unknown = sorted(set(archive.files) - known)
     if unknown:
         writer = archive.get("gspice_version")
@@ -1126,12 +1336,15 @@ def _from_archive(archive: Any, path: str) -> Model:
     # [()] returns a 0-d array as a scalar and other arrays as they are.
     blocks = Blocks(*(archive[key][()] for key in _BLOCKS)) if with_blocks else None
     center = archive["center"][()]
+    # save writes noise only if it is True (design section 9).
+    noise = archive["noise"][()] if "noise" in archive else False
     return Model(
         archive["mean"],
         cov,
         archive["n_train"],
         edges=archive["edges"],
         center=None if isinstance(center, float) and math.isnan(center) else center,
+        noise=noise,
         weighted=archive["weighted"][()],
         blocks=blocks,
     )
@@ -1150,6 +1363,10 @@ def _arrays(model: Model) -> dict[str, Any]:
         "center": np.nan if model.center is None else model.center,
         "weighted": model.weighted,
     }
+    # Only if True, so that a version without noise models reads the other files
+    # (design section 9).
+    if model.noise:
+        arrays["noise"] = True
     for b, C in enumerate(model.cov):
         if isinstance(C, LowRank):
             arrays |= {f"{name}{b}": getattr(C, name) for name in _LOW_RANK}
@@ -1168,7 +1385,7 @@ def _arrays(model: Model) -> dict[str, Any]:
 
 
 def _covariance(
-    value: ArrayLike | LowRank, name: str, npix: int
+    value: ArrayLike | LowRank, name: str, npix: int, noise: bool
 ) -> NDArray[np.float64] | LowRank:
     if isinstance(value, LowRank):
         # A new LowRank, so that copy and deepcopy of a model check its fields again.
@@ -1178,8 +1395,10 @@ def _covariance(
                 f"{name}: expected a LowRank of {npix} pixels like mean, got vectors "
                 f"of shape {low.vectors.shape}"
             )
-        # P = D^-1 - L L^T needs d > 0 (design section 3.3).
-        require(low.diag > 0, low.diag, name, "diag > 0", ("pixel",))
+        # P = D^-1 - L L^T needs d > 0 (design section 3.3), which nu > 0 gives a
+        # noise model.
+        if not noise:
+            require(low.diag > 0, low.diag, name, "diag > 0", ("pixel",))
         # Finite fields can give infinite variances, as a dense C cannot.
         with np.errstate(over="ignore"):
             variances = variances_of(low)
@@ -1200,8 +1419,13 @@ def _covariance(
         )
     # The prior of a window that covers every pixel takes its variances from the
     # diagonal, without the factorization that would reject it (design section 4.2).
+    # A noise model adds nu > 0 to a diagonal that is >= 0 if cov[0] is positive
+    # semi-definite.
     diagonal = np.diagonal(C)
-    require(diagonal > 0, diagonal, name, "a positive diagonal", ("pixel",))
+    if noise:
+        require(diagonal >= 0, diagonal, name, "a diagonal >= 0", ("pixel",))
+    else:
+        require(diagonal > 0, diagonal, name, "a positive diagonal", ("pixel",))
     # After the checks, because issymmetric of scipy 1.11 rejects read-only arrays.
     C.flags.writeable = False
     return C

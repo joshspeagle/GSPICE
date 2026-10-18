@@ -93,11 +93,11 @@ class Repaired:
         f_s(N_s, N_k, dof) of `finite_sample_factor`, with N_s the n_train of the bin
         of the spectrum and N_k = npix - |G| its conditioning pixels, divided by
         f_s(N_s, N_k, 1) with inflate=True. NaN where dof is 0 or
-        N_s - N_k - dof - 2 <= 0. 1 for a model with a constant centre, weights or a
-        `LowRank` covariance, for which no factor is derived (unit-free). For the
-        other models and replace and ignore masks that do not depend on the data,
-        chi2 / (dof fs) has the mean 1 for held-out Gaussian spectra, with or without
-        inflate.
+        N_s - N_k - dof - 2 <= 0. 1 for a model with a constant centre, weights, a
+        `LowRank` covariance or noise, for which no factor is derived (unit-free).
+        For the other models and replace and ignore masks that do not depend on the
+        data, chi2 / (dof fs) has the mean 1 for held-out Gaussian spectra, with or
+        without inflate.
     draws : ndarray, shape (nspec, npix), or None
         A draw from the conditional distribution at the replaced pixels, with the
         covariance of `covariance`, and the input flux elsewhere (flux); None if
@@ -183,7 +183,9 @@ def pixelwise(
     depending on the noise level). A bad pixel farther than nguard from i takes its
     value from the nearest good pixels, so that a good pixel within nguard of i, or i
     itself next to a bad run longer than nguard, can enter the prediction of i.
-    nguard >= npix - 1 gives the prior.
+    nguard >= npix - 1 gives the prior. For a noise model, x is in flux units and P is
+    the inverse of the covariance C_s of the spectrum (see `Model`), which pixelwise
+    forms for each spectrum, with its guard weights.
 
     Parameters
     ----------
@@ -198,10 +200,11 @@ def pixelwise(
         the n_train of the bin of the spectrum and N_k = npix - |g| the conditioning
         pixels of each pixel, more near the ends, where g is clipped. z^2 then has the
         mean 1 for held-out Gaussian spectra. Needs a dense, mean-centred, unweighted
-        model.
+        model without noise.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra with the
-        stage "pixelwise", the number of spectra done and their total.
+        progress(stage, done, total), called after each chunk of spectra, of one
+        spectrum for a noise model, with the stage "pixelwise", the number of
+        spectra done and their total.
 
     Returns
     -------
@@ -217,21 +220,23 @@ def pixelwise(
     ValueError
         If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
         has another npix than model, nguard < 0, or a spectrum has no good pixel. If
-        inflate is True and model has a constant centre, weights or a `LowRank`
-        covariance, or N_s - N_k - 3 <= 0 at a pixel of a bin with spectra, where
-        f_s(N_s, N_k, 1) is not defined; the message names N_s and N_k.
+        inflate is True and model has a constant centre, weights, a `LowRank`
+        covariance or noise, or N_s - N_k - 3 <= 0 at a pixel of a bin with spectra,
+        where f_s(N_s, N_k, 1) is not defined; the message names N_s and N_k.
     numpy.linalg.LinAlgError
         If nguard < npix - 1 and the covariance of a bin with spectra fails the check
         of its precision matrix: it is not positive definite, or the reciprocal
         condition number of the covariance scaled to unit diagonal is below 1e-13, or
-        kappa_W of a `LowRank` covariance is above 1e13. The message names the bin.
+        kappa_W of a `LowRank` covariance is above 1e13. The message names the bin,
+        or for a noise model the row whose C_s fails.
 
     Notes
     -----
     Cost: npix^3 flops for P at the first use of a bin, npix^2 K for a `LowRank` of
-    rank K, and about npix (w^3/3 + 2 npix w) flops for the guard weights at the first use of a bin and
-    after each change of nguard, w = min(2 nguard + 1, npix); then 2 npix^2 flops per
-    spectrum. The model keeps P and the guard weights (see `Model`).
+    rank K, and about npix (w^3/3 + 2 npix w) flops for the guard weights at the first
+    use of a bin and after each change of nguard, w = min(2 nguard + 1, npix); then
+    2 npix^2 flops per spectrum. The model keeps P and the guard weights (see
+    `Model`). A noise model costs all of these per spectrum, and keeps none.
     """
     start = time.perf_counter()
     nguard = integer(nguard, "nguard", 0)
@@ -253,10 +258,13 @@ def pixelwise(
     weigh(model, nguard, bins)
     center = 0.0 if model.center is None else model.center
     predicted, variance, z = (np.empty((nspec, npix)) for _ in range(3))
-    for rows in chunks(nspec, npix):
+    for rows in spans(model, nspec, npix):
         X, a = working(model, flux[rows], ivar[rows], bad[rows], bins[rows])
         f, v, zs = predicted[rows], variance[rows], z[rows]
-        predict(model, nguard, X, bins[rows], inflation, f, v, zs)
+        cover = noisy(model, ivar[rows], bad[rows], rows.start)
+        predict(cover, nguard, X, bins[rows], inflation, f, v, zs)
+        # Free C_s, P_s and the guard weights before the next spectrum forms its own.
+        del cover
         to_flux(f, a, means(model, bins[rows]), center, out=f)
         v /= np.square(a)[:, np.newaxis]
         zs[bad[rows]] = np.nan
@@ -296,6 +304,8 @@ def infill(
     it. chi2 compares the input values at T = M & ~bad, the replaced pixels that are
     good in the input, with their conditional distribution. Where G covers all pixels,
     the result is the prior N(0, cov[b]), which infill computes from cov[b] without P.
+    For a noise model, x is in flux units, and C_s of the spectrum (see `Model`)
+    takes the place of cov[b], so that each spectrum has its own P and pattern.
     With rng, Repaired.draws holds the draw mu_M + F z_M of x_M, in flux units like the
     mean, with mu_M the mean at M, F F^T = (P_GG^-1)_MM and z_M the normals of the
     spectrum at M. Spectra of one S/N bin with equal G, M and T form a pattern, whose
@@ -323,7 +333,7 @@ def infill(
         root. For held-out Gaussian spectra, the squared residual of every fixed
         linear combination of the replaced pixels, divided by its variance from the
         covariance, then has the mean 1. Needs a dense, mean-centred, unweighted
-        model.
+        model without noise.
     covariance : bool, optional
         If True, keep the conditional covariance of each pattern for
         `Repaired.covariance`.
@@ -336,8 +346,9 @@ def infill(
         var and covariance give the uncertainty of the replaced pixels. None: no
         draws.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra with the
-        stage "infill", the number of spectra done and their total.
+        progress(stage, done, total), called after each chunk of spectra, of one
+        spectrum for a noise model, with the stage "infill", the number of
+        spectra done and their total.
 
     Returns
     -------
@@ -355,7 +366,7 @@ def infill(
         If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
         has another npix than model, a spectrum has no good pixel, or replace or
         ignore has another shape than (nspec, npix) or (npix,). If inflate is True and
-        model has a constant centre, weights or a `LowRank` covariance, or
+        model has a constant centre, weights, a `LowRank` covariance or noise, or
         N_s - N_k - 3 <= 0 for a spectrum with a pixel to replace, where
         f_s(N_s, N_k, 1) is not defined; the message names N_s and N_k.
     numpy.linalg.LinAlgError
@@ -364,7 +375,9 @@ def infill(
         cover all its pixels; if P_GG of a pattern is not positive definite; or, for a
         pattern whose G covers all pixels, if cov[b] at T fails that check, or if rng
         is given and cov[b] at M is not positive definite. The message names the bin,
-        and for a pattern its first spectrum.
+        and for a pattern its first spectrum. For a noise model, C_s replaces cov[b],
+        and a C_s that fails the check of its precision matrix raises with its row in
+        the message.
 
     Notes
     -----
@@ -377,7 +390,10 @@ def infill(
     covariance=True, the result keeps |M|^2 x 8 bytes per pattern and chunk. With rng,
     each spectrum costs npix normals and |M|^2 flops more. Where G covers all pixels,
     it costs 2 |M|^2 flops more instead, and each pattern and chunk |M|^3/3 flops for
-    the factor of cov[b] at M, which a `LowRank` forms at |M|^2 K flops.
+    the factor of cov[b] at M, which a `LowRank` forms at |M|^2 K flops. A noise
+    model forms C_s for each spectrum with a pixel to replace, and P_s, npix^3 flops
+    for a dense cov[0], where G is also short of all pixels; every spectrum is its
+    own pattern.
     """
     start = time.perf_counter()
     inflate = boolean(inflate, "inflate")
@@ -422,7 +438,7 @@ def validated(
     if not isinstance(model, Model):
         raise TypeError(f"model: expected a Model, got {type(model).__name__}")
     if inflate and not model._derived:
-        kind = "dense" if model._dense else "low-rank"
+        kind = "noise" if model.noise else "dense" if model._dense else "low-rank"
         raise ValueError(
             f"inflate: expected a dense, mean-centred, unweighted model, for which f_s "
             f"is derived, got a {kind} model with center {model.center} and weighted "
@@ -475,89 +491,198 @@ def infilled(
     if inflate:
         inflation = _inflation(n_train, n_cond, replaced.any(axis=1), ("row",))
     # P of the bins that need it, before any spectrum, so that a covariance that fails
-    # its check raises at once.
-    for b in np.unique(bins[needs]).tolist():
-        model._precision(b)
-    center = 0.0 if model.center is None else model.center
-    result = np.empty((nspec, npix))
-    draws = None if rng is None else np.array(flux, dtype=np.float64, order="C")
-    var = np.full((nspec, npix), np.inf)
-    chi2 = np.zeros(nspec)
-    dof = np.empty(nspec, dtype=np.int64)
-    refscale = np.empty(nspec)
-    patterns: list[NDArray[np.float64]] = []
-    pattern = np.empty(nspec, dtype=np.intp)
-    count = 0
-    for rows in chunks(nspec, npix):
-        good = ~bad[rows]
-        result[rows] = flux[rows]
-        np.divide(1.0, ivar[rows], out=var[rows], where=good, dtype=np.float64)
-        # X of scale bit for bit; the input flux at bad pixels is never read.
+    # its check raises at once. A noise model forms P_s per spectrum.
+    if not model.noise:
+        for b in np.unique(bins[needs]).tolist():
+            model._precision(b)
+    filling = Filling(
+        model,
+        flux,
+        ivar,
+        bad,
+        bins,
+        inflation=inflation,
+        inflate=inflate,
+        covariance=covariance,
+        rng=rng,
+    )
+    for rows in spans(model, nspec, npix):
         X, a = working(model, flux[rows], ivar[rows], bad[rows], bins[rows])
-        # Design decision A16: a row of normals for every spectrum, also one without a
-        # pixel to replace.
-        normals = None if rng is None else rng.standard_normal(X.shape)
-        # The deviation of a draw is f^1/2 R_MM^-T z_M, so z carries f^1/2.
-        if normals is not None and inflate:
-            normals *= np.sqrt(inflation[rows])[:, np.newaxis]
-        refscale[rows] = a
         M = replaced[rows]
-        T = M & good
-        dof[rows] = np.count_nonzero(T, axis=1)
-        index = np.arange(rows.start, rows.stop)
-        for group, pixels, solution in conditionals(
-            model, X, bins[rows], index, M | ignored[rows], M, T, normals, covariance
-        ):
-            count += 1
-            spectra = index[group]
-            cov = np.zeros((0, 0)) if covariance else None
-            if solution is not None:
-                at = np.ix_(spectra, pixels)
-                mean = model.mean[bins[spectra[0]], pixels]
-                result[at] = to_flux(solution.mean, a[group], mean, center)
-                if draws is not None and solution.draws is not None:
-                    draws[at] = to_flux(solution.draws, a[group], mean, center)
-                # The key of a pattern holds the bin and G, so its spectra share N_s,
-                # N_k and their factor.
-                factor = inflation[spectra[0]]
-                var[at] = solution.var * factor / np.square(a[group])[:, np.newaxis]
-                chi2[spectra] = solution.chi2 / factor
-                # f C_MM, which covariance(s) divides by a^2 as var.
-                cov = None if solution.cov is None else solution.cov * factor
-            if cov is not None:
-                pattern[spectra] = len(patterns)
-                patterns.append(cov)
+        # A spectrum without a pixel to replace reads no covariance, so a noise model
+        # forms no C_s for it.
+        cover = noisy(model, ivar[rows], bad[rows], rows.start) if M.any() else model
+        filling.fill(cover, rows, X, a, M, ignored[rows])
+        del cover
         if progress is not None:
             progress(stage, rows.stop, nspec)
     # Design section 4.3: the models without a derived factor report 1.
     fs = np.ones(nspec)
     if model._derived:
-        fs = sample_factor(n_train, n_cond, dof) / inflation
-    for array in (result, var, replaced, ignored, chi2, dof, fs):
-        array.flags.writeable = False
-    if draws is not None:
-        draws.flags.writeable = False
-    _logger.debug(
-        "%s: %d spectra, %d patterns in %.3f s",
-        stage,
-        nspec,
-        count,
-        time.perf_counter() - start,
-    )
-    covariances = (
-        _Covariances(tuple(patterns), pattern, refscale) if covariance else None
-    )
-    return Repaired(
-        result, var, replaced, ignored, chi2, dof, fs, draws, _covariances=covariances
-    )
+        fs = sample_factor(n_train, n_cond, filling.dof) / inflation
+    return filling.done(replaced, ignored, fs, stage, start)
+
+
+class Filling:
+    # The outputs of infill of nspec spectra in flux units, which fill writes chunk
+    # by chunk and done returns as a Repaired, so that infilled and the noise path of
+    # repair share them. inflation holds f_s(N_s, N_k, 1) of each spectrum, or 1,
+    # and inflate says whether the draws carry it.
+
+    def __init__(
+        self,
+        model: Model,
+        flux: NDArray[Any],
+        ivar: NDArray[Any],
+        bad: NDArray[np.bool_],
+        bins: NDArray[np.intp],
+        *,
+        inflation: NDArray[np.float64],
+        inflate: bool,
+        covariance: bool,
+        rng: np.random.Generator | None,
+    ) -> None:
+        nspec, npix = flux.shape
+        self.model, self.flux, self.ivar, self.bad, self.bins = (
+            model,
+            flux,
+            ivar,
+            bad,
+            bins,
+        )
+        self.inflation, self.inflate = inflation, inflate
+        self.covariance, self.rng = covariance, rng
+        self.result = np.empty((nspec, npix))
+        self.draws = None if rng is None else np.array(flux, np.float64, order="C")
+        self.var = np.full((nspec, npix), np.inf)
+        self.chi2 = np.zeros(nspec)
+        self.dof = np.empty(nspec, dtype=np.int64)
+        self.refscale = np.empty(nspec)
+        self.patterns: list[NDArray[np.float64]] = []
+        self.pattern = np.empty(nspec, dtype=np.intp)
+        self.count = 0
+
+    def fill(
+        self,
+        cover: Model,
+        rows: slice,
+        X: NDArray[np.float64],
+        a: NDArray[np.float64],
+        M: NDArray[np.bool_],
+        ignored: NDArray[np.bool_],
+    ) -> None:
+        # The spectra rows, with their working vectors X, their a_s and their
+        # replaced and ignored pixels, under the covariance of cover from noisy.
+        model = self.model
+        good = ~self.bad[rows]
+        self.result[rows] = self.flux[rows]
+        np.divide(
+            1.0, self.ivar[rows], out=self.var[rows], where=good, dtype=np.float64
+        )
+        # Design decision A16: a row of normals for every spectrum, also one without a
+        # pixel to replace.
+        normals = None if self.rng is None else self.rng.standard_normal(X.shape)
+        # The deviation of a draw is f^1/2 R_MM^-T z_M, so z carries f^1/2.
+        if normals is not None and self.inflate:
+            normals *= np.sqrt(self.inflation[rows])[:, np.newaxis]
+        self.refscale[rows] = a
+        T = M & good
+        self.dof[rows] = np.count_nonzero(T, axis=1)
+        index = np.arange(rows.start, rows.stop)
+        center = 0.0 if model.center is None else model.center
+        for group, pixels, solution in conditionals(
+            cover,
+            X,
+            self.bins[rows],
+            index,
+            M | ignored,
+            M,
+            T,
+            normals,
+            self.covariance,
+        ):
+            self.count += 1
+            spectra = index[group]
+            cov = np.zeros((0, 0)) if self.covariance else None
+            if solution is not None:
+                at = np.ix_(spectra, pixels)
+                mean = model.mean[self.bins[spectra[0]], pixels]
+                self.result[at] = to_flux(solution.mean, a[group], mean, center)
+                if self.draws is not None and solution.draws is not None:
+                    self.draws[at] = to_flux(solution.draws, a[group], mean, center)
+                # The key of a pattern holds the bin and G, so its spectra share N_s,
+                # N_k and their factor.
+                factor = self.inflation[spectra[0]]
+                scale = np.square(a[group])[:, np.newaxis]
+                self.var[at] = solution.var * factor / scale
+                self.chi2[spectra] = solution.chi2 / factor
+                # f C_MM, which covariance(s) divides by a^2 as var.
+                cov = None if solution.cov is None else solution.cov * factor
+            if cov is not None:
+                self.pattern[spectra] = len(self.patterns)
+                self.patterns.append(cov)
+
+    def done(
+        self,
+        replaced: NDArray[np.bool_],
+        ignored: NDArray[np.bool_],
+        fs: NDArray[np.float64],
+        stage: str,
+        start: float,
+    ) -> Repaired:
+        # The result, read-only; stage names the caller in the log, and start is the
+        # time of its call.
+        arrays = (self.result, self.var, replaced, ignored, self.chi2, self.dof, fs)
+        for array in arrays:
+            array.flags.writeable = False
+        if self.draws is not None:
+            self.draws.flags.writeable = False
+        _logger.debug(
+            "%s: %d spectra, %d patterns in %.3f s",
+            stage,
+            len(fs),
+            self.count,
+            time.perf_counter() - start,
+        )
+        covariances = None
+        if self.covariance:
+            covariances = _Covariances(
+                tuple(self.patterns), self.pattern, self.refscale
+            )
+        return Repaired(*arrays, self.draws, _covariances=covariances)
 
 
 def weigh(model: Model, nguard: int, bins: NDArray[np.intp]) -> None:
     # The guard weights of the bins with spectra, before any spectrum, so that a
     # covariance that fails its check raises at once. A bin without spectra computes
-    # no P.
+    # no P, and a noise model forms its guard weights per spectrum.
+    if model.noise:
+        return
     for b in np.unique(bins).tolist():
         model._guard_weights(b, nguard)
+
+
+def spans(model: Model, nspec: int, npix: int) -> Iterator[slice]:
+    # The chunks of spectra of the functions that predict: max(1, 2**24 // npix)
+    # spectra, or one for a noise model, whose P_s per spectrum costs more than a
+    # chunk of another model, so that progress comes after each spectrum.
+    if model.noise:
+        return (slice(s, s + 1) for s in range(nspec))
+    return chunks(nspec, npix)
+
+
+def noisy(model: Model, ivar: NDArray[Any], bad: NDArray[np.bool_], row: int) -> Model:
+    # The model whose covariance conditions a chunk of spectra, of first row row:
+    # model, or for a noise model, whose chunks hold one spectrum, the model of
+    # C_s = cov[0] + diag(nu_s), with nu_si = 1/ivar_si at good pixels and 1/a_s^2 at
+    # bad ones (design section 4.1). It forms P_s at its first use and keeps it for
+    # every operation of the call on the spectrum (decision A22).
+    if not model.noise:
+        return model
+    a = root_mean_ivar(ivar, bad)[0]
+    nu = np.full(bad.shape[1], 1 / a**2)
+    np.divide(1.0, ivar[0], out=nu, where=~bad[0], dtype=np.float64)
+    return model._with_noise(nu, f"model: cov[0] + diag(nu) of row {row}")
 
 
 def working(
@@ -568,9 +693,9 @@ def working(
     bins: NDArray[np.intp],
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     # The working vectors X of a chunk of spectra, a new C-contiguous array, and their
-    # a_s (see Model).
+    # scale of the working units: a_s, or 1 for a noise model (see Model).
     X = interpolate(flux, bad)
-    a = root_mean_ivar(ivar, bad)
+    a = np.ones(len(flux)) if model.noise else root_mean_ivar(ivar, bad)
     to_working(X, a, 0.0 if model.center is None else model.center, means(model, bins))
     return X, a
 
@@ -635,7 +760,7 @@ def conditionals(
     # and their rows in the caller's arrays, with T in M in G: for each pattern, its
     # spectra in X, the pixels of M, and the solution of solve_pattern, or None where
     # M is empty. normals (nspec, npix) give the draws. The caller computed P of the
-    # bins that need it, so only a solve can raise.
+    # bins that need it, so only a solve can raise, or for a noise model P_s.
     # The bin of each spectrum, one-hot, is part of the key of its pattern.
     one_hot = np.eye(len(model.cov), dtype=bool)
     keys = np.concatenate([G, M, T, one_hot[bins]], axis=1)
@@ -720,8 +845,10 @@ def _solve(
     covariance: bool,
     row: int,
 ) -> Conditional:
+    # Outside the try, as the message of P names the covariance.
+    P = None if G.all() else model._precision(b)
     try:
-        if G.all():
+        if P is None:
             # The prior N(0, C): exact from C, and without P, which a singular C does
             # not have. It forms C at M only for the covariance or the draws, and
             # otherwise at T alone (design section 4.2).
@@ -737,10 +864,10 @@ def _solve(
                 chi2 = prior_chi2(submatrix_of(C, np.flatnonzero(T)), X[:, T])
             mean = np.zeros((X.shape[0], pixels.size))
             return Conditional(mean, variances_of(C)[pixels], chi2, cov, draws)
-        return solve_pattern(model._precision(b), G, M, T, X, normals, covariance)
+        return solve_pattern(P, G, M, T, X, normals, covariance)
     except LinAlgError as error:
         raise LinAlgError(
-            f"model: cov[{b}] is {error}, for the pattern of row {row}"
+            f"{model._name(b)} is {error}, for the pattern of row {row}"
         ) from None
 
 

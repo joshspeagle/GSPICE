@@ -1,6 +1,7 @@
 import dataclasses
 import math
 import time
+from functools import partial
 from typing import Literal
 
 import numpy as np
@@ -9,7 +10,17 @@ from scipy.ndimage import grey_opening
 
 from ._blocks import BlockFactor, block_chi2, block_factors
 from ._model import Blocks, Model
-from ._predict import Repaired, filled, infilled, validated, working, zscores
+from ._predict import (
+    Filling,
+    Repaired,
+    filled,
+    infilled,
+    noisy,
+    spans,
+    validated,
+    working,
+    zscores,
+)
 from ._spectra import (
     Boolean,
     Integer,
@@ -19,7 +30,6 @@ from ._spectra import (
     check_choice,
     check_progress,
     check_rng,
-    chunks,
     integer,
     real,
 )
@@ -76,7 +86,9 @@ def repair(
 
     Nothing limits the replaced set; the paper measured calibration up to 1024 of 2415
     replaced pixels (l.530). Since M and I depend on the data, f_s does not hold for
-    Repaired.chi2 (see `finite_sample_factor`).
+    Repaired.chi2 (see `finite_sample_factor`). For a noise model, x is in flux units,
+    and C_s of the spectrum (see `Model`) takes the place of cov[b] in every step:
+    repair runs the five steps one spectrum at a time, with one P_s for all of them.
 
     Parameters
     ----------
@@ -104,13 +116,14 @@ def repair(
         The counting set K of step 4.
     inflate, covariance : bool, optional
         As in `infill`, for step 5. inflate needs a dense, mean-centred, unweighted
-        model.
+        model without noise.
     rng : numpy.random.Generator, optional
         As in `infill`, for step 5: the source of Repaired.draws. None: no draws.
     progress : callable, optional
         progress(stage, done, total), called with the stage "repair", the number of
         spectra done and their total, after each chunk of spectra of steps 1 to 4, and
-        again after each chunk of step 5.
+        again after each chunk of step 5; a noise model runs the five steps on chunks
+        of one spectrum, and reports after its steps 1 to 4 and after its step 5.
 
     Returns
     -------
@@ -131,7 +144,7 @@ def repair(
         has another npix than model, a spectrum has no good pixel, an argument is
         outside its range above, count_on is neither "all" nor "flagged", or blockwise
         is True and model has no blocks. If inflate is True and model has a constant
-        centre, weights or a `LowRank` covariance, or, before step 5,
+        centre, weights, a `LowRank` covariance or noise, or, before step 5,
         N_s - N_k - 3 <= 0 for a spectrum with a replaced pixel, with
         N_k = npix - |M | I|; the message names N_s and N_k.
     numpy.linalg.LinAlgError
@@ -140,7 +153,8 @@ def repair(
         any spectrum, also for nguard >= npix - 1, where `pixelwise` computes no P.
         As in `fit_blocks` for the blocks of a bin with spectra, with blockwise=True,
         or as in `infill` for a conditional mean. The message names the bin, and the
-        block or the row.
+        block or the row. For a noise model, as in `infill`, with C_s in place of
+        cov[b], and checked for each spectrum where a step factors C_s.
 
     Notes
     -----
@@ -151,6 +165,8 @@ def repair(
     and one infill per flagged block, and two infills as in `infill`: that of step 5,
     and that of step 2, whose last x_b gives x1, or without blockwise that of step 3.
     repair holds replaced and ignored of all spectra, and a few arrays of one chunk.
+    A noise model costs P_s, npix^3 flops for a dense cov[0], its guard weights and
+    its block factors for each spectrum.
     """
     start = time.perf_counter()
     nguard = integer(nguard, "nguard", 0)
@@ -184,71 +200,139 @@ def repair(
     blocks = model.blocks if blockwise else None
     nspec, npix = flux.shape
     bins = model._bins(flux, ivar, bad)
-    # P, the guard weights and the block factors of the bins with spectra, before any
-    # spectrum, so that a covariance that fails a check raises at once. Every step
-    # but the block scan can need P.
-    factors = {}
-    for b in np.unique(bins).tolist():
-        model._precision(b)
-        model._guard_weights(b, nguard)
-        if blocks is not None:
-            factors[b] = block_factors(
-                model, b, blocks.starts, blocks.width, blocks.nguard
-            )
-    replaced, ignored = (np.empty((nspec, npix), dtype=bool) for _ in range(2))
+    detect = partial(
+        _detect,
+        blocks=blocks,
+        nguard=nguard,
+        nsigma_replace=nsigma_replace,
+        nsigma_ignore=nsigma_ignore,
+        d=d,
+        runlength=runlength,
+        halfwidth=halfwidth,
+        minfrac=minfrac,
+        count_on=count_on,
+    )
     nblock = 0 if blocks is None else blocks.starts.size
     flagged = np.empty((nspec, nblock), dtype=bool)
-    for rows in chunks(nspec, npix):
-        X, _ = working(model, flux[rows], ivar[rows], bad[rows], bins[rows])
+    replaced, ignored = (np.empty((nspec, npix), dtype=bool) for _ in range(2))
+    factors: dict[int, list[BlockFactor]] = {}
+    filling = None
+    if model.noise:
+        # Step 5 runs on each spectrum after its steps 1 to 4, so that every step
+        # reuses its P_s (decision A22). No factor f_s is derived (design section 4.3).
+        filling = Filling(
+            model,
+            flux,
+            ivar,
+            bad,
+            bins,
+            inflation=np.ones(nspec),
+            inflate=False,
+            covariance=covariance,
+            rng=rng,
+        )
+    else:
+        # P, the guard weights and the block factors of the bins with spectra, before
+        # any spectrum, so that a covariance that fails a check raises at once. Every
+        # step but the block scan can need P.
+        for b in np.unique(bins).tolist():
+            model._precision(b)
+            model._guard_weights(b, nguard)
+            if blocks is not None:
+                factors[b] = block_factors(
+                    model, b, blocks.starts, blocks.width, blocks.nguard
+                )
+    for rows in spans(model, nspec, npix):
+        X, a = working(model, flux[rows], ivar[rows], bad[rows], bins[rows])
         index = np.arange(rows.start, rows.stop)
-        # Step 1, with G1 = M1 | I1.
-        z1 = zscores(model, nguard, X, bins[rows])
-        M1 = _dilated(z1, nsigma_replace, d) | bad[rows]
-        G1 = M1 | _dilated(z1, nsigma_ignore, d)
-        # Steps 2 and 3. The last x_b of the block pass conditions on the pixels
-        # outside G1 | M_b, as x1 does, so its values at M1 | M_b are those of x1.
-        if blocks is None:
-            Mb = np.zeros(X.shape, dtype=bool)
-            X1 = filled(model, X, bins[rows], index, G1, M1)
-        else:
-            flagged[rows], Mb, X_b = _block_pass(
-                model, blocks, factors, X, bins[rows], index, G1
-            )
-            X1 = np.where(M1 | Mb, X_b, X)
-        z2 = zscores(model, nguard, X1, bins[rows])
-        M = M1 | Mb | _dilated(z2, nsigma_replace, d)
-        I = _dilated(z2, nsigma_ignore, d) & ~M
-        # Step 4.
-        if runlength is not None:
-            if count_on == "all":
-                K = M | I
-            else:
-                core = (np.abs(z1) > nsigma_replace) | (np.abs(z2) > nsigma_ignore)
-                K = (core & ~bad[rows]) | Mb
-            I = _exclude_extended(M, I, K, runlength, halfwidth, minfrac)
-        replaced[rows], ignored[rows] = M, I
+        cover = noisy(model, ivar[rows], bad[rows], rows.start)
+        if model.noise and blocks is not None:
+            factors = {
+                0: block_factors(cover, 0, blocks.starts, blocks.width, blocks.nguard)
+            }
+        flagged[rows], replaced[rows], ignored[rows] = detect(
+            cover, factors, X, bins[rows], index, bad[rows]
+        )
         if progress is not None:
             progress("repair", rows.stop, nspec)
+        if filling is not None:
+            filling.fill(cover, rows, X, a, replaced[rows], ignored[rows])
+            if progress is not None:
+                progress("repair", rows.stop, nspec)
+        del cover
+        if model.noise:
+            # Free the block factors of the spectrum, which hold its P_s.
+            factors = {}
     # The block factors can take 649 MB per bin (see fit_blocks); step 5 needs none.
     del factors
-    # Step 5, which checks inflate where G is known.
-    result = infilled(
-        model,
-        flux,
-        ivar,
-        bad,
-        bins,
-        replaced,
-        ignored,
-        inflate=inflate,
-        covariance=covariance,
-        rng=rng,
-        progress=progress,
-        stage="repair",
-        start=start,
-    )
+    if filling is None:
+        # Step 5, which checks inflate where G is known.
+        result = infilled(
+            model,
+            flux,
+            ivar,
+            bad,
+            bins,
+            replaced,
+            ignored,
+            inflate=inflate,
+            covariance=covariance,
+            rng=rng,
+            progress=progress,
+            stage="repair",
+            start=start,
+        )
+    else:
+        result = filling.done(replaced, ignored, np.ones(nspec), "repair", start)
     flagged.flags.writeable = False
     return dataclasses.replace(result, blocks=None if blocks is None else flagged)
+
+
+def _detect(
+    model: Model,
+    factors: dict[int, list[BlockFactor]],
+    X: NDArray[np.float64],
+    bins: NDArray[np.intp],
+    rows: NDArray[np.intp],
+    bad: NDArray[np.bool_],
+    *,
+    blocks: Blocks | None,
+    nguard: int,
+    nsigma_replace: float,
+    nsigma_ignore: float,
+    d: int,
+    runlength: int | None,
+    halfwidth: int,
+    minfrac: float,
+    count_on: str,
+) -> tuple[NDArray[np.bool_], NDArray[np.bool_], NDArray[np.bool_]]:
+    # Steps 1 to 4 of design section 5.4 for the working vectors X of a chunk of
+    # spectra, with the block factors of their bins: the flagged blocks, M and I.
+    # Step 1, with G1 = M1 | I1.
+    z1 = zscores(model, nguard, X, bins)
+    M1 = _dilated(z1, nsigma_replace, d) | bad
+    G1 = M1 | _dilated(z1, nsigma_ignore, d)
+    # Steps 2 and 3. The last x_b of the block pass conditions on the pixels outside
+    # G1 | M_b, as x1 does, so its values at M1 | M_b are those of x1.
+    if blocks is None:
+        flagged = np.zeros((len(X), 0), dtype=bool)
+        Mb = np.zeros(X.shape, dtype=bool)
+        X1 = filled(model, X, bins, rows, G1, M1)
+    else:
+        flagged, Mb, X_b = _block_pass(model, blocks, factors, X, bins, rows, G1)
+        X1 = np.where(M1 | Mb, X_b, X)
+    z2 = zscores(model, nguard, X1, bins)
+    M = M1 | Mb | _dilated(z2, nsigma_replace, d)
+    I = _dilated(z2, nsigma_ignore, d) & ~M
+    # Step 4.
+    if runlength is not None:
+        if count_on == "all":
+            K = M | I
+        else:
+            core = (np.abs(z1) > nsigma_replace) | (np.abs(z2) > nsigma_ignore)
+            K = (core & ~bad) | Mb
+        I = _exclude_extended(M, I, K, runlength, halfwidth, minfrac)
+    return flagged, M, I
 
 
 def _positive(value: object, name: str) -> float:

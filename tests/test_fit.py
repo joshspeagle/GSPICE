@@ -8,6 +8,7 @@ from numpy.linalg import LinAlgError
 from _golden import checked, same
 from gspice import _model, _spectra, fit, pixelwise, scale, snr
 from gspice._linalg import precision
+from oracle import random_spd
 
 EPS = np.finfo(float).eps
 NSPEC, NPIX, NGUARD = 200, 12, 2
@@ -286,11 +287,13 @@ def test_a_pixel_of_variance_0_raises_naming_its_fit():
         fit(flux, ivar, mask, nguard=NGUARD, nsigma=(10,))
 
 
-def test_progress_counts_the_spectra_of_each_fit_after_each_chunk(monkeypatch):
+@pytest.mark.parametrize("noise", [False, True])
+def test_progress_counts_the_spectra_of_each_fit_after_each_chunk(monkeypatch, noise):
     monkeypatch.setattr(_spectra, "CHUNK", 64 * NPIX)
     flux, ivar, mask = spectra()
     calls, progress = recorder()
-    fit(flux, ivar, mask, nguard=NGUARD, nsigma=(10, 8), progress=progress)
+    options = {"nguard": NGUARD, "nsigma": (10, 8), "noise": noise}
+    fit(flux, ivar, mask, **options, progress=progress)
     # Two passes, then the final fit.
     assert calls == [("fit", done, NSPEC) for done in (64, 128, 192, 200)] * 3
 
@@ -582,3 +585,172 @@ def test_snr_bins_without_a_used_spectrum_raises_the_requirement_error():
     )
     with pytest.raises(ValueError, match=message):
         fit(flux, ivar, mask, weights=np.zeros(NSPEC), snr_bins=3)
+
+
+def noise_design(nspec, npix, seed):
+    # Masks, weights and ivar for the noise-free estimator, fixed for every draw of
+    # the data (condition 4 of design section 4.1): 25% bad pixels, with two spectra
+    # good at every pixel and one good at both pixels of every pair; weights from 0.5
+    # to 2; ivar of each spectrum and pixel from 1 to 10.
+    rng = np.random.default_rng(seed)
+    bad = rng.random((nspec, npix)) < 0.25
+    good = (~bad).astype(float)
+    assert (good.sum(axis=0) >= 2).all() and (good.T @ good > 0).all()
+    weights = rng.uniform(0.5, 2, nspec)
+    ivar = rng.uniform(1, 10, (nspec, npix))
+    return bad, weights, ivar
+
+
+def raw(flux, ivar, bad, weights):
+    # The estimator before the eigenvalue floor, on every spectrum.
+    rows = np.arange(len(flux))
+    return _model._noise_free(flux, ivar, rows, bad, weights, "the final fit", None)
+
+
+def test_the_noise_free_estimator_is_exactly_unbiased(monkeypatch):
+    # Design section 4.1 under its conditions 1 to 4, with per-pixel masks, weights
+    # and per-spectrum ivar, and without sampling: Sigma is (q(F) - delta N) / den
+    # with q a quadratic form of the data F and N and den fixed. For F of mean m and
+    # covariance L L^T, E[q(F)] = q(m) + sum_k (q(m + L e_k) + q(m - L e_k)) / 2 - q(m)
+    # exactly, for any distribution. Spectrum s has the covariance
+    # C_s = Sigma + diag(1/ivar_s), and the data of the spectra are independent.
+    # Chunks of 3 spectra, so that the sums run over chunks.
+    nspec, npix = 10, 5
+    monkeypatch.setattr(_spectra, "CHUNK", 3 * npix)
+    bad, weights, ivar = noise_design(nspec, npix, 3)
+    Sigma = 0.5 * random_spd(npix, 10, 4)
+    m = np.tile(1 + 0.2 * np.arange(npix), (nspec, 1))
+    base = raw(m, ivar, bad, weights)[1]
+    total, scale = base.copy(), np.abs(base)
+    for s in range(nspec):
+        L = np.linalg.cholesky(Sigma + np.diag(1 / ivar[s]))
+        for k in range(npix):
+            F = m.copy()
+            F[s] += L[:, k]
+            plus = raw(F, ivar, bad, weights)[1]
+            F[s] -= 2 * L[:, k]
+            minus = raw(F, ivar, bad, weights)[1]
+            total += (plus + minus) / 2 - base
+            scale += (np.abs(plus) + np.abs(minus)) / 2 + np.abs(base)
+    # Each evaluation rounds by a few eps of the size of its terms, and scale bounds
+    # the sum of their sizes over the 2 K + 1 = 101 evaluations: the error measured
+    # 5.6 eps scale, and 1e3 eps scale is at most 8e-11 of |Sigma| here.
+    assert np.all(np.abs(total - Sigma) <= 1e3 * EPS * scale)
+
+
+def floored(S):
+    values, Q = np.linalg.eigh(S)
+    return (Q * np.maximum(values, 0)) @ Q.T
+
+
+@pytest.mark.parametrize("weighted", [False, True])
+def test_a_noise_fit_floors_the_estimator_on_the_final_mask_of_the_clipping(
+    weighted, caplog
+):
+    caplog.set_level(logging.INFO, logger="gspice")
+    flux, ivar, mask = spectra()
+    spike(flux, ivar, 5, 6, 40.0)
+    weights = np.random.default_rng(1).uniform(0.5, 2, NSPEC) if weighted else None
+    model, training = fit(flux, ivar, mask, nguard=NGUARD, noise=True, weights=weights)
+    logged = [record.getMessage() for record in caplog.records]
+    # The passes clip as for a model without noise, with unit weights.
+    _, expected_mask = fit(flux, ivar, mask, nguard=NGUARD)
+    assert same(training, expected_mask)
+    assert training[5, 5:8].all()
+    rows = np.flatnonzero(~training.all(axis=1))
+    # In units of the largest, as fit passes them.
+    w = np.ones(rows.size) if weights is None else weights[rows] / weights[rows].max()
+    mean, S, v = _model._noise_free(flux, ivar, rows, training[rows], w, "", None)
+    # The floor acts: the estimate has negative eigenvalues, as the signal has rank 3.
+    values = np.linalg.eigvalsh(S)
+    assert values[0] < 0
+    # Both floors round by about npix eps |lambda|_max in each entry.
+    tol = 4 * NPIX * EPS * np.abs(values).max()
+    assert np.all(np.abs(model.cov[0] - floored(S)) <= tol)
+    assert np.linalg.eigvalsh(model.cov[0])[0] >= -tol
+    assert same(model.mean[0], mean)
+    # mu is the mean of the good pixels with the weights a_s^2 w_s, a_s^2 the mean
+    # ivar of the good pixels; each sum rounds by at most N_s eps of its terms.
+    good = ~training[rows]
+    a2 = np.array([iv[g].mean() for iv, g in zip(ivar[rows], good, strict=True)])
+    np.testing.assert_allclose(v, a2 * w / (a2 * w).max(), rtol=4 * EPS)
+    vu = v[:, np.newaxis] * good
+    expected = (vu * np.where(good, flux[rows], 0)).sum(axis=0) / vu.sum(axis=0)
+    assert np.all(np.abs(mean - expected) <= 4 * rows.size * EPS * np.abs(expected))
+    assert model.noise and model.n_train == (rows.size,)
+    # weighted reports the weights of the user, not a_s^2 w_s, and the log gives the
+    # effective count of the weights of the estimator, which differ also without
+    # weights of the user.
+    assert model.weighted is weighted
+    effective = (
+        f"fit: the final fit of {rows.size} spectra is weighted, with V1^2/V2 = "
+        f"{v.sum() ** 2 / (v @ v):.4g} effective spectra for the weights a_s^2 w_s of "
+        f"the noise-free estimator"
+    )
+    assert effective in logged
+    assert model._cache == {}
+
+
+def test_a_noise_fit_needs_two_spectra_at_every_pixel_and_one_at_every_pair():
+    # Pixel 3 is good only in row 0, pixel 4 only in rows 1 and 2, and pixel 5 only
+    # in rows 0 and 3, so that no spectrum is good at both pixels 4 and 5.
+    flux, ivar, mask = spectra(20)
+    mask[:, 3:6] = True
+    mask[0, [3, 5]] = mask[[1, 2], 4] = mask[3, 5] = False
+    flux[~mask & np.isnan(flux)] = 1.0
+    ivar[~mask & (ivar == 0)] = 100.0
+    options = {"nsigma": (), "noise": True, "maxbadpix": NPIX}
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"^fit: the final fit needs two spectra good at every pixel for the "
+            r"noise-free covariance, got fewer than two of its 20 spectra, on the final "
+            r"mask, at pixels 3: of 20 spectra, maxbadpix removed 0, weight 0 removed "
+            r"0 and full masks removed 0$"
+        ),
+    ):
+        fit(flux, ivar, mask, **options)
+    mask[1, 3] = False
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"^fit: the final fit needs a denominator of the noise-free covariance "
+            r"> 0 at every pair of pixels, got <= 0 at the pairs \(4, 5\), where no "
+            r"spectrum is good at both pixels, or where weights differ by a factor "
+            r"near 1/eps$"
+        ),
+    ):
+        fit(flux, ivar, mask, **options)
+    # With a spectrum good at both, the fit holds.
+    mask[2, 5] = False
+    model, _ = fit(flux, ivar, mask, **options)
+    assert np.isfinite(model.cov[0]).all()
+
+
+@pytest.mark.slow
+def test_the_noise_free_estimator_before_the_floor_is_unbiased():
+    # Design section 11 (5.3): with per-pixel masks, weights and per-spectrum ivar
+    # fixed, and data drawn afresh in each of R sets, the mean of Sigma over the sets
+    # equals the true covariance within 4 sigma at every element, sigma the Monte
+    # Carlo standard error of the mean. Neither the signal nor the noise is Gaussian:
+    # the signal is m + L e with e standardized exponential, and the noise is uniform
+    # with variance 1/ivar. The 21 elements of the upper triangle each fail with
+    # probability 6.3e-5 at 4 sigma, so all pass with probability above 0.998
+    # (Bonferroni); a seed fixes the outcome.
+    nspec, npix, R = 30, 6, 20_000
+    bad, weights, ivar = noise_design(nspec, npix, 5)
+    Sigma = 0.3 * random_spd(npix, 10, 6)
+    m = 1 + 0.2 * np.arange(npix)
+    L = np.linalg.cholesky(Sigma)
+    rng = np.random.default_rng(7)
+    total, squares = np.zeros((npix, npix)), np.zeros((npix, npix))
+    for _ in range(R):
+        signal = m + (rng.exponential(size=(nspec, npix)) - 1) @ L.T
+        noise = rng.uniform(-np.sqrt(3), np.sqrt(3), (nspec, npix)) / np.sqrt(ivar)
+        S = raw(signal + noise, ivar, bad, weights)[1]
+        total += S
+        squares += S**2
+    mean = total / R
+    sem = np.sqrt((squares / R - mean**2) / (R - 1))
+    upper = np.triu_indices(npix)
+    assert np.all(np.abs(mean - Sigma)[upper] <= 4 * sem[upper])

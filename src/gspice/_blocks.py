@@ -11,13 +11,12 @@ from scipy.linalg import lapack
 
 from ._linalg import factor_pattern, factor_prior
 from ._model import NGUARD_MAX, Blocks, Model, submatrix_of
-from ._predict import filled, validated, working
+from ._predict import filled, noisy, spans, validated, working
 from ._spectra import (
     Integer,
     Progress,
     Real,
     check_progress,
-    chunks,
     integer,
     real,
     to_flux,
@@ -60,7 +59,9 @@ def fit_blocks(
     (m (1 - p/100) + p/100)/(m + 1) when (m - 1) p/100 is an integer, and at most that
     otherwise, for a density that falls beyond the threshold: 0.20% at m = 1000 and
     0.12% at m = 5000 for p = 99.9 (the paper used 5000). `repair` also infills
-    z-flagged pixels, which lowers the rate. Use spectra not used for training.
+    z-flagged pixels, which lowers the rate. Use spectra not used for training. For a
+    noise model, x is in flux units, and C_s of each spectrum (see `Model`) takes the
+    place of cov[b] in its infill and its blocks.
 
     Parameters
     ----------
@@ -80,8 +81,9 @@ def fit_blocks(
     percentile : float, optional
         The percentile p of the thresholds; > 0 and < 100.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra with the
-        stage "fit_blocks", the number of spectra done and their total.
+        progress(stage, done, total), called after each chunk of spectra, of one
+        spectrum for a noise model, with the stage "fit_blocks", the number of
+        spectra done and their total.
 
     Returns
     -------
@@ -106,7 +108,8 @@ def fit_blocks(
         `pixelwise`, and G of a block does not cover all pixels; if P_GG of a block is
         not positive definite; or, for a block whose G covers all pixels, if cov[b] at
         T = A fails that check. Also as in `infill` for the bad pixels. The message
-        names the bin, and the block of a block or the row of a pattern.
+        names the bin, and the block of a block or the row of a pattern. For a noise
+        model, as in `infill`, with C_s in place of cov[b].
 
     Notes
     -----
@@ -116,8 +119,11 @@ def fit_blocks(
     8.8 MB per bin at npix 2400 with the defaults, and 649 MB at stride 1. Beyond the
     inputs and their float64 copies if they are long double, fit_blocks holds a bool
     array of the input shape, chi2 of the spectra of one bin (nblock float64 per
-    spectrum), and a few float64 arrays of one chunk of max(1, 2**24 // npix) spectra. The new model shares the arrays of model, its
-    precision matrices and its guard weights (see `Model`).
+    spectrum), and a few float64 arrays of one chunk of max(1, 2**24 // npix)
+    spectra. The new model shares the arrays of model, its precision matrices and its
+    guard weights (see `Model`). A noise model forms P_s, npix^3 flops for a dense
+    cov[0], and the factors of the blocks for each spectrum, unless every block covers
+    all pixels with its guard and the spectrum has no bad pixel.
     """
     start = time.perf_counter()
     width = integer(width, "width", 1)
@@ -150,20 +156,33 @@ def fit_blocks(
     # A stride above npix gives the starts of npix, and keeps arange in int64.
     starts = np.append(np.arange(0, npix - width, min(stride, npix)), npix - width)
     # The factors of every bin, and P of the bins with bad pixels for their infill,
-    # before any spectrum, so that a covariance that fails a check raises at once.
-    factors = [block_factors(model, b, starts, width, nguard) for b in range(nbin)]
-    for b in np.unique(bins[bad.any(axis=1)]).tolist():
-        model._precision(b)
+    # before any spectrum, so that a covariance that fails a check raises at once. A
+    # noise model forms them for each spectrum.
+    factors: list[list[BlockFactor]] = []
+    if not model.noise:
+        factors = [block_factors(model, b, starts, width, nguard) for b in range(nbin)]
+        for b in np.unique(bins[bad.any(axis=1)]).tolist():
+            model._precision(b)
     thresholds = np.empty((nbin, starts.size))
     done = 0
     for b in range(nbin):
         rows = np.flatnonzero(bins == b)
         chi2 = np.empty((rows.size, starts.size))
-        for c in chunks(rows.size, npix):
+        for c in spans(model, rows.size, npix):
             spectra = rows[c]
-            chi2[c] = block_chi2(
-                factors[b], _scan_vectors(model, b, flux, ivar, bad, spectra)
+            cover = (
+                noisy(model, ivar[spectra], bad[spectra], int(spectra[0]))
+                if model.noise
+                else model
             )
+            F = (
+                block_factors(cover, 0, starts, width, nguard)
+                if model.noise
+                else factors[b]
+            )
+            X = _scan_vectors(model, cover, b, flux, ivar, bad, spectra)
+            chi2[c] = block_chi2(F, X)
+            del cover, F
             done += spectra.size
             if progress is not None:
                 progress("fit_blocks", done, nspec)
@@ -179,17 +198,19 @@ def fit_blocks(
 
 def _scan_vectors(
     model: Model,
+    cover: Model,
     b: int,
     flux: NDArray[Any],
     ivar: NDArray[Any],
     bad: NDArray[np.bool_],
     spectra: NDArray[np.intp],
 ) -> NDArray[np.float64]:
-    # The working vectors x of the infilled flux of the spectra of bin b.
+    # The working vectors x of the infilled flux of the spectra of bin b, under the
+    # covariance of cover.
     bins = np.full(spectra.size, b)
     G = bad[spectra]
     X, a = working(model, flux[spectra], ivar[spectra], G, bins)
-    X = filled(model, X, bins, spectra, G, G)
+    X = filled(cover, X, bins, spectra, G, G)
     # Through flux units, as the docstring of fit_blocks defines x.
     center = 0.0 if model.center is None else model.center
     x = np.array(flux[spectra], dtype=np.float64)
@@ -228,7 +249,7 @@ def block_factors(
             else:
                 R = factor_pattern(P[G, G][np.ix_(order, order)])
         except LinAlgError as error:
-            raise LinAlgError(f"model: cov[{b}] is {error}, for block {k}") from None
+            raise LinAlgError(f"{model._name(b)} is {error}, for block {k}") from None
         factors.append(BlockFactor(A, G, order, R, P))
     return factors
 
