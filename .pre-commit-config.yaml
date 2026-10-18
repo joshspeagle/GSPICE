@@ -1,5 +1,5 @@
 # The same files that the lint job of CI checks.
-files: ^(src|tests|benchmarks)/
+files: ^(src|tests|benchmarks|tools)/
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # The ruff pin of the dev group in pyproject.toml.

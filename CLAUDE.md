@@ -10,6 +10,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - `notebooks/`, `notes/`, `paper/`: 2021-2022 working material.
 - `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
 - `tests/legacy/`: tests of the behaviour changes of `gspice.legacy`.
+- `tools/`: `check_dist.py` checks the contents of the built wheel and sdist, and `smoke.py` is the smoke test of an installed wheel. CI runs both.
 - `benchmarks/run.py`: times benchmark cases of `docs/design.md` section 12 and prints the setup and the timings as JSON.
 - `pyproject.toml`: the build, the dependencies and the tool settings.
 
@@ -18,7 +19,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - Set up: `uv venv --clear --python 3.13 .venv && uv pip install -e . --group dev`. mypy needs scipy-stubs, which requires Python 3.12 or later. Once per clone, in the main checkout and not in a worktree, also run `.venv/bin/pre-commit install --allow-missing-config`: its hook runs ruff on each commit in every worktree, also on branches without the hook configuration.
 - Test: `.venv/bin/python -m pytest --cov=gspice`. It skips `slow` tests and fails if the tests cover less than 90% of the code outside `gspice.legacy`.
 - All tests, `slow` ones included: `.venv/bin/python -m pytest -m ""`.
-- Lint, format and type check: `.venv/bin/ruff check src tests benchmarks && .venv/bin/ruff format --check src tests benchmarks && .venv/bin/mypy && .venv/bin/mypy --python-version 3.11`.
+- Lint, format and type check: `.venv/bin/ruff check src tests benchmarks tools && .venv/bin/ruff format --check src tests benchmarks tools && .venv/bin/mypy && .venv/bin/mypy --python-version 3.11`.
 
 ## Plan
 
