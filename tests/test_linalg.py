@@ -16,6 +16,7 @@ from gspice._linalg import (
     prior_draws,
     solve_factor,
     solve_low_rank,
+    solve_mean,
     solve_pattern,
     woodbury,
 )
@@ -287,6 +288,41 @@ def test_pattern_solve_rejects_a_pattern_on_which_P_is_not_positive_definite():
     P[7, 7] = -1.0
     with pytest.raises(LinAlgError, match="^not positive definite in its precision"):
         solve_pattern(P, mask([6, 7]), mask([6]), mask([]), np.zeros((1, NPIX)))
+
+
+# (G, M) as pixel lists with |G| > NPIX / 2, where filled takes the mean from C_OO.
+MEAN_PATTERNS = {
+    "run": (range(10, 40), range(14, 36)),
+    # O scattered, with both edges, and M not a run.
+    "scattered": (
+        [i for i in range(NPIX) if i % 7],
+        [i for i in range(NPIX) if i % 7 and i % 2],
+    ),
+    # C_OO is 1 x 1.
+    "one in O": ([i for i in range(NPIX) if i != 17], range(18, 43)),
+}
+
+
+@pytest.mark.parametrize("pattern", MEAN_PATTERNS)
+@pytest.mark.parametrize("name", MATRICES)
+def test_the_mean_from_c_oo_matches_the_reference_without_reading_g(name, pattern):
+    C, _, X, tol = case(name)
+    G, M = (mask(pixels) for pixels in MEAN_PATTERNS[pattern])
+    mean, cov, _ = conditional(C, np.flatnonzero(G), X)
+    at = np.flatnonzero(M[G])
+    X = X.copy()
+    X[:, G] = np.nan
+    # The tolerance of design section 11 for the P route.
+    error = (solve_mean(C, G, M, X) - mean[:, at]) / np.sqrt(np.diagonal(cov)[at])
+    assert np.max(np.abs(error)) <= tol
+
+
+def test_the_mean_from_c_oo_rejects_a_c_oo_that_is_not_positive_definite():
+    C = np.eye(NPIX)
+    C[7, 7] = -1.0
+    G = ~mask([6, 7])
+    with pytest.raises(LinAlgError, match="^not positive definite on the pixels O$"):
+        solve_mean(C, G, G, np.zeros((1, NPIX)))
 
 
 @pytest.mark.parametrize("name", MATRICES)

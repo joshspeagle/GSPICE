@@ -339,6 +339,26 @@ def _conditional(
     return Conditional(mean.T[:, order], var[order], chi2, cov, draws)
 
 
+def solve_mean(
+    C: NDArray[np.float64],
+    G: NDArray[np.bool_],
+    M: NDArray[np.bool_],
+    X: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    # mu_M = C_MO C_OO^-1 x_O, with O the pixels outside G, from the Cholesky factor of
+    # C_OO: the mean of solve_pattern without P (design section 4.2).
+    O = np.flatnonzero(~G)
+    # C_OO is symmetric, so its transpose is the F-contiguous matrix LAPACK factors in
+    # place.
+    L, info = lapack.dpotrf(C[np.ix_(O, O)].T, lower=1, overwrite_a=1)
+    if info:
+        raise LinAlgError("not positive definite on the pixels O")
+    Y, _ = lapack.dpotrs(L, X[:, O].T, lower=1)
+    # Whole rows of C gather faster than C_MO.
+    mean: NDArray[np.float64] = (Y.T @ C[O])[:, M]
+    return mean
+
+
 def prior_chi2(
     CTT: NDArray[np.float64], XT: NDArray[np.float64]
 ) -> NDArray[np.float64]:

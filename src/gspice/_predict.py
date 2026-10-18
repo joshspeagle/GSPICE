@@ -16,6 +16,7 @@ from ._linalg import (
     prior_draws,
     solve_factor,
     solve_low_rank,
+    solve_mean,
     solve_pattern,
 )
 from ._model import LowRank, Model, sample_factor, submatrix_of, variances_of
@@ -787,7 +788,7 @@ def conditionals(
 ) -> Iterator[tuple[NDArray[np.intp], NDArray[np.intp], Conditional | None]]:
     # The patterns of a chunk of spectra with the working vectors X, their S/N bins
     # and their rows in the caller's arrays, with T in M in G: for each pattern, its
-    # spectra in X, the pixels of M, and the solution of solve_pattern, or None where
+    # spectra in X, the pixels of M, and their conditional (see _solve), or None where
     # M is empty. normals (nspec, npix) give the draws. variance=False skips the var
     # of solve_pattern, which is then NaN; the prior and the low-rank route keep var.
     # The caller computed P of the bins that need it, so only a solve can raise, or
@@ -882,13 +883,27 @@ def _solve(
     # without P_s: a LowRank from V and d + nu_s, and a dense one from its Cholesky
     # factor unless the call formed P_s (design section 12, (b) and (e)).
     noise = model._label is not None and not prior
-    # Outside the try, as the messages of P and of the factor name the covariance.
+    # Outside the try, as the messages of P and of the factor name the covariance. P
+    # also checks C for the mean from C_OO.
     P = L = None
     if noise and not isinstance(C, LowRank):
         P, L = model._conditioner(b, C)
     elif not (prior or noise):
         P = model._precision(b)
     try:
+        # The mean alone, of a dense model without noise, from C_OO at |O|^3/3 flops
+        # instead of |G|^3/3 (design section 12, (j)).
+        if (
+            not (variance or prior or T.any())
+            and normals is None
+            and model._label is None
+            and not isinstance(C, LowRank)
+            and 2 * np.count_nonzero(G) > G.size
+        ):
+            mean = solve_mean(C, G, M, X)
+            return Conditional(
+                mean, np.full(mean.shape[1], np.nan), np.zeros(len(mean)), None, None
+            )
         if isinstance(C, LowRank) and noise:
             V, values, d = C.vectors, C.values, C.diag
             return solve_low_rank(V, values, d, G, M, T, X, normals, covariance)

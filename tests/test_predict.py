@@ -12,6 +12,7 @@ from gspice import (
     LowRank,
     Model,
     _model,
+    _predict,
     _spectra,
     finite_sample_factor,
     fit,
@@ -21,7 +22,8 @@ from gspice import (
     snr,
     unscale,
 )
-from gspice._linalg import precision
+from gspice._linalg import precision, solve_mean
+from gspice._predict import filled
 from oracle import (
     CONTEXT,
     assert_gaussian,
@@ -682,6 +684,39 @@ def test_a_pattern_whose_factorization_fails_names_the_bin_and_its_first_row(
         infill(
             Model(MEANS[:1], model.cov[:1], (100,)), flux, ivar, mask, replace=replace
         )
+
+
+@pytest.mark.parametrize(
+    ("size", "from_cov"), [(NPIX // 2, False), (NPIX // 2 + 1, True)]
+)
+def test_filled_takes_the_mean_from_c_oo_only_where_g_holds_over_half_the_pixels(
+    monkeypatch, size, from_cov
+):
+    C = random_spd(NPIX, 1e8, 0)
+    model = Model(np.zeros((1, NPIX)), (C,), (100,))
+    X = np.random.default_rng(0).standard_normal((3, NPIX)) @ np.linalg.cholesky(C).T
+    G = np.broadcast_to((PIXELS >= 2) & (PIXELS < 2 + size), X.shape)
+    M = G & (PIXELS % 2 == 0)
+    calls = []
+
+    def counted(*args):
+        calls.append(args)
+        return solve_mean(*args)
+
+    monkeypatch.setattr(_predict, "solve_mean", counted)
+    result = filled(model, X, np.zeros(3, np.intp), np.arange(3), G, M)
+    assert bool(calls) == from_cov
+    mean, cov, _ = conditional(C, np.flatnonzero(G[0]), X)
+    at = np.flatnonzero(M[0][G[0]])
+    # Design section 11: 10 kappa eps sigma against the 60-digit reference.
+    tol = 10 * condition(C) * EPS * np.sqrt(np.diagonal(cov)[at])
+    assert np.all(np.abs(result[:, M[0]] - mean[:, at]) <= tol)
+    assert same(result[:, ~M[0]], X[:, ~M[0]])
+    # infill needs the variances, which the mean from C_OO does not give, also where
+    # T is empty: M holds only bad pixels.
+    calls.clear()
+    result = infill(model, X, np.ones(X.shape), M, replace=M, ignore=G & ~M)
+    assert not calls and np.isfinite(result.var).all()
 
 
 def test_covariance_needs_a_result_computed_with_covariance_true():
