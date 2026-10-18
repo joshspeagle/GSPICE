@@ -6,7 +6,7 @@ import pytest
 from numpy.linalg import LinAlgError
 
 from _golden import checked, same
-from gspice import _model, _spectra, fit, pixelwise, scale
+from gspice import _model, _spectra, fit, pixelwise, scale, snr
 from gspice._linalg import precision
 
 EPS = np.finfo(float).eps
@@ -258,6 +258,22 @@ def test_a_singular_covariance_raises_naming_its_fit_and_n_s(nsigma, covariance)
         fit(flux, ivar, mask, nguard=NGUARD, nsigma=nsigma)
 
 
+def test_a_singular_covariance_of_a_bin_raises_naming_the_bin_and_its_n_s():
+    # Rows 0 to 99, with 16 times the ivar, form bin 1, where pixel 1 repeats pixel 0.
+    flux, ivar, mask = spectra()
+    ivar[:100] *= 16
+    for array in (flux, ivar, mask):
+        array[:100, 1] = array[:100, 0]
+    ratio = snr(flux, ivar, mask)
+    edge = float(ratio[100:].max() + ratio[:100].min()) / 2
+    assert ratio[100:].max() < edge < ratio[:100].min()
+    message = (
+        rf"^fit: the final covariance of S/N bin 1 \(snr >= {edge}\) \(N_s = 100\) is "
+    )
+    with pytest.raises(LinAlgError, match=message):
+        fit(flux, ivar, mask, nguard=NGUARD, nsigma=(), snr_bins=(edge,))
+
+
 def test_a_pixel_of_variance_0_raises_naming_its_fit():
     flux, ivar, mask = spectra()
     # Pixel 4 is good and 0 in every spectrum. 2022 also raised LinAlgError.
@@ -382,3 +398,187 @@ def test_a_low_rank_fit_needs_no_good_pixel_at_every_pixel():
         fit(flux, ivar, mask, nguard=NGUARD, nsigma=())
     model, _ = fit(flux, ivar, mask, nguard=NGUARD, nsigma=(), rank=3)
     assert np.all(model.cov[0].diag > 0)
+
+
+def test_snr_bins_puts_the_edges_at_quantiles_of_the_used_spectra_and_assigns_them():
+    # Row 10 has more than maxbadpix bad pixels and row 11 weight 0. Both are left
+    # out of the quantiles, and an S/N far above the others would move the top edge.
+    flux, ivar, mask = spectra()
+    mask[10, :5] = True
+    ivar[10:12, ~mask[10]] *= 100
+    weights = np.ones(NSPEC)
+    weights[11] = 0.0
+    options = {"nguard": NGUARD, "nsigma": (), "maxbadpix": 4, "weights": weights}
+    model, training = fit(flux, ivar, mask, **options, snr_bins=3)
+    ratio = snr(flux, ivar, mask)
+    used = np.ones(NSPEC, dtype=bool)
+    used[[10, 11]] = False
+    edges = tuple(np.quantile(ratio[used], [1 / 3, 2 / 3]))
+    assert model.edges == edges
+    bins = np.searchsorted(edges, ratio, side="right")
+    assert model.n_train == tuple(np.bincount(bins[used]))
+    np.testing.assert_array_equal(training.all(axis=1), ~used)
+    # A sequence gives the interior edges, and an edge equal to an S/N puts that
+    # spectrum in the bin above it.
+    given = (float(np.sort(ratio)[60]), 16.0)
+    model, _ = fit(flux, ivar, mask, **options, snr_bins=given)
+    bins = np.searchsorted(given, ratio, side="right")
+    assert model.edges == given
+    assert model.n_train == tuple(np.bincount(bins[used]))
+    assert np.count_nonzero(bins[used] == 0) == 60
+    # A spectrum without a good pixel, which only maxbadpix >= npix lets through to the
+    # full-mask check, is left out of the quantiles and the fit like one of weight 0.
+    options["maxbadpix"] = NPIX
+    weights[12] = 0.0
+    model, _ = fit(flux, ivar, mask, **options, snr_bins=3)
+    weights[12] = 1.0
+    mask[12] = True
+    full, training = fit(flux, ivar, mask, **options, snr_bins=3)
+    assert same(
+        (full.edges, full.n_train, full.mean), (model.edges, model.n_train, model.mean)
+    )
+    assert training[12].all()
+
+
+@pytest.mark.parametrize(
+    "options",
+    [{}, {"center": 0.9, "weights": np.linspace(1, 2, NSPEC)}, {"rank": 3}],
+    ids=["dense", "center-weights", "rank"],
+)
+def test_each_bin_is_the_fit_of_its_spectra_alone(options):
+    # Design decision A6: each bin clips and fits its own spectra. Spikes in rows 0
+    # to 9 give flags.
+    flux, ivar, mask = spectra()
+    for s in range(10):
+        spike(flux, ivar, s, s, 40.0)
+    options = {"nguard": NGUARD, "nsigma": (10, 6)} | options
+    weights = options.pop("weights", None)
+    calls, progress = recorder()
+    model, training = fit(
+        flux, ivar, mask, **options, weights=weights, snr_bins=3, progress=progress
+    )
+    bad = (mask != 0) | (ivar == 0)
+    assert np.any(training & ~bad & ~training.all(axis=1)[:, np.newaxis])
+    bins = np.searchsorted(model.edges, snr(flux, ivar, mask), side="right")
+    single_calls, single_progress = recorder()
+    for b in range(3):
+        rows = bins == b
+        single, single_mask = fit(
+            flux[rows],
+            ivar[rows],
+            mask[rows],
+            **options,
+            weights=None if weights is None else weights[rows],
+            progress=single_progress,
+        )
+        pair = (model.cov[b], single.cov[0])
+        if "rank" in options:
+            pair = tuple(map(astuple, pair))
+        assert same(*pair)
+        assert same(
+            (model.mean[b], model.n_train[b], training[rows]),
+            (single.mean[0], single.n_train[0], single_mask),
+        )
+        # pixelwise uses the precision matrix that fit computed for the bin.
+        assert same(model._precision(b), single._precision(0))
+    # Each fit of a bin counts its own spectra.
+    assert calls == single_calls
+    assert model.weighted is (weights is not None)
+
+
+def test_snr_bins_1_gives_the_fit_of_one_bin_bit_for_bit():
+    flux, ivar, mask = spectra()
+    spike(flux, ivar, 0, 5, 40.0)
+    weights = np.linspace(1, 2, NSPEC)
+    default, default_mask = fit(flux, ivar, mask, nguard=NGUARD, weights=weights)
+    model, training = fit(flux, ivar, mask, nguard=NGUARD, weights=weights, snr_bins=1)
+    assert same(
+        (model.mean, model.cov, model.n_train, model.edges, model.weighted, training),
+        (
+            default.mean,
+            default.cov,
+            default.n_train,
+            default.edges,
+            default.weighted,
+            default_mask,
+        ),
+    )
+
+
+def test_a_bin_below_its_requirement_raises_naming_it():
+    # Bin 2 holds the 12 spectra of highest S/N, too few for 12 pixels: 11 and one
+    # without a good pixel, whose S/N is inf and which maxbadpix removes. One of
+    # them has weight 0. The counts leave out the spectra of bin 1 that maxbadpix
+    # and weight 0 remove.
+    flux, ivar, mask = spectra()
+    mask[0, :5] = True
+    ratio = snr(flux, ivar, mask)
+    mask[1] = True
+    ratio[1] = np.inf
+    order = np.argsort(ratio)
+    edges = (float(ratio[order[20]]), float(ratio[order[188]]))
+    assert edges[0] < ratio[0] < edges[1]
+    weights = np.ones(NSPEC)
+    weights[order[[195, 102]]] = 0.0
+    message = (
+        rf"^fit: pass 1 of S/N bin 2 \(snr >= {edges[1]}\) needs at least 13 spectra "
+        r"for a mean-centred model of 12 pixels, got 10: of 12 spectra, maxbadpix "
+        r"removed 1, weight 0 removed 1 and full masks removed 0$"
+    )
+    calls, progress = recorder()
+    with pytest.raises(ValueError, match=message):
+        fit(
+            flux,
+            ivar,
+            mask,
+            maxbadpix=4,
+            weights=weights,
+            snr_bins=edges,
+            progress=progress,
+        )
+    # Before bins 0 and 1 clip.
+    assert calls == []
+    # A bin between two edges names both.
+    edges = (float(ratio[order[20]]), float(ratio[order[32]]))
+    message = rf"^fit: pass 1 of S/N bin 1 \({edges[0]} <= snr < {edges[1]}\) needs "
+    with pytest.raises(ValueError, match=message):
+        fit(flux, ivar, mask, snr_bins=edges)
+
+
+def test_tied_quantiles_leave_a_bin_empty_and_raise_naming_it():
+    # 150 copies of row 0 tie the quantiles at 1/3 and 2/3, so bin 1 between them is
+    # empty.
+    flux, ivar, mask = spectra()
+    for array in (flux, ivar, mask):
+        array[50:] = array[0]
+    tie = snr(flux[:1], ivar[:1], mask[:1])[0]
+    message = rf"^fit: pass 1 of S/N bin 1 \({tie} <= snr < {tie}\) needs .* got 0"
+    with pytest.raises(ValueError, match=message):
+        fit(flux, ivar, mask, nguard=NGUARD, snr_bins=3)
+
+
+def test_weights_equal_within_each_bin_give_an_unweighted_model():
+    # Only the ratios of the weights in a bin matter, so f_s holds (design A13).
+    flux, ivar, mask = spectra()
+    edges = (float(np.median(snr(flux, ivar, mask))),)
+    bins = np.searchsorted(edges, snr(flux, ivar, mask), side="right")
+    options = {"nguard": NGUARD, "snr_bins": edges}
+    model, training = fit(flux, ivar, mask, **options)
+    scaled, scaled_mask = fit(flux, ivar, mask, **options, weights=1.0 + bins)
+    assert scaled.weighted is False
+    # Unequal weights in one bin make the model weighted.
+    weights = np.where(bins == 1, np.linspace(1, 2, NSPEC), 1.0)
+    assert fit(flux, ivar, mask, **options, weights=weights)[0].weighted is True
+    assert same(
+        (scaled.mean, scaled.cov, scaled_mask), (model.mean, model.cov, training)
+    )
+
+
+def test_snr_bins_without_a_used_spectrum_raises_the_requirement_error():
+    # No quantiles exist, so the fit has one bin and raises as without snr_bins.
+    flux, ivar, mask = spectra()
+    message = (
+        r"^fit: pass 1 needs at least 13 spectra .* got 0: .* weight 0 removed 200"
+    )
+    with pytest.raises(ValueError, match=message):
+        fit(flux, ivar, mask, weights=np.zeros(NSPEC), snr_bins=3)

@@ -22,6 +22,7 @@ from ._spectra import (
     Real,
     boolean,
     check_progress,
+    chunked_snr,
     chunks,
     dilate,
     finite_array,
@@ -30,7 +31,6 @@ from ._spectra import (
     interpolate,
     items,
     listing,
-    median_snr,
     numeric,
     real,
     require,
@@ -251,7 +251,8 @@ class Model:
     center : float or None
         None for a mean-centred model, or the constant centre c (flux).
     weighted : bool
-        True if the model was fitted with positive weights that are not all equal.
+        True if the model was fitted with positive weights that are not all equal in
+        a bin.
     blocks : Blocks or None
         The blocks and thresholds of `fit_blocks`, with a row of thresholds for each
         bin and every block within the npix pixels; None for a model without them.
@@ -376,13 +377,10 @@ class Model:
     def _bins(
         self, flux: NDArray[Any], ivar: NDArray[Any], bad: NDArray[np.bool_]
     ) -> NDArray[np.intp]:
-        bins = np.zeros(len(flux), dtype=np.intp)
         # A model with one bin skips the S/N, which sorts every row.
-        if len(self.cov) > 1:
-            for rows in chunks(*flux.shape):
-                snr = median_snr(flux[rows], ivar[rows], bad[rows])
-                bins[rows] = np.searchsorted(self.edges, snr, side="right")
-        return bins
+        if len(self.cov) == 1:
+            return np.zeros(len(flux), dtype=np.intp)
+        return np.searchsorted(self.edges, chunked_snr(flux, ivar, bad), side="right")
 
     def _guard_weights(
         self, b: int, nguard: int, *, subject: str | None = None
@@ -473,6 +471,7 @@ def fit(
     center: Real | None = None,
     weights: ArrayLike | None = None,
     rank: Integer | None = None,
+    snr_bins: Integer | Iterable[Real] | None = None,
     progress: Progress | None = None,
 ) -> tuple[Model, NDArray[np.bool_]]:
     """Fit a model to training spectra with iterative outlier clipping (paper Alg. 4).
@@ -502,12 +501,19 @@ def fit(
     The final fit uses the final mask and the weights w_s; reweighting the clipping
     raised false flags in the paper (l.548).
 
+    With snr_bins, spectrum s goes to the S/N bin np.searchsorted(edges, snr_s,
+    side="right"), with snr_s from `snr` on flux, ivar and mask. Each bin runs the
+    passes and the final fit above on its own spectra, so bin b of the model equals
+    the model of fit on the spectra of bin b alone, with their own clipping, m, S and
+    N_s. Each bin clips with its own N_s, so the in-sample ceiling of |z| falls in
+    small bins, and they flag fewer outliers (design decision A6).
+
     With cumulative=False, fit equals legacy covar_iter_mask, the covariance to
-    rounding and the mask exactly, if nguard is 20, center, weights and rank are None,
-    flux is float64, ivar == 0 only at pixels in mask, nsigma is not empty, no |z| lies
-    within the error of the 2022 Schur updates of a threshold, no pass mask or final
-    mask covers completely a spectrum with at most maxbadpix bad pixels, and fit
-    raises no error.
+    rounding and the mask exactly, if nguard is 20, center, weights, rank and snr_bins
+    are None, flux is float64, ivar == 0 only at pixels in mask, nsigma is not empty,
+    no |z| lies within the error of the 2022 Schur updates of a threshold, no pass
+    mask or final mask covers completely a spectrum with at most maxbadpix bad pixels,
+    and fit raises no error.
 
     Parameters
     ----------
@@ -530,17 +536,24 @@ def fit(
     rank : int, optional
         The rank K of a low-rank model, used by every pass; from 1 to npix - 1. None:
         a dense model.
+    snr_bins : int or sequence of float, optional
+        The S/N bins: their number n >= 1, with the interior edges at the 1/n, ...,
+        (n - 1)/n quantiles (np.quantile, linear) of snr_s of the spectra that fit uses
+        (at most maxbadpix bad pixels, a weight > 0 and a good pixel); or the interior
+        edges, finite and strictly increasing. None: one bin.
     progress : callable, optional
         progress(stage, done, total), called after each chunk of spectra of each pass
         and of the final fit, with the stage "fit", the number of spectra of that fit
-        done, and their total N_s.
+        done, and their total N_s; with S/N bins, each fit of a bin counts the
+        spectra of that bin.
 
     Returns
     -------
     model : Model
-        The model, of one bin, with n_train (N_s,), the centre, weighted True if the
-        weights of the spectra of the final fit are not all equal, and a `LowRank`
-        covariance with rank=K. It holds its precision matrix (see `Model`).
+        The model, with the edges, N_s of each bin in n_train, the centre, weighted
+        True if the weights of the spectra of a bin in the final fit are not all equal,
+        and `LowRank` covariances with rank=K. It holds its precision matrices (see
+        `Model`).
     mask : ndarray of bool, shape (nspec, npix)
         The final mask, and True at every pixel of a spectrum that is not used.
 
@@ -550,29 +563,33 @@ def fit(
         If an argument has a type or a dtype that is not allowed above.
     ValueError
         If an argument has a shape or a value that is not allowed above, or if a fit
-        lacks the spectra it needs: for a dense model, N_s - 1 >= npix if it is
-        mean-centred, N_s >= npix for a constant centre, and a good pixel in one of
-        them at every pixel; with rank=K, N_s - 1 >= K + 1 if it is mean-centred and
-        N_s >= K + 1 for a constant centre, for S of rank K + 1 or more. With rank=K,
-        also if lambda_K <= 0 or a d_i <= 0. The message names the counts, the first
-        such pixels, or lambda_K.
+        (of a bin, with snr_bins) lacks the spectra it needs: for a dense model,
+        N_s - 1 >= npix if it is mean-centred, N_s >= npix for a constant centre, and
+        a good pixel in one of them at every pixel; with rank=K, N_s - 1 >= K + 1 if
+        it is mean-centred and N_s >= K + 1 for a constant centre, for S of rank
+        K + 1 or more. With rank=K, also if lambda_K <= 0 or a d_i <= 0. The message
+        names the pass or the final fit, the bin and its edges, the counts, the first
+        such pixels, or lambda_K. fit checks the counts of every bin before any bin
+        clips.
     numpy.linalg.LinAlgError
         If a covariance has a variance of 0, or fails the check of its precision
         matrix: it is not positive definite, or the reciprocal condition number of the
         covariance scaled to unit diagonal is below 1e-13, which can happen for N_s - 1
         close to npix; with rank=K, kappa_W of `LowRank` is above 1e13. Clipping checks
-        P only if nguard < npix - 1. The message names the pass or the final fit and
-        N_s, and the pixel of variance 0, the reciprocal condition number below 1e-13
-        or kappa_W.
+        P only if nguard < npix - 1. The message names the pass or the final fit, the
+        bin and N_s, and the pixel of variance 0, the reciprocal condition number below
+        1e-13 or kappa_W.
 
     Notes
     -----
-    Cost per pass: about N_s npix^2 flops for the covariance, npix^3 for its precision
-    matrix, npix (w^3/3 + 2 npix w) for the guard weights, w = min(2 nguard + 1, npix),
-    and 2 N_s npix^2 for z. The final fit costs about N_s npix^2 + npix^3 flops. With
-    rank=K, each fit adds about (4/3) npix^3 flops for the K leading eigenpairs of S,
-    more than the npix^3 of a dense P, and P then costs about npix^2 K flops. Each
-    fit holds the working vectors of its spectra, N_s npix x 8 bytes.
+    Cost per pass and bin: about N_s npix^2 flops for the covariance, npix^3 for its
+    precision matrix, npix (w^3/3 + 2 npix w) for the guard weights,
+    w = min(2 nguard + 1, npix), and 2 N_s npix^2 for z, with N_s of the bin. The
+    final fit costs about N_s npix^2 + npix^3 flops per bin. With nbin > 1, the S/N
+    sorts the npix values of each spectrum once. With rank=K, each fit adds about
+    (4/3) npix^3 flops for the K leading eigenpairs of S, more than the npix^3 of a
+    dense P, and P then costs about npix^2 K flops. Each fit holds the working vectors
+    of its spectra, N_s npix x 8 bytes.
     """
     start = time.perf_counter()
     thresholds = _thresholds(nsigma)
@@ -583,6 +600,8 @@ def fit(
         center = real(center, "center")
     if rank is not None:
         rank = integer(rank, "rank", 1)
+    if snr_bins is not None:
+        snr_bins = _snr_bins(snr_bins)
     check_progress(progress)
     flux, ivar, bad = validate(flux, ivar, mask)
     nspec, npix = flux.shape
@@ -597,12 +616,90 @@ def fit(
         require(weights >= 0, weights, "weights", "values >= 0", ("row",))
     over = np.count_nonzero(bad, axis=1) > maxbadpix
     zero = ~over & (weights == 0)
-    removed = (nspec, int(np.count_nonzero(over)), int(np.count_nonzero(zero)))
     rows = np.flatnonzero(~over & ~zero & ~bad.all(axis=1))
+    edges, bins = _assign(flux, ivar, bad, rows, snr_bins)
+    nbin = len(edges) + 1
+    # Each bin runs the whole procedure on its own spectra (design decision A6).
+    spectra = [rows[bins[rows] == b] for b in range(nbin)]
+    names = [_of(b, edges) for b in range(nbin)]
+    removed = [_removed(bins == b, over, zero) for b in range(nbin)]
+    # The check of pass 1 of every bin before any bin clips, as validation.
+    first = "pass 1" if thresholds else "the final fit"
+    for group, of, counts in zip(spectra, names, removed, strict=True):
+        _check(bad[group], center, rank, first + of, counts)
+    clip = partial(
+        _clip,
+        flux,
+        ivar,
+        bad,
+        thresholds=thresholds,
+        cumulative=cumulative,
+        center=center,
+        rank=rank,
+        nguard=nguard,
+        progress=progress,
+    )
+    masks, models = [], []
+    for group, of, counts in zip(spectra, names, removed, strict=True):
+        used, M = clip(rows=group, removed=counts, of=of)
+        masks.append((used, M))
+        models.append(
+            _final(
+                flux,
+                ivar,
+                used,
+                M,
+                weights=weights,
+                center=center,
+                rank=rank,
+                removed=counts,
+                of=of,
+                progress=progress,
+            )
+        )
+    if edges:
+        model = Model(
+            np.concatenate([single.mean for single in models]),
+            [single.cov[0] for single in models],
+            [single.n_train[0] for single in models],
+            edges=edges,
+            center=center,
+            weighted=any(single.weighted for single in models),
+        )
+        # The precision matrices that _final checked, shared as in _with_blocks.
+        for b, single in enumerate(models):
+            model._cache["precision", b] = single._precision(0)
+    else:
+        model = models[0]
+    # After the fits, which hold their working vectors.
+    training = np.ones((nspec, npix), dtype=bool)
+    for used, M in masks:
+        training[used] = M
+    _logger.debug("fit: %d spectra in %.3f s", nspec, time.perf_counter() - start)
+    return model, training
+
+
+def _clip(
+    flux: NDArray[Any],
+    ivar: NDArray[Any],
+    bad: NDArray[np.bool_],
+    *,
+    thresholds: tuple[float, ...],
+    cumulative: bool,
+    center: float | None,
+    rank: int | None,
+    nguard: int,
+    progress: Progress | None,
+    rows: NDArray[np.intp],
+    removed: tuple[int, int, int],
+    of: str,
+) -> tuple[NDArray[np.intp], NDArray[np.bool_]]:
+    # The clipping passes of the spectra rows, with unit weights (decision A23): the
+    # rows that the final fit uses and their final mask. of names the bin.
     M = bad[rows]
-    n_cond = max(npix - 2 * nguard - 1, 0)
+    n_cond = max(bad.shape[1] - 2 * nguard - 1, 0)
     for n, threshold in enumerate(thresholds, 1):
-        _check(M, center, rank, f"pass {n}", removed)
+        _check(M, center, rank, f"pass {n}{of}", removed)
         n_train = rows.size
         # In a spectrum of typical leverage, the in-sample |z| of an outlier of any
         # amplitude approaches this ceiling of a dense model (design section 4.1). No
@@ -614,14 +711,15 @@ def fit(
                 ceiling = math.sqrt(n_train - n_cond)
             if threshold > ceiling:
                 _logger.warning(
-                    "fit: pass %d has nsigma %g above %.3g, the in-sample ceiling of "
-                    "|z| at N_s = %d",
+                    "fit: pass %d%s has nsigma %g above %.3g, the in-sample ceiling "
+                    "of |z| at N_s = %d",
                     n,
+                    of,
                     threshold,
                     ceiling,
                     n_train,
                 )
-        subject = f"fit: the clipping covariance of pass {n} (N_s = {n_train})"
+        subject = f"fit: the clipping covariance of pass {n}{of} (N_s = {n_train})"
         z = _clipping_z(flux, ivar, rows, M, center, rank, nguard, subject, progress)
         flagged = dilate(np.abs(z, out=z) > threshold, 1)
         # Free z before the next fit allocates its working vectors.
@@ -633,34 +731,51 @@ def fit(
             M = bad[rows] | flagged
         keep = ~M.all(axis=1)
         _logger.info(
-            "fit: pass %d with nsigma %g flagged %.3g%% of the pixels of its %d "
+            "fit: pass %d%s with nsigma %g flagged %.3g%% of the pixels of its %d "
             "spectra; spectra dropped: %d",
             n,
+            of,
             threshold,
             100 * np.count_nonzero(flagged) / flagged.size,
             n_train,
             n_train - np.count_nonzero(keep),
         )
         rows, M = rows[keep], M[keep]
-    _check(M, center, rank, "the final fit", removed)
+    return rows, M
+
+
+def _final(
+    flux: NDArray[Any],
+    ivar: NDArray[Any],
+    rows: NDArray[np.intp],
+    M: NDArray[np.bool_],
+    *,
+    weights: NDArray[np.float64],
+    center: float | None,
+    rank: int | None,
+    removed: tuple[int, int, int],
+    of: str,
+    progress: Progress | None,
+) -> Model:
+    # The final fit of the spectra rows on their final mask M, with the weights: a
+    # model of one bin that holds its checked P. of names the bin.
+    fitted = f"the final fit{of}"
+    _check(M, center, rank, fitted, removed)
     n_train = rows.size
     # Only the ratios of the weights matter. In units of the largest, V2 neither
     # overflows nor underflows, and equal weights are exactly 1.
     w = weights[rows] / np.max(weights[rows])
-    subject = f"fit: the final covariance (N_s = {n_train})"
+    subject = f"fit: the final covariance{of} (N_s = {n_train})"
     _, model = _fitted(flux, ivar, rows, M, center, rank, w, subject, progress)
     if model.weighted:
         _logger.info(
-            "fit: the final fit of %d spectra is weighted, with V1^2/V2 = %.4g "
-            "effective spectra",
+            "fit: %s of %d spectra is weighted, with V1^2/V2 = %.4g effective spectra",
+            fitted,
             n_train,
             w.sum() ** 2 / np.vdot(w, w),
         )
     model._precision(0, subject=subject)
-    training = np.ones((nspec, npix), dtype=bool)
-    training[rows] = M
-    _logger.debug("fit: %d spectra in %.3f s", nspec, time.perf_counter() - start)
-    return model, training
+    return model
 
 
 def _thresholds(value: object) -> tuple[float, ...]:
@@ -674,6 +789,62 @@ def _thresholds(value: object) -> tuple[float, ...]:
     ok = np.isfinite(nsigma) & (nsigma > 0)
     require(ok, nsigma, "nsigma", "finite values > 0", ("element",))
     return tuple(nsigma.astype(np.float64).tolist())
+
+
+def _snr_bins(value: Any) -> int | tuple[float, ...]:
+    # The interior edges, or the number of bins (design section 8).
+    if isinstance(value, Iterable):
+        edges = items(value, "snr_bins", None, real)
+        _increasing(edges, "snr_bins")
+        return edges
+    return integer(value, "snr_bins", 1)
+
+
+def _assign(
+    flux: NDArray[Any],
+    ivar: NDArray[Any],
+    bad: NDArray[np.bool_],
+    rows: NDArray[np.intp],
+    snr_bins: int | tuple[float, ...] | None,
+) -> tuple[tuple[float, ...], NDArray[np.intp]]:
+    # The interior edges and the bin of every spectrum (design section 4.1, S/N
+    # statistic). A spectrum without a good pixel has the S/N inf of chunked_snr, so it
+    # goes to the last bin, where it counts among the spectra that maxbadpix, weight 0
+    # or full masks removed.
+    if snr_bins is None or snr_bins == 1:
+        return (), np.zeros(len(flux), dtype=np.intp)
+    ratio = chunked_snr(flux, ivar, bad)
+    if isinstance(snr_bins, int):
+        # Equal-count bins of the spectra of the first pass (decision A5).
+        q = np.arange(1, snr_bins) / snr_bins
+        edges = tuple(np.quantile(ratio[rows], q).tolist()) if rows.size else ()
+    else:
+        edges = snr_bins
+    return edges, np.searchsorted(edges, ratio, side="right")
+
+
+def _of(b: int, edges: tuple[float, ...]) -> str:
+    # The name of bin b in messages; none for a model of one bin.
+    if not edges:
+        return ""
+    if b == 0:
+        where = f"snr < {edges[0]}"
+    elif b == len(edges):
+        where = f"snr >= {edges[-1]}"
+    else:
+        where = f"{edges[b - 1]} <= snr < {edges[b]}"
+    return f" of S/N bin {b} ({where})"
+
+
+def _removed(
+    in_bin: NDArray[np.bool_], over: NDArray[np.bool_], zero: NDArray[np.bool_]
+) -> tuple[int, int, int]:
+    # The spectra of a bin, and those of them that maxbadpix and weight 0 removed.
+    return (
+        int(np.count_nonzero(in_bin)),
+        int(np.count_nonzero(in_bin & over)),
+        int(np.count_nonzero(in_bin & zero)),
+    )
 
 
 def _check(
