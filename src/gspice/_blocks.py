@@ -115,16 +115,17 @@ def fit_blocks(
     -----
     Cost: npix^3 flops for P at the first use of a bin, then |G|^3/3 flops per bin and
     block, and about 2 npix^2 + sum_A |G|^2 flops per spectrum, plus the `infill` of the
-    bad pixels. The factors of all bins take nbin sum_A |G|^2 x 8 bytes during the scan:
-    8.8 MB per bin at npix 2400 with the defaults, and 649 MB at stride 1. Beyond the
-    inputs and their float64 copies if they are long double, fit_blocks holds a bool
-    array of the input shape, chi2 of the spectra of one bin (nblock float64 per
-    spectrum), and a few float64 arrays of one chunk of max(1, 2**24 // npix) spectra.
-    The new model shares the arrays of model, its precision matrices and its guard
-    weights (see `Model`). A noise model forms P_s, npix^3 flops for a dense cov[0] or
-    npix^2 K for a `LowRank` of rank K, and the factors of the blocks for each spectrum,
-    unless every block covers all pixels with its guard and, for a dense cov[0], the
-    spectrum has no bad pixel: the infill of a `LowRank` forms no P_s (see `infill`).
+    bad pixels, of the mean only. The factors of all bins take nbin sum_A |G|^2 x 8
+    bytes during the scan: 8.8 MB per bin at npix 2400 with the defaults, and 649 MB at
+    stride 1. Beyond the inputs and their float64 copies if they are long double,
+    fit_blocks holds a bool array of the input shape, chi2 of the spectra of one bin
+    (nblock float64 per spectrum), and a few float64 arrays of one chunk of
+    max(1, 2**24 // npix) spectra. The new model shares the arrays of model, its
+    precision matrices and its guard weights (see `Model`). A noise model forms P_s,
+    npix^3 flops for a dense cov[0] or npix^2 K for a `LowRank` of rank K, and the
+    factors of the blocks for each spectrum, unless every block covers all pixels with
+    its guard and, for a dense cov[0], the spectrum has no bad pixel: the infill of a
+    `LowRank` forms no P_s (see `infill`).
     """
     start = time.perf_counter()
     width = integer(width, "width", 1)

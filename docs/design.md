@@ -709,7 +709,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 - (f) Blockwise prediction on spectra with their own bad pixels: one factor for the shared part of G and a rank-|E_s| update for the extra bad pixels E_s of each spectrum.
 - (g) No copy of X in `solve_pattern`: a sum of products over the runs of O, the pixels outside G, which skips the G columns of the product. PR 5.5 measured 11.4% of a shared `infill` at |G| 1200, and −2.2% to 1.9% with one spectrum per pattern, where the pull request must show no slowdown.
 - (h) χ² only in `calibration`: an option of `solve_pattern` that skips the inverse of R_MM, which only the variances and the covariance need, passed through the private prediction core of issue #59. Done in #85 as `variance=False`.
-- (i) Mean only in the infills of the block pass of `repair`, with the same option of `solve_pattern` as (h). Before step 3 reused the block pass, PR #67 measured 24% of a `repair` call at npix 2400 with `artifacts=0.4`.
+- (i) Mean only in the infills of the block pass of `repair`, with the same option of `solve_pattern` as (h). Done in #86 as `variance=False` in `filled`.
 - (j) The conditional mean from a Cholesky factor of C_OO where |G| > npix/2, in the infills of the block pass of `repair`, at |O|³/3 flops instead of |G|³/3 for R and |G|³/3 for its inverse. With (i), PR #67 measured 21% of the same call, with masks and flux unchanged and x_b within 3e-11 relative of the P route, at cond(C_OO) about 1e6 against 6e2 for P_GG. It changes the numerics, so it needs the direct-solve tests of CLAUDE.md up to κ 1e8.
 - (k) Lanczos (`eigsh`) for the K leading eigenpairs in `fit(rank=K)` (#93).
 
