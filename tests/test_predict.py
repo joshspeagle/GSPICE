@@ -979,6 +979,18 @@ def test_infill_of_a_low_rank_noise_model_forms_no_p_s(monkeypatch):
     infill(model, flux, ivar, mask, replace=REPLACE, ignore=IGNORE, covariance=True)
 
 
+def test_infill_of_a_dense_noise_model_forms_no_p_s(monkeypatch):
+    # Design section 12, (e): the conditionals come from the Cholesky factor of C_s.
+    def precision(*args):
+        raise AssertionError("precision forms P_s")
+
+    monkeypatch.setattr(_model, "precision", precision)
+    model, flux, ivar, mask = noise_case(1e2)
+    rng = np.random.default_rng(0)
+    options = {"replace": REPLACE, "ignore": IGNORE, "covariance": True, "rng": rng}
+    infill(model, flux, ivar, mask, **options)
+
+
 @pytest.mark.parametrize(
     "C",
     [np.ones((NPIX, NPIX)), LowRank(np.ones((NPIX, 1)), [1.0], np.zeros(NPIX))],

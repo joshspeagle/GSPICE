@@ -82,7 +82,10 @@ def repair(
        K is M | I for count_on="all". For "flagged", K holds the pixels outside bad
        with |z(x)| > nsigma_replace or |z(x1)| > nsigma_ignore, and M_b.
     5. The result is that of `infill` with replace=M, ignore=I, and inflate,
-       covariance and rng, bit for bit, plus the flagged blocks.
+       covariance and rng, bit for bit, plus the flagged blocks. For a dense noise
+       model whose steps 1 to 4 form P_s, for guard windows or blocks short of all
+       pixels, step 5 conditions on that P_s, where `infill` uses the Cholesky factor
+       of C_s, so the two agree to rounding.
 
     Nothing limits the replaced set; the paper measured calibration up to 1024 of 2415
     replaced pixels (l.530). Since M and I depend on the data, f_s does not hold for

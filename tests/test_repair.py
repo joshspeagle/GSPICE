@@ -17,6 +17,7 @@ from gspice import (
     LowRank,
     Model,
     _model,
+    _predict,
     _repair,
     _spectra,
     finite_sample_factor,
@@ -30,6 +31,7 @@ from gspice import (
 from gspice._blocks import block_chi2
 from gspice._predict import filled
 from gspice._repair import _exclude_extended
+from oracle import condition
 
 
 def exclusion(M, I, K, *numbers):
@@ -488,8 +490,10 @@ def test_a_noise_model_follows_the_steps_with_one_precision_matrix_per_spectrum(
 ):
     # The noise model of the distribution of artifact_case in flux units: a_s = A at
     # every spectrum, so nu_s = 1/A^2 at every pixel and C_s = C/A^2. The steps of the
-    # public pixelwise and infill of the noise model give its masks, and step 5 is
-    # infill of the noise model bit for bit, which forms P_s again from the same C_s.
+    # public pixelwise and infill of the noise model give its masks. Step 5 uses the
+    # P_s of the guard weights, where infill uses the factor of C_s (design section
+    # 12, (e)): it is that infill bit for bit when infill forms P_s first, and agrees
+    # with the public infill to rounding.
     model, flux, ivar, mask = artifact_case()
     signal = (model.cov[0] - np.eye(NPIX)) / A**2
     noise = Model(model.mean / A, (signal,), (1000,), noise=True, blocks=model.blocks)
@@ -501,6 +505,29 @@ def test_a_noise_model_follows_the_steps_with_one_precision_matrix_per_spectrum(
     result = repair(noise, flux, ivar, mask, **OPTIONS, **options, rng=rng())
     assert same(result.replaced, case.M) and same(result.ignored, case.ignored)
     assert same(result.blocks, case.flagged)
+    inputs = (noise, flux, ivar, mask)
+    masks = {"replace": result.replaced, "ignore": result.ignored}
+    public = infill(*inputs, **masks, covariance=True)
+    # Each route lies within 10 kappa eps of the exact conditional (design section 11),
+    # with C_s = C / A^2 of the condition number of C.
+    tol = 2 * 10 * condition(model.cov[0]) * np.finfo(float).eps
+    replaced = result.replaced
+    sigma = np.sqrt(public.var[replaced])
+    assert np.all(np.abs(result.flux - public.flux)[replaced] <= tol * sigma)
+    assert np.all(np.abs(result.var - public.var)[replaced] <= tol * sigma**2)
+    assert np.all(np.abs(result.chi2 - public.chi2) <= tol * (public.chi2 + public.dof))
+    for s in range(NSPEC):
+        cov = public.covariance(s)[1]
+        scale = np.sqrt(np.outer(np.diagonal(cov), np.diagonal(cov)))
+        assert np.all(np.abs(result.covariance(s)[1] - cov) <= tol * scale)
+
+    def with_precision(*args):
+        cover = noisy(*args)
+        cover._precision(0)
+        return cover
+
+    noisy = _predict.noisy
+    monkeypatch.setattr(_predict, "noisy", with_precision)
     expected = infill(
         noise,
         flux,

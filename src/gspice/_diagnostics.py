@@ -554,9 +554,8 @@ def calibration(
     pattern of a chunk of max(1, 2**24 // npix) spectra, at most one per spectrum,
     |G|^3/3 flops, or n^3/3 where G covers all pixels, and per spectrum
     2 |G| (npix + |G|) flops. The masks of a chunk take up to len(sizes) x 2^24
-    bytes. A noise model forms P_s once per spectrum for all sizes, npix^3 flops for a
-    dense cov[0]; a `LowRank` cov[0] forms none, and costs per spectrum and size as in
-    `infill`, with M = T.
+    bytes. A noise model costs per spectrum and size as in `infill`, with M = T; a
+    dense cov[0] factors C_s once per spectrum for all sizes.
     """
     start = time.perf_counter()
     if sizes is not None:
@@ -580,7 +579,7 @@ def calibration(
     bins = model._bins(flux, ivar, bad)
     # P of each bin with a spectrum that keeps a conditioning pixel for some size
     # (m > n), before any spectrum, so that a covariance that fails its check raises
-    # at once, as in infill. A noise model forms P_s per spectrum.
+    # at once, as in infill. A noise model factors C_s per spectrum.
     if not model.noise:
         for b in np.unique(bins[count > min(sizes)]).tolist():
             model._precision(b)

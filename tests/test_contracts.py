@@ -29,7 +29,7 @@ from gspice import (
     snr,
     unscale,
 )
-from gspice._linalg import precision
+from gspice._linalg import cholesky, precision
 
 SPECTRA = {"flux": np.ones((2, 3)), "ivar": np.ones((2, 3)), "mask": np.zeros((2, 3))}
 UNSCALE = {"x": np.zeros((2, 3)), "refscale": np.ones(2), "refmean": np.zeros(3)}
@@ -653,8 +653,13 @@ NOISE = Model(
         (partial(fit_blocks, width=1, nguard=0, percentile=50), [0, 1, 2, 3]),
         (partial(repair, nguard=1), [0, 1, 2, 3]),
         (partial(calibration, sizes=(2, 3), rng=np.random.default_rng(0)), [0, 2, 3]),
+        # Rows 0, 2 and 3 condition twice, at sizes 1 and 2, on one factor.
+        (
+            partial(calibration, sizes=(1, 2), rng=np.random.default_rng(0)),
+            [0, 1, 2, 3],
+        ),
         (partial(noise_audit, nguard=1), [0, 1, 2, 3]),
-        # The prior needs no precision matrix.
+        # The prior needs neither.
         (partial(pixelwise, nguard=2), []),
     ],
     ids=[
@@ -663,25 +668,31 @@ NOISE = Model(
         "fit_blocks",
         "repair",
         "calibration",
+        "calibration sizes",
         "noise_audit",
         "prior",
     ],
 )
-def test_a_noise_model_forms_the_precision_matrix_of_each_spectrum_once_per_call(
+def test_a_noise_model_factors_the_c_s_of_each_spectrum_once_per_call(
     monkeypatch, function, expected
 ):
-    # Design section 4.2: P_s once per spectrum and call, for every operation of the
-    # call, and never P of the noise-free covariance. Chunks of two spectra. Row 1
-    # has a bad pixel, so that its two good pixels leave calibration none to
-    # condition on at the sizes 2 and 3; C_s differs between spectra, as ivar does.
+    # Design section 4.2: P_s or the Cholesky factor of C_s once per spectrum and
+    # call, for every operation of the call, and never P or a factor of the noise-free
+    # covariance. Chunks of two spectra. Row 1 has a bad pixel, so that its two good
+    # pixels leave calibration none to condition on at the sizes 2 and 3; C_s differs
+    # between spectra, as ivar does.
     monkeypatch.setattr(_spectra, "CHUNK", 6)
     calls = []
 
-    def counted(S):
-        calls.append(np.diagonal(S) - 0.5)
-        return precision(S)
+    def counted(factor):
+        def wrapped(S):
+            calls.append(np.diagonal(S) - 0.5)
+            return factor(S)
 
-    monkeypatch.setattr(_model, "precision", counted)
+        return wrapped
+
+    for factor in (cholesky, precision):
+        monkeypatch.setattr(_model, factor.__name__, counted(factor))
     ivar = np.array([[1.0, 2.0, 4.0], [1.0, 0.0, 2.0], [4.0] * 3, [0.5] * 3])
     flux = np.random.default_rng(3).standard_normal(ivar.shape)
     function(NOISE, flux, ivar)
