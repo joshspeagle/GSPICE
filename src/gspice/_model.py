@@ -172,10 +172,11 @@ class LowRank:
         The K >= 1 columns of V, for npix >= 1 pixels: finite. `fit` returns
         orthonormal columns (unit-free), in decreasing order of values.
     values : ndarray, shape (K,)
-        The variance of each column (scaled^2): finite and > 0.
+        The variance of each column (scaled^2; flux^2 for a noise model): finite and
+        > 0.
     diag : ndarray, shape (npix,)
-        The diagonal term (scaled^2): finite and >= 0; `Model` requires > 0, except
-        for a noise model.
+        The diagonal term (scaled^2; flux^2 for a noise model): finite and >= 0;
+        `Model` requires > 0, except for a noise model.
 
     Raises
     ------
@@ -571,7 +572,10 @@ def fit(
     uncorrelated between pixels and with the signal, and the masks, weights and ivar
     do not depend on the flux; the outlier flags of the final mask break the last
     condition. The model holds mean[0] = mu and cov[0] = Q max(Lambda, 0) Q^T, with
-    Sigma = Q Lambda Q^T its eigendecomposition, which is biased upward.
+    Sigma = Q Lambda Q^T its eigendecomposition, which is biased upward. With rank=K,
+    cov[0] is the `LowRank` C = V diag(lambda) V^T + diag(d), with (V, lambda) the K
+    leading eigenpairs of Sigma and d_i = sum_{k>K} max(lambda_k, 0) Q_ik^2, so that C
+    and Q max(Lambda, 0) Q^T have the same diagonal.
 
     With snr_bins, spectrum s goes to the S/N bin np.searchsorted(edges, snr_s,
     side="right"), with snr_s from `snr` on flux, ivar and mask. Each bin runs the
@@ -582,10 +586,10 @@ def fit(
 
     With cumulative=False, fit equals legacy covar_iter_mask, the covariance to
     rounding and the mask exactly, if nguard is 20, center, weights, rank and snr_bins
-    are None, flux is float64, ivar == 0 only at pixels in mask, nsigma is not empty,
-    no |z| lies within the error of the 2022 Schur updates of a threshold, no pass
-    mask or final mask covers completely a spectrum with at most maxbadpix bad pixels,
-    and fit raises no error.
+    are None, noise is False, flux is float64, ivar == 0 only at pixels in mask,
+    nsigma is not empty, no |z| lies within the error of the 2022 Schur updates of a
+    threshold, no pass mask or final mask covers completely a spectrum with at most
+    maxbadpix bad pixels, and fit raises no error.
 
     Parameters
     ----------
@@ -609,7 +613,7 @@ def fit(
         The rank K of a low-rank model, used by every pass; from 1 to npix - 1. None:
         a dense model.
     noise : bool, optional
-        If True, fit a noise model (see `Model`), with center, rank and snr_bins None.
+        If True, fit a noise model (see `Model`), with center and snr_bins None.
     snr_bins : int or sequence of float, optional
         The S/N bins: their number n >= 1, with the interior edges at the 1/n, ...,
         (n - 1)/n quantiles (np.quantile, linear) of snr_s of the spectra that fit uses
@@ -644,13 +648,14 @@ def fit(
         a good pixel in one of them at every pixel; with rank=K, N_s - 1 >= K + 1 if
         it is mean-centred and N_s >= K + 1 for a constant centre, for S of rank
         K + 1 or more. With rank=K, also if lambda_K <= 0 or a d_i <= 0. If noise is
-        True with a centre, a rank or snr_bins. With noise=True, for the final fit, if
-        fewer than two spectra are good at a pixel, or if a denominator of Sigma is
-        <= 0: with two spectra at each pixel, that happens where no spectrum is good
-        at both pixels of a pair, or by rounding near 0. The message names the pass
-        or the final fit, the bin and its edges, the counts, the first such pixels or
-        pairs of pixels, or lambda_K. fit checks the counts of every bin before any
-        bin clips.
+        True with a centre or snr_bins. With noise=True, the passes need the spectra
+        above, and the final fit raises instead if fewer than two spectra are good at
+        a pixel, if a denominator of Sigma is <= 0, or with rank=K if lambda_K <= 0
+        for Sigma. With two spectra at each pixel, a denominator is <= 0 where no
+        spectrum is good at both pixels of a pair, or by rounding near 0. The message
+        names the pass or the final fit, the bin and its edges, the counts, the first
+        such pixels or pairs of pixels, or lambda_K. fit checks the counts of every
+        bin before any bin clips.
     numpy.linalg.LinAlgError
         If a covariance has a variance of 0, or fails the check of its precision
         matrix: it is not positive definite, or the reciprocal condition number of the
@@ -670,9 +675,9 @@ def fit(
     (4/3) npix^3 flops for the K leading eigenpairs of S, more than the npix^3 of a
     dense P, and P then costs about npix^2 K flops. Each fit holds the working vectors
     of its spectra, N_s npix x 8 bytes. With noise=True, the final fit costs about
-    3 N_s npix^2 flops for A^T A, D1 and D2 and an eigendecomposition of an
-    npix x npix matrix, and holds a few arrays of one chunk of max(1, 2**24 // npix)
-    spectra instead of the working vectors.
+    3 N_s npix^2 flops for A^T A, D1 and D2 and a full eigendecomposition of an
+    npix x npix matrix, also with rank=K, and holds a few arrays of one chunk of
+    max(1, 2**24 // npix) spectra instead of the working vectors.
     """
     start = time.perf_counter()
     thresholds = _thresholds(nsigma)
@@ -686,10 +691,10 @@ def fit(
     noise = boolean(noise, "noise")
     if snr_bins is not None:
         snr_bins = _snr_bins(snr_bins)
-    if noise and (center is not None or snr_bins is not None or rank is not None):
+    if noise and (center is not None or snr_bins is not None):
         raise ValueError(
-            f"noise: expected center, rank and snr_bins None for True, got center "
-            f"{center}, rank {rank} and snr_bins {snr_bins}"
+            f"noise: expected center and snr_bins None for True, got center {center} "
+            f"and snr_bins {snr_bins}"
         )
     check_progress(progress)
     flux, ivar, bad = validate(flux, ivar, mask)
@@ -877,7 +882,7 @@ def _final(
         mean, S, v = _noise_free(flux, ivar, rows, M, w, fitted, progress)
         model = Model(
             mean[np.newaxis],
-            (_floored(S),),
+            (_noise_covariance(S, rank, subject),),
             (n_train,),
             noise=True,
             weighted=np.any(w != 1),
@@ -1165,13 +1170,22 @@ def _noise_free(
     return mean, AtA / denominator, w
 
 
-def _floored(S: NDArray[np.float64]) -> NDArray[np.float64]:
-    # Sigma_+ = Q max(lambda, 0) Q^T of design section 4.1, as B B^T, which numpy
-    # computes by syrk, so that it is exactly symmetric.
+def _noise_covariance(
+    S: NDArray[np.float64], rank: int | None, subject: str
+) -> NDArray[np.float64] | LowRank:
+    # The covariance of a noise model from Sigma (design section 4.1): Sigma_+ as
+    # B B^T, which numpy computes by syrk, so that it is exactly symmetric, or with
+    # rank K a LowRank. d needs the floored tail, so the eigendecomposition is full.
     values, Q = eigh(S)
-    B = Q * np.sqrt(np.maximum(values, 0))
-    floored: NDArray[np.float64] = B @ B.T
-    return floored
+    if rank is None:
+        B = Q * np.sqrt(np.maximum(values, 0))
+        floored: NDArray[np.float64] = B @ B.T
+        return floored
+    tail = len(S) - rank
+    leading, V = values[tail:][::-1], Q[:, tail:][:, ::-1]
+    _require_lambda_k(leading, rank, subject)
+    d = low_rank_variances(Q[:, :tail], np.maximum(values[:tail], 0))
+    return LowRank(V, leading, d)
 
 
 def _low_rank(S: NDArray[np.float64], rank: int, subject: str) -> LowRank:
@@ -1180,11 +1194,7 @@ def _low_rank(S: NDArray[np.float64], rank: int, subject: str) -> LowRank:
     values, V = eigh(S, subset_by_index=(npix - rank, npix - 1))
     # In decreasing order of the eigenvalues.
     values, V = values[::-1], V[:, ::-1]
-    if not values[-1] > 0:
-        raise ValueError(
-            f"{subject} needs lambda_K > 0 for rank {rank}, got lambda_{rank} = "
-            f"{values[-1]:.3g}"
-        )
+    _require_lambda_k(values, rank, subject)
     d = np.diagonal(S) - low_rank_variances(V, values)
     nonpositive = np.flatnonzero(d <= 0)
     if nonpositive.size:
@@ -1193,6 +1203,15 @@ def _low_rank(S: NDArray[np.float64], rank: int, subject: str) -> LowRank:
             f"pixels {listing(nonpositive, 'pixels')}"
         )
     return LowRank(V, values, d)
+
+
+def _require_lambda_k(values: NDArray[np.float64], rank: int, subject: str) -> None:
+    # The requirement lambda_K > 0 of the K leading eigenvalues, in decreasing order.
+    if not values[-1] > 0:
+        raise ValueError(
+            f"{subject} needs lambda_K > 0 for rank {rank}, got lambda_{rank} = "
+            f"{values[-1]:.3g}"
+        )
 
 
 def save(model: Model, path: FilePath) -> None:

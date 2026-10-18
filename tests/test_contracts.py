@@ -442,7 +442,7 @@ def test_an_invalid_spectrum_of_repaired_covariance_is_rejected(s, error):
         pytest.param({"noise": 1}, TypeError, "noise", id="noise=1"),
         *(
             pytest.param({"noise": True, key: value}, ValueError, "noise", id=key)
-            for key, value in (("center", 0.9), ("rank", 1), ("snr_bins", 1))
+            for key, value in (("center", 0.9), ("snr_bins", 1))
         ),
         pytest.param({"progress": 5}, TypeError, "progress", id="progress=5"),
     ],

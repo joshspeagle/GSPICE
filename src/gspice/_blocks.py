@@ -122,7 +122,7 @@ def fit_blocks(
     spectrum), and a few float64 arrays of one chunk of max(1, 2**24 // npix)
     spectra. The new model shares the arrays of model, its precision matrices and its
     guard weights (see `Model`). A noise model forms P_s, npix^3 flops for a dense
-    cov[0], and the factors of the blocks for each spectrum, unless every block covers
+    cov[0] or npix^2 K for a `LowRank` of rank K, and the factors of the blocks for each spectrum, unless every block covers
     all pixels with its guard and the spectrum has no bad pixel.
     """
     start = time.perf_counter()

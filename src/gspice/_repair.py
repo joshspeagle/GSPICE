@@ -165,7 +165,8 @@ def repair(
     and one infill per flagged block, and two infills as in `infill`: that of step 5,
     and that of step 2, whose last x_b gives x1, or without blockwise that of step 3.
     repair holds replaced and ignored of all spectra, and a few arrays of one chunk.
-    A noise model costs P_s, npix^3 flops for a dense cov[0], its guard weights and
+    A noise model costs P_s, npix^3 flops for a dense cov[0] or npix^2 K for a
+    `LowRank` of rank K, its guard weights and
     its block factors for each spectrum.
     """
     start = time.perf_counter()

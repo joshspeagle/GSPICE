@@ -331,18 +331,20 @@ def test_a_low_rank_fit_holds_the_leading_eigenpairs_of_s_and_its_variances():
     assert np.all(np.abs(c - np.diagonal(S)) <= 4 * EPS * np.diagonal(S))
 
 
-def test_the_clipping_passes_of_a_low_rank_fit_use_its_rank_below_npix_spectra():
+@pytest.mark.parametrize("noise", [False, True])
+def test_the_clipping_passes_of_a_low_rank_fit_use_its_rank_below_npix_spectra(noise):
     # 10 spectra without bad pixels, too few for a dense model of 12 pixels. A pass of
-    # the fit flags what pixelwise z of the low-rank model fitted on bad flags.
+    # the fit flags what pixelwise z of the low-rank model fitted on bad flags, also
+    # for a noise model.
     flux, ivar, mask = spectra(10)
     options = {"nguard": NGUARD, "rank": 3}
     first, _ = fit(flux, ivar, mask, **options, nsigma=())
     z = pixelwise(first, flux, ivar, mask, nguard=NGUARD).z
     flagged = _spectra.dilate(np.abs(z) > 2, 1)
     assert 0 < np.count_nonzero(flagged) < flagged.size
-    model, training = fit(flux, ivar, mask, **options, nsigma=(2,))
+    model, training = fit(flux, ivar, mask, **options, nsigma=(2,), noise=noise)
     np.testing.assert_array_equal(training, flagged)
-    final, _ = fit(flux, ivar, training, **options, nsigma=())
+    final, _ = fit(flux, ivar, training, **options, nsigma=(), noise=noise)
     assert same(
         (model.mean, astuple(model.cov[0])), (final.mean, astuple(final.cov[0]))
     )
@@ -689,6 +691,60 @@ def test_a_noise_fit_floors_the_estimator_on_the_final_mask_of_the_clipping(
     )
     assert effective in logged
     assert model._cache == {}
+
+
+def test_a_noise_fit_of_rank_k_holds_the_leading_eigenpairs_of_sigma_and_its_tail():
+    flux, ivar, mask = spectra()
+    spike(flux, ivar, 5, 6, 40.0)
+    weights = np.random.default_rng(1).uniform(0.5, 2, NSPEC)
+    options = {"nguard": NGUARD, "rank": 3}
+    model, training = fit(flux, ivar, mask, noise=True, weights=weights, **options)
+    # The passes clip as for a low-rank model without noise, with unit weights.
+    _, expected_mask = fit(flux, ivar, mask, **options)
+    assert same(training, expected_mask)
+    assert training[5, 5:8].all()
+    rows = np.flatnonzero(~training.all(axis=1))
+    w = weights[rows] / weights[rows].max()
+    mean, S, _ = _model._noise_free(flux, ivar, rows, training[rows], w, "", None)
+    assert same(model.mean[0], mean)
+    assert model.noise and model.weighted and model.n_train == (rows.size,)
+    assert model._cache == {}
+    low = model.cov[0]
+    V, values, d = low.vectors, low.values, low.diag
+    # The reference is numpy's eigh, another LAPACK driver. Both are backward stable,
+    # so each eigenvalue, residual and orthogonality errs by a small multiple of
+    # npix eps |lambda|_max, as in the test of a low-rank fit above. The tail
+    # subspace errs by about npix eps |lambda|_max / (lambda_3 - lambda_4), so d by
+    # that times max |lambda_k| of the tail, at most twice npix eps |lambda|_max here.
+    # The errors measured at most 1.1 npix eps |lambda|_max.
+    reference, Q = np.linalg.eigh(S)
+    top = reference[::-1]
+    tol = 10 * NPIX * EPS * np.abs(reference).max()
+    assert V.shape == (NPIX, 3)
+    assert top[2] - top[3] >= np.abs(top[3:]).max() / 2
+    assert np.all(np.abs(values - top[:3]) <= tol)
+    assert np.all(np.linalg.norm(S @ V - V * values, axis=0) <= tol)
+    assert np.all(np.abs(V.T @ V - np.eye(3)) <= 10 * NPIX * EPS)
+    # d_i = sum_{k>K} max(lambda_k, 0) Q_ik^2: the tail has negative eigenvalues,
+    # which the floor drops. Each d_i is >= 0 and rounds as the floor does.
+    assert reference[0] < 0
+    tail = np.square(Q[:, :-3]) @ np.maximum(reference[:-3], 0)
+    assert np.all(np.abs(d - tail) <= tol)
+    # So C has the diagonal of Q max(Lambda, 0) Q^T, the dense floor.
+    c = d + np.square(V) @ values
+    assert np.all(np.abs(c - np.square(Q) @ np.maximum(reference, 0)) <= tol)
+
+
+def test_a_noise_fit_of_rank_k_needs_lambda_k_positive():
+    # The tail of Sigma beyond the signal of rank 3 holds noise of both signs, so
+    # lambda_11 < 0.
+    flux, ivar, mask = spectra()
+    message = (
+        rf"^fit: the final covariance \(N_s = {NSPEC}\) needs lambda_K > 0 for rank "
+        r"11, got lambda_11 = -\S+$"
+    )
+    with pytest.raises(ValueError, match=message):
+        fit(flux, ivar, mask, nguard=NGUARD, nsigma=(), noise=True, rank=11)
 
 
 def test_a_noise_fit_needs_two_spectra_at_every_pixel_and_one_at_every_pair():
