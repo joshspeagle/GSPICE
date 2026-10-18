@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from . import legacy
 from ._blocks import fit_blocks
 from ._datasets import Simulation, simulate
-from ._diagnostics import finite_sample_factor, noise_audit
+from ._diagnostics import Calibration, calibration, finite_sample_factor, noise_audit
 from ._model import Blocks, Model, fit, load, save
 from ._predict import Prediction, Repaired, infill, pixelwise
 from ._spectra import scale, snr, unscale
@@ -20,10 +20,12 @@ __version__ = "2.0.0.dev0"
 
 __all__ = [
     "Blocks",
+    "Calibration",
     "Model",
     "Prediction",
     "Repaired",
     "Simulation",
+    "calibration",
     "finite_sample_factor",
     "fit",
     "fit_blocks",

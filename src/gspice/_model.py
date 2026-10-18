@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import KW_ONLY, dataclass, field, fields
 from functools import partial
 from itertools import pairwise
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy.linalg import LinAlgError
@@ -28,6 +28,7 @@ from ._spectra import (
     integer,
     integers,
     interpolate,
+    items,
     listing,
     median_snr,
     numeric,
@@ -37,6 +38,9 @@ from ._spectra import (
     validate,
     vector,
 )
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 # The arrays that load reads. save also writes gspice_version and cov0, cov1, ...,
 # and the arrays of _BLOCKS for a model with blocks.
@@ -52,7 +56,7 @@ NGUARD_MAX = 2**63 - 1
 FilePath = str | bytes | os.PathLike[str] | os.PathLike[bytes]
 
 
-def _rebuild(instance: "Blocks | Model") -> tuple[Callable[[], object], tuple[()]]:
+def rebuild(instance: "DataclassInstance") -> tuple[Callable[[], object], tuple[()]]:
     # The __reduce__ of the frozen classes: pickle, copy and deepcopy rebuild through
     # __init__, so they check the fields again. Keywords keep a pickle valid when a
     # later version adds a field.
@@ -141,7 +145,7 @@ class Blocks:
         ):
             object.__setattr__(self, name, value)
 
-    __reduce__ = _rebuild
+    __reduce__ = rebuild
 
 
 @dataclass(frozen=True, eq=False)
@@ -231,9 +235,9 @@ class Model:
             )
         mean = finite_array(mean, "mean", ("bin", "pixel"))
         nbin, npix = mean.shape
-        cov = _items(cov, "cov", nbin, partial(_covariance, npix=npix))
-        n_train = _items(n_train, "n_train", nbin, partial(integer, minimum=1))
-        edges = _items(edges, "edges", nbin - 1, real)
+        cov = items(cov, "cov", nbin, partial(_covariance, npix=npix))
+        n_train = items(n_train, "n_train", nbin, partial(integer, minimum=1))
+        edges = items(edges, "edges", nbin - 1, real)
         _increasing(edges, "edges")
         center = None if center is None else real(center, "center")
         weighted = boolean(weighted, "weighted")
@@ -259,7 +263,7 @@ class Model:
         # The kinds of model for which f_s is derived (design section 4.3, A13).
         return self.center is None and not self.weighted
 
-    __reduce__ = _rebuild
+    __reduce__ = rebuild
 
     def _with_blocks(self, blocks: Blocks) -> "Model":
         # This model with the blocks of fit_blocks, which fit it. It shares the
@@ -855,22 +859,6 @@ def _check_blocks(blocks: object, nbin: int, npix: int) -> Blocks:
             f"block that ends at starts[-1] + width = {end}"
         )
     return blocks
-
-
-def _items(
-    value: Iterable[Any], name: str, count: int, check: Callable[[Any, str], Any]
-) -> tuple[Any, ...]:
-    # Outside the try, a TypeError raised by a generator keeps its own message.
-    try:
-        iterator = iter(value)
-    except TypeError:
-        raise TypeError(
-            f"{name}: expected an iterable, got {type(value).__name__}"
-        ) from None
-    items = tuple(iterator)
-    if len(items) != count:
-        raise ValueError(f"{name}: expected {count} values, got {len(items)}")
-    return tuple(check(item, f"{name}[{i}]") for i, item in enumerate(items))
 
 
 def _increasing(values: Sequence[Any], name: str) -> None:

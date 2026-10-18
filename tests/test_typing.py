@@ -9,10 +9,12 @@ from numpy.typing import NDArray
 import gspice
 from gspice import (
     Blocks,
+    Calibration,
     Model,
     Prediction,
     Repaired,
     Simulation,
+    calibration,
     finite_sample_factor,
     fit,
     fit_blocks,
@@ -124,6 +126,25 @@ def test_the_documented_calls_type_check_and_run(tmp_path: Path) -> None:
     )
     assert_type(blocked, Model)
     assert_type(blocked.blocks, Blocks | None)
+    calibrated = calibration(
+        centred,
+        flux,
+        ivar,
+        mask,
+        sizes=[np.int64(1), 2],
+        layout="scattered",
+        rng=rng,
+        progress=progress,
+    )
+    assert_type(calibrated, Calibration)
+    columns = tuple[NDArray[np.float64], NDArray[np.float64]]
+    assert_type(calibrated.ratio(where=[True, False] * 3), columns)
+    assert_type(
+        calibrated.tail(np.float32(0.9), where=np.ones(6, bool)), NDArray[np.float64]
+    )
+    assert_type(calibrated.qq(np.int64(1), where=[True] * 6), columns)
+    built = Calibration(z2=[[1.0, 4.0]] * 6, n=np.int32(1), fs=[[1], [2]] * 3)
+    assert_type(built, Calibration)
     assert_type(finite_sample_factor(np.int64(200), 40), float)
     factor = finite_sample_factor(np.int64(200), [40, 41], np.ones(2, np.uint8))
     assert_type(factor, float | NDArray[np.float64])

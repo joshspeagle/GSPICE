@@ -1,6 +1,6 @@
 import math
 import numbers
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
 
 import numpy as np
@@ -424,6 +424,25 @@ def listing(indices: NDArray[np.intp], noun: str) -> str:
     # The first 10 indices, and their count if there are more (design section 8).
     more = f", ... ({indices.size} {noun})" if indices.size > 10 else ""
     return ", ".join(map(str, indices[:10])) + more
+
+
+def items(
+    value: Iterable[Any], name: str, count: int | None, check: Callable[[Any, str], Any]
+) -> tuple[Any, ...]:
+    # The checked items of an iterable: count of them, or at least one for None.
+    # Outside the try, a TypeError raised by a generator keeps its own message.
+    try:
+        iterator = iter(value)
+    except TypeError:
+        raise TypeError(
+            f"{name}: expected an iterable, got {type(value).__name__}"
+        ) from None
+    values = tuple(iterator)
+    if count is None and not values:
+        raise ValueError(f"{name}: expected at least one value, got none")
+    if count is not None and len(values) != count:
+        raise ValueError(f"{name}: expected {count} values, got {len(values)}")
+    return tuple(check(item, f"{name}[{i}]") for i, item in enumerate(values))
 
 
 def real(value: object, name: str) -> float:
