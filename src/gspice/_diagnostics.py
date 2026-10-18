@@ -554,7 +554,8 @@ def calibration(
     then per pattern of a chunk of max(1, 2**24 // npix) spectra, at most one per
     spectrum, |G|^3/3 + n^3/3 flops, and per spectrum 2 |G| (npix + |G|) flops. The
     masks of a chunk take up to len(sizes) x 2^24 bytes. A noise model forms P_s once
-    per spectrum for all sizes, npix^3 flops for a dense cov[0].
+    per spectrum for all sizes, npix^3 flops for a dense cov[0] or npix^2 K for a
+    `LowRank` of rank K.
     """
     start = time.perf_counter()
     if sizes is not None:

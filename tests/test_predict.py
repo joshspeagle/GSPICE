@@ -969,12 +969,18 @@ def test_infill_of_a_noise_model_matches_the_60_digit_reference_of_each_c_s(
         infill(model, flux, ivar, mask, inflate=True)
 
 
+@pytest.mark.parametrize(
+    "C",
+    [np.ones((NPIX, NPIX)), LowRank(np.ones((NPIX, 1)), [1.0], np.zeros(NPIX))],
+    ids=["dense", "low-rank"],
+)
 @pytest.mark.parametrize("name", FUNCTIONS)
-def test_a_c_s_that_fails_the_check_of_its_precision_matrix_names_its_row(name):
+def test_a_c_s_that_fails_the_check_of_its_precision_matrix_names_its_row(name, C):
     # cov[0] = 1 at every entry: with nu_s = 1e-15, C_s scaled to unit diagonal has a
-    # reciprocal condition number near 1e-15, below 1e-13 (decision A26); with
-    # nu_s = 1, it passes. Pixel 0 is bad, so that infill has a pixel to replace.
-    model = Model(np.zeros((1, NPIX)), (np.ones((NPIX, NPIX)),), (10,), noise=True)
+    # reciprocal condition number near 1e-15, below 1e-13 (decision A26), and the
+    # LowRank has kappa_W near NPIX / 1e-15, above 1e13 (decision A28); with
+    # nu_s = 1, both pass. Pixel 0 is bad, so that infill has a pixel to replace.
+    model = Model(np.zeros((1, NPIX)), (C,), (10,), noise=True)
     ivar = np.ones((4, NPIX))
     ivar[2] = 1e15
     mask = np.zeros(ivar.shape, bool)
