@@ -61,7 +61,7 @@ def finite_sample_factor(
     N_k conditioning pixels, with the mean and the covariance (divisor N_s - 1) of N_s
     unweighted training spectra. With r the residual of the N_* pixels from their
     conditional mean and C their full conditional covariance, Z^2 = r^T C^-1 r has the
-    mean
+    mean::
 
         E[Z^2] / N_* = f_s = (1 + 1/N_s) (N_s - 2)/(N_s - N_k - 2)
                              (N_s - 1)/(N_s - N_k - N_* - 2).
@@ -377,13 +377,13 @@ def noise_audit(
 ) -> NDArray[np.float64]:
     """Ratio of the residual scatter to the reported noise at each pixel.
 
-    With f the flux and fhat its prediction by `pixelwise` with nguard, in flux units,
+    With f the flux and fhat its prediction by `pixelwise` with nguard, in flux units::
 
         rho_i^2 = mean_s (f_si - fhat_si)^2 ivar_si,
 
     where the mean runs over the spectra s whose pixel i is good (see `scale`). With t
     the noise-free flux, let k_i be the mean of ivar_si var(f_si - t_si), which is 1
-    where ivar is right, and e_i the mean of ivar_si (t_si - fhat_si)^2. Then
+    where ivar is right, and e_i the mean of ivar_si (t_si - fhat_si)^2. Then::
 
         E[rho_i^2] = k_i + E[e_i]
 
@@ -484,7 +484,7 @@ def calibration(
     """Held-out whitened residuals for masks drawn independently of the data.
 
     For each spectrum and each size n of sizes, calibration draws a set M of n good
-    pixels, and computes, as `infill` with replace=M does,
+    pixels, and computes, as `infill` with replace=M does::
 
         z2 = r_M^T C_MM^-1 r_M,
 

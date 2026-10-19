@@ -80,7 +80,7 @@ class Repaired:
     """Spectra whose replaced pixels hold their conditional mean, from `infill`.
 
     `repair` returns one too. The arrays that `infill` and `repair` return are
-    read-only. With covariance=True, `covariance(s)` gives the conditional covariance
+    read-only. With covariance=True, ``covariance(s)`` gives the conditional covariance
     of the replaced pixels of spectrum s.
 
     Attributes
@@ -185,7 +185,7 @@ def pixelwise(
     """Predict each pixel from all pixels farther than nguard from it (paper Alg. 3).
 
     For pixel i of a spectrum in S/N bin b, with x its working vector (see `Model`) and
-    P the inverse of cov[b],
+    P the inverse of cov[b]::
 
         x_i | x_O ~ N(-(P_gg^-1 P_gO x_O)_i, (P_gg^-1)_ii),
         g = {j : |j - i| <= nguard},
@@ -311,7 +311,7 @@ def infill(
 
     For a spectrum in S/N bin b, with x its working vector (see `Model`) and P the
     inverse of cov[b], let G = replace | ignore | bad, with the bad pixels
-    (mask != 0) | (ivar == 0), and let O hold the other pixels. Then
+    (mask != 0) | (ivar == 0), and let O hold the other pixels. Then::
 
         x_G | x_O ~ N(-P_GG^-1 P_GO x_O, P_GG^-1).
 
@@ -400,7 +400,7 @@ def infill(
         V, Lambda = diag(values) and D_s = diag(diag + nu_s) of C_s, or where the
         factor of I + Lambda^1/2 V_O^T D_s,O^-1 V_O Lambda^1/2, or of its conditional
         covariance at M (at T without rng), fails, with its row in the message.
-        kappa_K accepts every C_s that `woodbury` accepts, and some with kappa_W up to
+        kappa_K accepts every C_s that ``woodbury`` accepts, and some with kappa_W up to
         npix kappa_K, which `pixelwise` and `repair` still reject.
 
     Notes

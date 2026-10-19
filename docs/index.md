@@ -27,5 +27,7 @@ band is flagged and restored.
 
 ```{toctree}
 installation
+reference/api
+reference/legacy
 references
 ```
