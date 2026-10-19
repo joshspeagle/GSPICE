@@ -164,7 +164,7 @@ class LowRank:
     `fit` with rank=K returns a `Model` with a LowRank covariance. A model computes its
     precision matrix by the Woodbury identity, without forming C, and
     rejects it where kappa_W > 1e13, with c_i = diag_i + sum_k values_k V_ik^2 the
-    variances of C, dtilde = diag / c, Vtilde = diag(c)^-1/2 V and
+    variances of C, dtilde = diag / c, Vtilde = diag(c)^-1/2 V and::
 
         kappa_W = (max dtilde + lambda_max(diag(values)^1/2 Vtilde^T Vtilde
                    diag(values)^1/2)) / min dtilde,
@@ -230,7 +230,7 @@ class Model:
     x = a (ftilde - center) - mean[b] for a constant centre, and
     x = a ftilde - mean[b] otherwise.
 
-    A noise model (noise=True) has one bin and works in flux units: spectrum s has
+    A noise model (noise=True) has one bin and works in flux units: spectrum s has::
 
         x = ftilde - mean[0] ~ N(0, C_s),  C_s = cov[0] + diag(nu_s),
 
@@ -596,7 +596,7 @@ def fit(
     there. A spectrum is used unless it has more than maxbadpix bad pixels, has weight
     0, or a pass mask or the final mask covers it completely; N_s counts the spectra
     of a fit. A fit on a mask interpolates the pixels in it, scales each spectrum by
-    a_s over the pixels outside it (see `scale`), and estimates
+    a_s over the pixels outside it (see `scale`), and estimates::
 
         m = sum_s w_s x_s / V1,  S = sum_s w_s (x_s - m)(x_s - m)^T / (V1 - V2 / V1),
 
@@ -619,7 +619,7 @@ def fit(
 
     With noise=True, the passes clip as above, and the final fit estimates the
     covariance of the noise-free flux in flux units (design section 4.1). Let u_si be
-    1 at the pixels outside the final mask and 0 elsewhere, and v_s = a_s^2 w_s. Then
+    1 at the pixels outside the final mask and 0 elsewhere, and v_s = a_s^2 w_s. Then::
 
         W_i = sum_s v_s u_si,  mu_i = sum_s v_s u_si f_si / W_i,
         A_si = v_s^1/2 u_si (f_si - mu_i),  D1_ij = sum_s v_s u_si u_sj,

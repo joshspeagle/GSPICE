@@ -47,7 +47,7 @@ def fit_blocks(
     l.510).
     For a spectrum in S/N bin b, let x be the working vector of its infilled flux (see
     `Model`), P the inverse of cov[b], A a block, G the pixels within nguard of A,
-    clipped at the ends, and O the pixels outside G. Then
+    clipped at the ends, and O the pixels outside G. Then::
 
         chi2_A = r_A^T C_AA^-1 r_A / |A|,  r_A = x_A - mu_A,
 
