@@ -8,8 +8,7 @@ dynamic = ["version"]
 requires-python = ">=3.11"
 # The oldest stack that CI tests.
 dependencies = ["numpy>=1.26", "scipy>=1.11"]
-# Provisional (design decision S11.8).
-license = "GPL-3.0-only"
+license = "GPL-3.0-or-later"
 authors = [
     { name = "Douglas P. Finkbeiner" },
     { name = "Joshua S. Speagle" },
@@ -40,7 +39,7 @@ figures = ["matplotlib==3.11.2"]
 path = "src/gspice/__init__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["/src", "/tests", "/README.md", "/CHANGELOG.md"]
+include = ["/src", "/tests", "/README.md", "/CHANGELOG.md", "/CITATION.cff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -553,7 +553,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 | S11.5 | Flux in and out; scaled units through `scale`/`unscale` | one unit system per layer, hard to misuse | `scaled=` flag |
 | S11.6 | (nspec, npix) | all existing Python and Julia code | none |
 | S11.7 | Import and distribution name `gspice` | continuity | none |
-| S11.8 | `license = "GPL-3.0-only"`, provisional; the authors choose "-only" or "-or-later" before release | permission can be widened later, not narrowed | "-or-later" now |
+| S11.8 | `license = "GPL-3.0-or-later"`, chosen by the lead before release (#131): the most permissive form of the GPL v3 of the 2022 code | the 2022 code ships the GPL v3 text with no "-only" notice | "-only" |
 | S11.9 | Sphinx; the docs phase picks the theme after it compares the comparables the lead named, PyData by default | all six comparables use Sphinx, with different themes | MkDocs |
 | S11.10 | Python ≥ 3.11; PR 2.1 drops 3.10 from CI, which changes the CI decision of #9 | 3.10 reached end of life on 2026-10-01; the oldest-stack CI job runs 3.11, so the floors of Python, numpy and scipy are tested together | 3.10 |
 | Q1 | A spectrum without a good pixel raises (sections 3.1 and 7.1); `fit` checks only the spectra it uses, and drops a spectrum that a pass mask or the final mask covers completely, where legacy raises (section 5.1); no `on_empty` option. **BC**, **BC-new** | NaN in every row helps nobody; the filter is one line, for the new API `bad = (ivar == 0) if mask is None else (np.asarray(mask) != 0) \| (ivar == 0); keep = ~bad.all(axis=1)`, and for legacy without the `\| (ivar == 0)` term | `on_empty="raise"\|"drop"`, default "raise" (inventory default) |
@@ -732,7 +732,7 @@ name = "gspice"
 dynamic = ["version"]
 requires-python = ">=3.11"
 dependencies = ["numpy>=1.26", "scipy>=1.11"]   # the oldest stack that CI tests
-license = "GPL-3.0-only"                  # provisional (S11.8)
+license = "GPL-3.0-or-later"              # S11.8
 authors = [{name = "Douglas P. Finkbeiner"}, {name = "Joshua S. Speagle"}, {name = "Tanveer Karim"}]
 
 [dependency-groups]
