@@ -75,7 +75,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 7. Merge it with a merge commit when CI passes, no review thread is unresolved, each request to Claude has an answer, and every approval this file requires is given. Until CI exists, the local commands take its place and the pull request says so. Then add its decisions to the phase's decision log.
 
 - A behaviour change alters a 2022 result (a number, a mask, an error or a default), loosens the tolerance of an existing test, or compares against the 2022 outputs at a tolerance looser than a relative error of 1e-10. Masks compare exactly. A changed result needs a test that shows the old and the new result.
-- Every pull request updates what it makes stale in `README.md`, `CLAUDE.md` and, once it exists, `docs/`. Each user-visible change gets a line under "Unreleased" in `CHANGELOG.md`, and each behaviour change also a line under "Behaviour changes". The first pull request that needs the file creates it.
+- Every pull request updates what it makes stale in `README.md`, `CLAUDE.md` and, once it exists, `docs/`. Each user-visible change gets a line under "Unreleased" in `CHANGELOG.md`, and each behaviour change also a line under "Behaviour changes". The first pull request after a release that needs the section creates it.
 - A pull request that the lead or a collaborator reviewed or committed to merges only after that person approves it.
 - Claude watches every pull request it opens until it merges or closes.
 

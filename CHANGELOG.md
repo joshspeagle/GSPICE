@@ -1,19 +1,21 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 - 2026-10-19
 
 ### Added
 
 - Golden tests in `tests/golden/`: the outputs of every public function of the 2022 package (commit `1fbab9f`) on synthetic inputs, and tests that compare an implementation with them.
 - Continuous integration on Linux with Python 3.11 to 3.15, on macOS and Windows with Python 3.11 and 3.15, and on the oldest supported numpy and scipy.
 - A CI job that builds the wheel and the sdist, checks that the sdist holds the sources and tests and that the wheel holds `py.typed` and no tests, and runs a smoke test of the wheel in a clean environment.
+- A workflow that publishes a GitHub release for each tag `vX.Y.Z`, with the wheel, the sdist and the CHANGELOG section of X.Y.Z. It checks that the tag names the version of the built package.
 - `pyproject.toml`: `pip install .` installs the package. It requires Python 3.11 or later, numpy 1.26 or later and scipy 1.11 or later.
-- `gspice.__version__`, which is `2.0.0.dev0`.
+- `gspice.__version__`, which is `2.0.0`.
 - `CITATION.cff`, the citation metadata for the software and the paper, which the sdist holds.
 - The licence is declared as GPL-3.0-or-later, the GPL v3 of the 2022 code in its "or later" form.
 - Type checks with mypy in strict mode for the code outside `gspice.legacy`.
 - A test coverage floor of 90% for the code outside `gspice.legacy`.
 - pre-commit hooks that run ruff.
+- Log records on the `gspice` logger: DEBUG lines on the time and size of the work of the main functions, INFO lines on the clipping passes of `fit`, and a WARNING from `fit` for each clipping pass whose threshold exceeds the in-sample ceiling of |z|. The package adds a `logging.NullHandler` to the logger, so the application decides where the records go.
 - A documentation site in `docs/`, built with Sphinx and deployed to GitHub Pages, with a quickstart, tutorials on fitting, pixelwise prediction, infilling, repair, calibration, the low-rank and noise-aware models, saving and loading, and migrating from the 2022 interface, background pages on the method, prediction, repair, fitting and diagnostics, a glossary, an API reference of every public name, and the GSPICE logo. The tutorials work on simulated LAMOST-like spectra from `docs/scripts/spectra.py`, and `docs/scripts/figures.py` makes their figures.
 - `benchmarks/run.py`, which times `pixelwise`, `infill`, `fit_blocks`, `repair`, `fit`, the noise models, the 2022 `gp_interp` and the 2022 Schur route against `solve_pattern`, and prints the timings and the setup as JSON.
 - `gspice.scale`, `gspice.unscale` and `gspice.snr`. `scale` interpolates each spectrum over its bad pixels and scales it to unit mean noise, `unscale` returns scaled values and variances to flux units, and `snr` gives the median signal-to-noise ratio of each spectrum.

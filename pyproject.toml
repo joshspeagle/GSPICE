@@ -5,6 +5,8 @@ build-backend = "hatchling.build"
 [project]
 name = "gspice"
 dynamic = ["version"]
+description = "Gaussian pixelwise conditional estimation for spectra"
+readme = "README.md"
 requires-python = ">=3.11"
 # The oldest stack that CI tests.
 dependencies = ["numpy>=1.26", "scipy>=1.11"]
@@ -14,6 +16,11 @@ authors = [
     { name = "Joshua S. Speagle" },
     { name = "Tanveer Karim" },
 ]
+
+[project.urls]
+Documentation = "https://joshspeagle.github.io/GSPICE/"
+Repository = "https://github.com/joshspeagle/GSPICE"
+Changelog = "https://github.com/joshspeagle/GSPICE/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 test = ["pytest>=8", "pytest-cov>=5", "hypothesis>=6"]

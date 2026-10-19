@@ -1,0 +1,33 @@
+name: Release
+
+# A tag vX.Y.Z publishes a GitHub release with the wheel, the sdist and the CHANGELOG
+# section of X.Y.Z. The lead makes any upload to PyPI.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: python -m pip install build
+      - run: python -m build
+      - run: python tools/check_dist.py dist
+      # The tag must name the version of the built package.
+      - run: test -f "dist/gspice-${GITHUB_REF_NAME#v}-py3-none-any.whl"
+      - run: |
+          awk -v version="${GITHUB_REF_NAME#v}" '
+            /^## / { inside = index($0, "## " version " ") == 1; next }
+            inside
+          ' CHANGELOG.md > notes.md
+          test -s notes.md
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "GSPICE $GITHUB_REF_NAME" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
