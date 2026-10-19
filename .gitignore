@@ -1,8 +1,5 @@
 dist
-test/gspice-unit-test-desi.fits
-.ipynb_checkpoints
 .vscode
-test
 # Local environments and caches
 .venv/
 .pytest_cache/
