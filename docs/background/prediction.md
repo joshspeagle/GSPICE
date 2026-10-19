@@ -1,0 +1,140 @@
+# Prediction
+
+Two functions predict pixels. {func}`gspice.pixelwise` predicts every pixel from the
+pixels beyond its {term}`guard window`, to find outliers. {func}`gspice.infill`
+predicts chosen pixels from the other pixels, to replace them. Both use the conditional
+distribution of {doc}`method` and return flux units.
+
+## Pixelwise prediction
+
+For pixel $i$, the guard window is $g = \{j : |j - i| \le \mathrm{nguard}\}$, clipped at
+the ends of the spectrum. The conditioning pixels $O$ are all the pixels outside $g$:
+
+$$
+x_i \mid x_O \sim \mathcal{N}\!\left(-\big(P_{gg}^{-1} P_{gO}\, x_O\big)_i,\;
+\big(P_{gg}^{-1}\big)_{ii}\right) .
+$$
+
+The other pixels of $g$ are marginalized.
+
+```{raw} html
+:file: ../_static/figures/pixelwise.svg
+```
+
+The guard window keeps the neighbours of pixel $i$ out of its prediction, for two
+reasons. Neighbouring pixels are correlated through the line-spread function and the
+upstream processing, and the prediction should use the correlations of the spectra
+instead {cite:p}`finkbeiner2025gspice`. A defect a few pixels wide also changes the
+neighbours of $i$, and a prediction from them would follow the defect. The default
+`nguard=20` is the paper's choice, set by the size of the smoothing kernel of the
+continuum normalization. `nguard >= npix - 1` gives the prior.
+
+For one model, S/N bin and `nguard`, the prediction of every pixel is one fixed linear
+function of $x$. `pixelwise` computes its weights once, and applies them to all the
+spectra of the bin as one matrix product, in 2 npix² flops per spectrum. The model keeps
+the weights of the latest `nguard` of each bin. A noise-aware model has its own
+covariance for each spectrum, so `pixelwise` forms its precision matrix for each
+spectrum and keeps no weights.
+
+Bad pixels enter the prediction as their interpolated values. Their z-score is NaN, and
+the variance omits the error of the interpolated values. Next to a long run of bad
+pixels, the z-scores of the good pixels are therefore not calibrated. An interpolated
+bad pixel beyond the guard window can also carry the flux of a good pixel inside it into
+the prediction.
+
+The {term}`z-score` of pixel $i$ of spectrum $s$ is
+
+$$
+z_{si} = \frac{f_{si} - \hat f_{si}}{\sqrt{\mathrm{var}_{si}}} ,
+$$
+
+with $\hat f_{si}$ and $\mathrm{var}_{si}$ the conditional mean and variance in flux
+units. {class}`gspice.Prediction` holds the three arrays.
+
+## Infill
+
+`infill` divides the pixels of each spectrum into four kinds:
+
+- the {term}`replaced pixels <replaced pixel>` $M$, given by `replace`, the bad pixels by
+  default;
+- the {term}`ignored pixels <ignored pixel>`, given by `ignore`, which are neither
+  conditioned on nor replaced, such as a guard window around a block;
+- the bad pixels, which are never conditioned on;
+- the conditioning pixels $O$, all the other pixels.
+
+$G$ is the union of `replace`, `ignore` and the bad pixels:
+
+$$
+x_G \mid x_O \sim \mathcal{N}\!\left(-P_{GG}^{-1} P_{GO}\, x_O,\; P_{GG}^{-1}\right) .
+$$
+
+```{raw} html
+:file: ../_static/figures/infill.svg
+```
+
+A pixel in both `replace` and `ignore` is replaced. The pixels of $G$ outside $M$ keep
+their input value, and {class}`gspice.Repaired` reports them in `ignored`. Unlike
+`pixelwise`, `infill` never conditions on a bad pixel, and no value in $G$ enters the
+mean.
+
+`Repaired.flux` holds the conditional mean at $M$ and the input flux elsewhere.
+`Repaired.var` holds the conditional variance at $M$, `1 / ivar` at the other good
+pixels, and inf at the other bad pixels.
+
+`Repaired.chi2` compares the input values with their prediction at $T$, the replaced
+pixels that are good in the input:
+
+$$
+\chi^2 = r_T^\mathsf{T} C_{TT}^{-1} r_T ,
+$$
+
+with $r_T$ the input values minus the conditional mean, and $C_{TT}$ their conditional
+covariance. `Repaired.dof` is $|T|$.
+
+A `replace` or `ignore` mask of shape (npix,) applies to every spectrum. This predicts a
+block of pixels, for example the red half of the spectra from the blue half, beyond a
+guard of 20 pixels:
+
+```python
+pixel = np.arange(npix)
+red = pixel >= npix // 2
+guard = (pixel >= npix // 2 - 20) & ~red
+result = gspice.infill(model, flux, ivar, mask, replace=red, ignore=guard)
+```
+
+Spectra of one S/N bin with equal $G$, $M$ and $T$ form a {term}`pattern`, and share
+one factorization of $P_{GG}$. An infill is therefore fast where many spectra share
+their masks.
+
+Two options describe the uncertainty of the replaced pixels:
+
+- `covariance=True` keeps the conditional covariance of each pattern.
+  `Repaired.covariance(s)` returns the replaced pixels of spectrum $s$ and their
+  covariance in flux².
+- `rng`, a `numpy.random.Generator`, fills `Repaired.draws`: a {term}`draw` from the
+  conditional distribution at $M$, and the input flux elsewhere. A measurement made on
+  the draws has a wider error than one made on `Repaired.flux`; `var` and `covariance`
+  state the uncertainty itself.
+
+To detect with one model and replace with another, pass the masks of the first result
+`r` to the second call: `replace=r.replaced` and `ignore=r.ignored`.
+
+## The finite-sample factor
+
+The model estimates its mean and covariance from $N_s$ training spectra, and the error
+of that estimate widens the residuals of a {term}`held-out spectrum`. For $N_*$ predicted
+pixels and $N_k$ conditioning pixels, $E[Z^2] / N_* = f_s$, with $Z^2$ the $\chi^2$ above
+and
+
+$$
+f_s = \left(1 + \frac{1}{N_s}\right) \frac{N_s - 2}{N_s - N_k - 2} \cdot
+\frac{N_s - 1}{N_s - N_k - N_* - 2} .
+$$
+
+The {term}`finite-sample factor` $f_s$ is exact for a dense, mean-centred, unweighted
+model, Gaussian working vectors and pixel sets that do not depend on the data. Guard and
+ignored pixels do not count in $N_k$. `inflate=True` multiplies the variances and
+covariances by $f_s(N_s, N_k, 1)$. `Repaired.fs` holds $f_s(N_s, N_k, \mathrm{dof})$,
+divided by $f_s(N_s, N_k, 1)$ with `inflate=True`, so that `chi2 / (dof * fs)` has the
+mean 1 in both cases. Models of other kinds report 1 and reject `inflate=True`.
+{func}`gspice.finite_sample_factor` computes $f_s$.

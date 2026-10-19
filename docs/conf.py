@@ -17,6 +17,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
 ]
+myst_enable_extensions = ["dollarmath"]
 nitpicky = True
 napoleon_google_docstring = False
 # The type slot holds shapes and sizes ("ndarray, shape (nspec, npix)"), which

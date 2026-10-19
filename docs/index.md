@@ -27,6 +27,22 @@ band is flagged and restored.
 
 ```{toctree}
 installation
+```
+
+```{toctree}
+:caption: Background
+
+background/method
+background/prediction
+background/repair
+background/fitting
+background/diagnostics
+background/glossary
+```
+
+```{toctree}
+:caption: Reference
+
 reference/api
 reference/legacy
 references
