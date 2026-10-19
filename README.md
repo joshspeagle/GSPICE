@@ -4,11 +4,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 
 ## Installation
 
-From a clone of this repository:
-
-```sh
-pip install .
-```
+See the [installation page](https://joshspeagle.github.io/GSPICE/installation.html) of the documentation.
 
 ## Example
 
@@ -47,5 +43,6 @@ model = gspice.load("model.npz")
 
 ## More
 
+- [The documentation](https://joshspeagle.github.io/GSPICE/).
 - [`docs/design.md`](docs/design.md): the design of the package, including functions that are not implemented yet.
 - [`CHANGELOG.md`](CHANGELOG.md): the changes since the 2022 package.

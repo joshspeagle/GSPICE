@@ -5,7 +5,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 ## Layout
 
 - `src/gspice/`: the package. `src/gspice/legacy/` holds the 2022 modules (commit `1fbab9f`).
-- `docs/design.md`: the design of the new package, which Phases 2 to 5 implement.
+- `docs/`: the Sphinx site in MyST Markdown, which a workflow deploys to GitHub Pages from `main`. `docs/design.md`, the design of the new package that Phases 2 to 5 implement, is not part of the site.
 - `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
 - `tests/legacy/`: tests of the behaviour changes of `gspice.legacy`.
 - `tools/`: `check_dist.py` checks the contents of the built wheel and sdist, and `smoke.py` is the smoke test of an installed wheel. CI runs both.
@@ -17,7 +17,8 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - Set up: `uv venv --clear --python 3.13 .venv && uv pip install -e . --group dev`. mypy needs scipy-stubs, which requires Python 3.12 or later. Once per clone, in the main checkout and not in a worktree, also run `.venv/bin/pre-commit install --allow-missing-config`: its hook runs ruff on each commit in every worktree, also on branches without the hook configuration.
 - Test: `.venv/bin/python -m pytest --cov=gspice`. It skips `slow` tests and fails if the tests cover less than 90% of the code outside `gspice.legacy`.
 - All tests, `slow` ones included: `.venv/bin/python -m pytest -m ""`.
-- Lint, format and type check: `.venv/bin/ruff check src tests benchmarks tools && .venv/bin/ruff format --check src tests benchmarks tools && .venv/bin/mypy && .venv/bin/mypy --python-version 3.11`.
+- Docs: `uv pip install -e . --group docs`, then `.venv/bin/sphinx-build -W --keep-going docs docs/_build/html`.
+- Lint, format and type check: `.venv/bin/ruff check src tests benchmarks tools docs/conf.py && .venv/bin/ruff format --check src tests benchmarks tools docs/conf.py && .venv/bin/mypy && .venv/bin/mypy --python-version 3.11`.
 
 ## Plan
 
