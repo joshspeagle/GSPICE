@@ -563,7 +563,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 | Q5 | Worst block = largest χ²/threshold; iterate until none exceeds; each block at most once | paper "until no block exceeds"; the cap of nblock follows | cap 6 (r26) |
 | Q6 | `repair` raises without `model.blocks` unless `blockwise=False` | the default must be the validated pipeline (D-68) | thresholds from the training set, or a warning |
 | Q7 | The golden tolerance table of #9 stays. A legacy output that new code computes would be a BC if its golden override is looser than 1e-10, or if it differs from 2022 by more than 1e-10 on a measured input; under Q10 legacy keeps the 2022 arithmetic, and the new expressions of D-80 and D-81 give the 2022 bits on finite inputs | CLAUDE.md; the overrides cover the spread of the 2022 results across platforms | per-environment goldens with bit identity |
-| Q8 | revision-2026 is not merged or tagged, and "1.0.0" is not reused (lead); version `2.0.0.dev0` until release preparation | distinct from r26 "1.0.0" and 2022 "0.0.1"; installs over r26 as an upgrade | 0.1.0.dev0 |
+| Q8 | revision-2026 is not merged or tagged, and "1.0.0" is not reused (lead); version `2.0.0.dev0` until release preparation, then `2.0.0` (#132) | distinct from r26 "1.0.0" and 2022 "0.0.1"; installs over r26 as an upgrade | 0.1.0.dev0 |
 | Q9 | No vendored `gspice_ref.py`; in-house oracle (lead) | licence unknown (D-77) | vendor |
 | Q10 | Legacy keeps the 2022 code: `gp_interp`, `gaussian_estimate` and the matrix utilities use the Schur updates of Appendix A, and the precision route serves the new API | the Schur variances cancel where the guard window is coupled to the conditioning pixels, but are exact to rounding where it is nearly independent, and there the precision route errs by up to about 0.5κε (section 4.2). A move would change correct 2022 results without a signal, against the first constraint of the overhaul, no silent regressions; `pixelwise` gives the bounded route | legacy `gp_interp` on the precision route (a numeric BC) |
 | Q11 | New API: bad = mask ∪ (ivar == 0), also counted against maxbadpix. **BC-new** | ivar = 0 carries no information (D-30) | mask only |
@@ -742,7 +742,7 @@ test = ["pytest>=8", "pytest-cov>=5", "hypothesis>=6"]
 dev = [{include-group = "test"}, "ruff==0.17.1", "mypy==2.4.0", "scipy-stubs==1.18.1.1; python_version >= '3.12'", "pre-commit"]
 
 [tool.hatch.version]
-path = "src/gspice/__init__.py"           # __version__ = "2.0.0.dev0" (Q8)
+path = "src/gspice/__init__.py"           # __version__ = "2.0.0" (Q8)
 
 ```
 
@@ -802,7 +802,7 @@ Each line is one issue, one branch and one pull request with a single goal; line
 
 - Docs: Sphinx with the theme chosen in the docs phase (S11.9), built in CI with `sphinx-build -W`; background, glossary, SVG schematics in currentColor, figures built from data.
 - Tutorials and examples, after the docs.
-- Release preparation: CITATION.cff, .zenodo.json, version, licence wording, the Python floor against end-of-life dates; the lead approves before any tag, release or upload.
+- Release preparation: CITATION.cff (Zenodo reads it, so there is no .zenodo.json), version, licence wording, the Python floor against end-of-life dates; the lead approves before any tag, release or upload.
 - Detection of long shifted regions in `repair` (#68): the block pass rarely flags the interior of a shift longer than a block. The lead chose to keep the procedure of section 5.4 and document the limit (A31).
 
 ## 15. Worked examples

@@ -17,7 +17,7 @@ from ._spectra import scale, snr, unscale
 # With one, the application decides where they go.
 logging.getLogger("gspice").addHandler(logging.NullHandler())
 
-__version__ = "2.0.0.dev0"
+__version__ = "2.0.0"
 
 __all__ = [
     "Blocks",
