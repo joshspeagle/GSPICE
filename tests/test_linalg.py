@@ -18,6 +18,7 @@ from gspice._linalg import (
     solve_low_rank,
     solve_mean,
     solve_pattern,
+    solve_shared,
     woodbury,
 )
 from oracle import (
@@ -326,6 +327,75 @@ def test_the_mean_from_c_oo_rejects_a_c_oo_that_is_not_positive_definite():
     G = ~mask([6, 7])
     with pytest.raises(LinAlgError, match="^not positive definite on the pixels O$"):
         solve_mean(C, G, G, np.zeros((1, NPIX)))
+
+
+# Patterns (G, T) with M = MASK and G = BASE plus extra pixels E, and T = MASK less
+# pixel 25 and the pixels D, for solve_shared: E and D empty (0), E at an edge of the
+# base (1 and 3), E apart from it with one D (2), D alone (4), E at the edges of the
+# spectrum and D next to T (5), and an empty T (6). Pixel 25 is in no T, so that the
+# order (M \ U, U) of solve_shared is not the pixel order of M.
+MASK, BASE = range(20, 28), range(16, 32)
+SHARED = [
+    ([], []),
+    ([15], []),
+    ([3, 40], [22]),
+    ([32, 33], [20, 27]),
+    ([], [21]),
+    ([0, 47], [23, 24]),
+    ([5], MASK),
+]
+
+
+def shared_case(name, base=BASE):
+    C, P, _, tol = case(name)
+    X = np.random.default_rng(3).standard_normal((len(SHARED) + 1, NPIX))
+    G = np.array([mask([*base, *E]) for E, _ in SHARED])
+    T = np.array([mask(MASK) & ~mask([25, *D]) for _, D in SHARED])
+    # Pattern 1 has two spectra, and the others one each.
+    groups = [slice(0, 1), slice(1, 3), *(slice(i, i + 1) for i in range(3, 8))]
+    return C, P, X @ np.linalg.cholesky(C).T, G, T, groups, tol
+
+
+# B as one run, where the product skips it, and as two runs.
+@pytest.mark.parametrize("base", [BASE, [*range(8, 12), *BASE]])
+@pytest.mark.parametrize("name", MATRICES)
+def test_shared_solve_matches_the_reference(name, base):
+    C, P, X, G, T, groups, tol = shared_case(name, base)
+    solutions = solve_shared(P, G, mask(MASK), T, X.copy(), groups, True)
+    for p, solution in enumerate(solutions):
+        g, t = np.flatnonzero(G[p]), np.flatnonzero(T[p])
+        mean, cov, chi2 = conditional(C, g, X[groups[p]], t)
+        at = np.flatnonzero(mask(MASK)[g])
+        mean, cov = mean[:, at], cov[np.ix_(at, at)]
+        sigma = np.sqrt(np.diagonal(cov))
+        assert np.max(np.abs(solution.mean - mean) / sigma) <= tol
+        assert np.max(np.abs(solution.cov - cov) / np.outer(sigma, sigma)) <= tol
+        np.testing.assert_array_equal(solution.cov, solution.cov.T)
+        np.testing.assert_array_equal(np.diagonal(solution.cov), solution.var)
+        assert np.all(np.abs(solution.chi2 - chi2) <= tol * (chi2 + t.size))
+        assert solution.draws is None
+    np.testing.assert_array_equal(solutions[6].chi2, 0.0)
+
+
+def test_shared_solve_never_reads_the_data_in_g_outside_t():
+    _, P, X, G, T, groups, _ = shared_case("kernel5")
+    expected = solve_shared(P, G, mask(MASK), T, X.copy(), groups, True)
+    for p, group in enumerate(groups):
+        X[group, G[p] & ~T[p]] = np.nan
+    actual = solve_shared(P, G, mask(MASK), T, X, groups, True)
+    for solution, reference in zip(actual, expected, strict=True):
+        for value, field in zip(solution, reference, strict=True):
+            np.testing.assert_array_equal(value, field)
+
+
+def test_shared_solve_without_variances_keeps_the_mean_and_chi2():
+    _, P, X, G, T, groups, _ = shared_case("spd1e8")
+    expected = solve_shared(P, G, mask(MASK), T, X.copy(), groups)
+    actual = solve_shared(P, G, mask(MASK), T, X, groups, variance=False)
+    for solution, reference in zip(actual, expected, strict=True):
+        np.testing.assert_array_equal(solution.mean, reference.mean)
+        np.testing.assert_array_equal(solution.chi2, reference.chi2)
+        assert np.isnan(solution.var).all() and solution.var.shape == (len(MASK),)
 
 
 @pytest.mark.parametrize("name", MATRICES)

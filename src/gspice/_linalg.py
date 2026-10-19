@@ -280,6 +280,102 @@ def solve_factor(
     return _conditional(blocks, G, M, T, X, normals, covariance, variance)
 
 
+def solve_shared(
+    P: NDArray[np.float64],
+    G: NDArray[np.bool_],
+    M: NDArray[np.bool_],
+    T: NDArray[np.bool_],
+    X: NDArray[np.float64],
+    groups: list[slice],
+    covariance: bool = False,
+    variance: bool = True,
+) -> list[Conditional]:
+    # solve_pattern without draws for the patterns (G[p], M, T[p]) of one M, whose
+    # spectra are the rows groups[p] of X, which it overwrites, from one factor of
+    # P_BB (design section 4.2). B holds the pixels in every G[p], and U the union of
+    # the T[p].
+    B, U = G.all(axis=0), T.any(axis=0)
+    # B ordered as (B \ M, M \ U, U), so that M and U are trailing blocks of R.
+    index = np.concatenate(
+        [np.flatnonzero(B & ~M), np.flatnonzero(M & ~U), np.flatnonzero(U)]
+    )
+    m, n = int(np.count_nonzero(M)), int(np.count_nonzero(U))
+    a, t = index.size - m, index.size - n
+    XU = X[:, index[t:]]
+    # X becomes x0, x with its entries in G[p] set to 0, as in solve_pattern.
+    for p, group in enumerate(groups):
+        X[group, G[p]] = 0.0
+    PB = P[index]
+    R = factor_pattern(PB[:, index])
+    RMM, RUU = R[a:, a:], R[t:, t:]
+    # x0 is 0 on B for every spectrum, so where B is one run the product skips it,
+    # as solve_pattern does where G is one run.
+    first, last = int(np.min(index)), int(np.max(index))
+    if last - first < index.size:
+        PX0 = PB[:, :first] @ X[:, :first].T + PB[:, last + 1 :] @ X[:, last + 1 :].T
+    else:
+        PX0 = PB @ X.T
+    v, _ = lapack.dtrtrs(R, PX0, lower=1, overwrite_b=1)
+    order = np.argsort(index[a:])
+    var = np.full(m, np.nan)
+    if variance:
+        inverse, _ = lapack.dtrtri(RMM, lower=1)
+        var = np.einsum("ij,ij->j", inverse, inverse)[order]
+    if covariance:
+        base, _ = lapack.dlauum(inverse, lower=1)
+        _mirror(base)
+        base = base[np.ix_(order, order)]
+    # Per pattern, with E = G[p] \ B: W = R^-1 P_BE, R_S R_S^T = P_EE - W^T W,
+    # Y = R_S^-1 W_M^T R_MM^-1 in the pixel order of M, K = R_S^-1 W_U^T, and v - W u
+    # in place of v, with u = S^-1 (P_{E,:} x0 - W^T v) the E entries of the solution.
+    updates = []
+    for p, group in enumerate(groups):
+        E = np.flatnonzero(G[p] & ~B)
+        if not E.size:
+            updates.append((np.zeros((0, m)), np.zeros((0, n))))
+            continue
+        W, _ = lapack.dtrtrs(R, PB[:, E], lower=1)
+        RS = factor_pattern(P[np.ix_(E, E)] - W.T @ W)
+        u, _ = lapack.dpotrs(RS, P[E] @ X[group].T - W.T @ v[:, group], lower=1)
+        v[:, group] -= W @ u
+        Y = np.zeros((E.size, m))
+        if variance:
+            Z, _ = lapack.dtrtrs(RMM, W[a:], lower=1, trans=1)
+            Y, _ = lapack.dtrtrs(RS, Z.T, lower=1)
+            Y = Y[:, order]
+        # R_UU^T Y_U^T = W_U R_S^-T, as the rows U of R_MM^-T are 0 outside U.
+        K, _ = lapack.dtrtrs(RS, W[t:].T, lower=1)
+        updates.append((Y, K))
+    # mu_M = -(R^-T (v - W u))_M = -R_MM^-T (v - W u)_M.
+    mean, _ = lapack.dtrtrs(RMM, -v[a:], lower=1, trans=1)
+    pixel_mean = mean[order].T
+    solutions = []
+    for p, group in enumerate(groups):
+        Y, K = updates[p]
+        e = K.shape[0]
+        pattern_var = var + np.einsum("ij,ij->j", Y, Y)
+        cov: NDArray[np.float64] | None = None
+        if covariance:
+            cov = base + Y.T @ Y
+            np.fill_diagonal(cov, pattern_var)
+        # chi2 at T[p] is the minimum over c and over v at D = U \ T[p], with v = r at
+        # T[p], of ||R_UU^T (v - Y_U^T c)||^2 + ||c||^2: the marginal of v_U ~ N(0,
+        # C_UU) at T[p], with C_UU = (R_UU R_UU^T)^-1 + Y_U^T Y_U. The residual of this
+        # least-squares problem is formed at its minimizer, so that an error in the
+        # minimizer enters chi2 only to second order.
+        D = np.flatnonzero(~T[p, index[t:]])
+        r = XU[group].T - mean[t - a :, group]
+        # v at D is free, so its data, in G, do not enter.
+        r[D] = 0.0
+        residual = np.concatenate([RUU.T @ r, np.zeros((e, r.shape[1]))])
+        A = np.block([[RUU[D].T, -K.T], [np.zeros((e, D.size)), np.eye(e)]])
+        Q, _ = np.linalg.qr(A)
+        residual -= Q @ (Q.T @ residual)
+        chi2 = np.sum(residual**2, axis=0)
+        solutions.append(Conditional(pixel_mean[group], pattern_var, chi2, cov, None))
+    return solutions
+
+
 def _conditional(
     blocks: Callable[
         [NDArray[np.intp]], tuple[NDArray[np.float64], NDArray[np.float64]]
