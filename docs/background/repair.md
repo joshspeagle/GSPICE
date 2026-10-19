@@ -102,6 +102,30 @@ The five steps run in this order:
 5. **Final infill.** The result is that of {func}`gspice.infill` with `replace=M` and
    `ignore=I`, and the options `inflate`, `covariance` and `rng`.
 
+## Long defects
+
+The block scan predicts each block from the pixels beyond its guard window. Inside a
+shifted region longer than a block, these pixels are shifted too, and the prediction
+follows them. The scan therefore flags few of the blocks wholly inside the region. The
+z-scores of steps 1 and 3 come from the same kind of prediction, so they miss the
+inside of the region as well.
+
+Two simulations show the size of this limit. "Strong" pixels here are those whose shift
+exceeds 5 times their noise.
+
+| | Tutorial survey | `gspice.simulate`, npix 1000 |
+|---|---|---|
+| Length of a shifted region | 100 to 400 pixels | 200 to 600 pixels |
+| Spectra with a flagged block | 16% | 43% |
+| The same, by a $\chi^2$ test of the known region | 36% | 61% |
+| Strong shifted pixels replaced or ignored | 97.5% | 40% |
+
+The $\chi^2$ test of the known region uses the 99.9th percentile of the same statistic
+on spectra without artifacts. It needs the region to be known, so it bounds what a
+$\chi^2$ test can find: most shifts that the scan misses are weak against the noise.
+Where a shifted region covers a large part of the spectrum, as in the second column,
+many of its strong pixels stay in the output.
+
 ## The result
 
 `repair` returns a {class}`gspice.Repaired`, as `infill` does. `replaced` is $M$, which
