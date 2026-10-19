@@ -1,5 +1,7 @@
 dist
 .vscode
+# The 2021 draft of the paper, kept out of the repository
+paper/
 # Local environments and caches
 .venv/
 .pytest_cache/
