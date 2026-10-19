@@ -315,7 +315,7 @@ def artifact_case():
     rng = np.random.default_rng(11)
     x = rng.standard_normal((NSPEC, NPIX)) @ np.linalg.cholesky(C).T
     x[1, 30:32] += 60.0
-    for s, columns in ((2, [slice(60, 70)]), (5, [slice(20, 28), slice(85, 93)])):
+    for s, columns in ((2, [slice(60, 70)]), (5, [slice(20, 31), slice(85, 96)])):
         for column in columns:
             x[s, column] = 4 * A - mean[column]
     block = slice(45, 75)
@@ -344,10 +344,12 @@ class Steps(NamedTuple):
     ignored: np.ndarray
 
 
-def steps(model, flux, ivar, mask, count_on="all", **options):
+def steps(model, flux, ivar, mask, count_on="all", r26=False, **options):
     # Design section 5.4 with the public pixelwise and infill, spectrum by spectrum in
     # the block pass, for spectra with ivar A^2 at good pixels, so that a_s = A at
-    # every step. ratios holds the ratios of each scan of each spectrum.
+    # every step. ratios holds the ratios of each scan of each spectrum. r26=True
+    # gives step 3 as r26 gp_repair runs it: z2 is the z of x1, and M keeps M1; its K
+    # for "flagged" is that of the package before issue #129.
     options = OPTIONS | options
     nguard, d = options["nguard"], options.get("dilate", 1)
     bad = mask | (ivar == 0)
@@ -388,12 +390,22 @@ def steps(model, flux, ivar, mask, count_on="all", **options):
             flagged[s, k] = True
             Mb[s] |= cover[k]
     X1 = infill(model, flux, ivar, mask, replace=M1 | Mb, ignore=I1).flux
-    z2 = pixelwise(model, X1, FULL[:n], nguard=nguard).z
-    M = M1 | Mb | _spectra.dilate(np.abs(z2) > NSIGMA_REPLACE, d)
+    prediction = pixelwise(model, X1, FULL[:n], nguard=nguard)
+    if r26:
+        z2 = prediction.z
+        M = M1 | Mb | _spectra.dilate(np.abs(z2) > NSIGMA_REPLACE, d)
+    else:
+        # x, with its bad pixels interpolated, against the prediction from x1.
+        z2 = (ftilde - prediction.flux) / np.sqrt(prediction.var)
+        keep = (np.abs(z1) > NSIGMA_REPLACE) & (np.abs(z2) > NSIGMA_IGNORE)
+        core = (np.abs(z2) > NSIGMA_REPLACE) | keep
+        M = _spectra.dilate(core, d) | Mb | bad
     I = _spectra.dilate(np.abs(z2) > NSIGMA_IGNORE, d) & ~M
     K = M | I
     if count_on == "flagged":
-        core = (np.abs(z1) > NSIGMA_REPLACE) | (np.abs(z2) > NSIGMA_IGNORE)
+        core = np.abs(z2) > NSIGMA_IGNORE
+        if r26:
+            core |= np.abs(z1) > NSIGMA_REPLACE
         K = (core & ~bad) | Mb
     exclusion = options["runlength"], options["halfwidth"]
     if exclusion[0] is None:
@@ -440,7 +452,7 @@ def captured(monkeypatch):
 )
 def test_repair_follows_the_steps_of_section_5_4(monkeypatch, options):
     # Done when 2 of issue #59: for "flagged", K is the direct construction of step 4,
-    # (((|z1| > nsigma_replace) | (|z2| > nsigma_ignore)) minus bad) | M_b.
+    # ((|z2| > nsigma_ignore) minus bad) | M_b.
     model, flux, ivar, mask = artifact_case()
     case = steps(model, flux, ivar, mask, **options)
     assert_margins(case)
@@ -557,34 +569,43 @@ def test_a_noise_model_follows_the_steps_with_one_precision_matrix_per_spectrum(
     assert empty.blocks.shape == (0, STARTS.size)
 
 
-def test_repair_matches_r26_gp_repair():
+def test_repair_matches_r26_gp_repair_where_step_3_keeps_m1():
     # Done when 1 of issue #59 (design section 14, item 4.3): r26 with max_block_iter
     # = nblock, count_on "all", dilate 1 and ivar 0 only at masked pixels, on the same
     # blocks and thresholds. r26 computes its pixelwise weights by the Schur route, so
-    # the margins of artifact_case keep every decision away from rounding.
+    # the margins of artifact_case keep every decision away from rounding. r26 keeps
+    # M1 in M; repair tests x at M1 again in step 3 (issue #129), so it matches r26 on
+    # the spectra where that test leaves M1 in M, and steps(r26=True) on all.
     from r26.repairUtils import block_operators, gp_repair, make_blocks
 
     model, flux, ivar, mask = artifact_case()
     case = steps(model, flux, ivar, mask)
+    old = steps(model, flux, ivar, mask, r26=True)
     assert_margins(case)
+    # The z2 of x1 decides M and I of r26.
+    assert_margins(old)
     # The case holds each kind of artifact that the brief of #59 names.
-    widened = (case.ignored != case.I).any(axis=1)
     # The cosmic rays, the bad column and the masked pixels are replaced.
     assert case.M[1, 30:32].all() and case.M[6, [0, NPIX - 1]].all()
     assert case.M[2, 60:70].all() and case.M[mask].all()
     # Only the z of masked pixel 32 of row 1 replaces pixel 33.
     assert np.abs(case.z1[1, 32]) > NSIGMA_REPLACE > np.abs(case.z1[1, [33, 34]]).max()
-    assert case.M[1, 33] and np.abs(case.z2[1, 32:35]).max() < NSIGMA_REPLACE
+    assert case.M[1, 33] and np.abs(case.z2[1, 33:35]).max() < NSIGMA_IGNORE
     # The block pass flags the shifted block, whose pixels no |z| flags, and nothing
     # else; one more scan of row 3 finds no other block.
     assert np.flatnonzero(case.flagged.any(axis=1)).tolist() == [3]
     assert np.flatnonzero(case.flagged[3]).tolist() == [3]
     assert np.abs(case.z1[3]).max() < NSIGMA_IGNORE
-    # The exclusion widens rows 1 to 4, and falls back in row 5.
-    assert np.flatnonzero(widened).tolist() == [1, 2, 3, 4]
-    assert case.left[5] < math.floor(MINFRAC * NPIX)
+    # The exclusion widens rows 1 to 4, and falls back in row 5, with both rules.
+    for c in (case, old):
+        assert np.flatnonzero((c.ignored != c.I).any(axis=1)).tolist() == [1, 2, 3, 4]
+        assert c.left[5] < math.floor(MINFRAC * NPIX)
     # The weak cosmic ray and its neighbours are ignored.
     assert case.I[8, 69:72].all() and not case.M[8].any()
+    # In step 1, the cosmic rays of rows 1 and 6 and the bad columns of rows 2 and 5
+    # flag artifact-free pixels, which r26 keeps in M and repair drops.
+    kept = ((case.M == old.M) & (case.ignored == old.ignored)).all(axis=1)
+    assert np.flatnonzero(~kept).tolist() == [1, 2, 5, 6]
     blocks = model.blocks
     stride = int(blocks.starts[1] - blocks.starts[0])
     assert same(np.array([b[0] for b in make_blocks(NPIX, WIDTH, stride)]), STARTS)
@@ -603,12 +624,48 @@ def test_repair_matches_r26_gp_repair():
         exclusion_halfwidth=OPTIONS["halfwidth"],
         minfrac=MINFRAC,
     )
+    assert same(old.M, info["replace"]) and same(old.ignored, info["ignore"])
     result = repair(model, flux, ivar, mask, **OPTIONS)
-    assert same(result.replaced, info["replace"])
-    assert same(result.ignored, info["ignore"])
+    assert same(result.replaced[kept], info["replace"][kept])
+    assert same(result.ignored[kept], info["ignore"][kept])
     assert same(result.blocks, info["block_flag"])
     # Q14: only var differs, so it is not compared.
-    assert np.all(np.abs(result.flux - newflux) <= 1e-12 * np.abs(newflux))
+    error = np.abs(result.flux - newflux)[kept]
+    assert np.all(error <= 1e-12 * np.abs(newflux[kept]))
+
+
+def test_step_3_replaces_a_cosmic_ray_and_not_the_pixels_it_flagged_in_step_1():
+    # Issue #129. Row 0 of artifact_case, with a cosmic ray of 40 sigma on pixel 60.
+    # The guard windows of pixels 54 and 66 do not hold the ray, so it moves their
+    # predictions from x, and step 1 replaces them and their neighbours. r26 keeps
+    # them in M. repair tests x again against the prediction from x1, which holds the
+    # conditional mean at the ray: it keeps the ray and drops pixels 54 and 66.
+    model, flux, ivar, mask = artifact_case()
+    flux, ivar, mask = flux[:1].copy(), ivar[:1], mask[:1]
+    flux[0, 60] += 40 / A
+    assert_margins(steps(model, flux, ivar, mask))
+    old = steps(model, flux, ivar, mask, r26=True)
+    assert np.flatnonzero(old.M[0]).tolist() == [53, 54, 55, 59, 60, 61, 65, 66, 67]
+    result = repair(model, flux, ivar, mask, **OPTIONS)
+    assert np.flatnonzero(result.replaced[0]).tolist() == [59, 60, 61]
+
+
+def test_step_3_keeps_a_pixel_of_a_smooth_artifact_above_nsigma_ignore():
+    # The counterexample of the review of PR #134 to a step 3 whose M held only
+    # |z2| > nsigma_replace: row 0 of artifact_case with pixels 50 to 64 offset by 30
+    # sigma. Step 1 ignores some of them, which keep their values in x1 and pull the
+    # prediction of pixels 53 and 61 toward the offset: their |z2| falls between the
+    # thresholds. They stay in M, with their neighbours 52 and 62 by dilation.
+    model, flux, ivar, mask = artifact_case()
+    flux, ivar, mask = flux[:1].copy(), ivar[:1], mask[:1]
+    flux[0, 50:65] += 30 / A
+    case = steps(model, flux, ivar, mask)
+    assert_margins(case)
+    z1, z2 = np.abs(case.z1[0]), np.abs(case.z2[0])
+    assert np.all(z1[[53, 61]] > NSIGMA_REPLACE)
+    assert np.all((z2[[53, 61]] > NSIGMA_IGNORE) & (z2[[53, 61]] < NSIGMA_REPLACE))
+    assert not _spectra.dilate(np.abs(case.z2) > NSIGMA_REPLACE, 1)[0, [52, 62]].any()
+    assert repair(model, flux, ivar, mask, **OPTIONS).replaced[0, 52:63].all()
 
 
 def test_each_spectrum_is_scanned_with_the_thresholds_of_its_bin():
@@ -632,6 +689,26 @@ def test_each_spectrum_is_scanned_with_the_thresholds_of_its_bin():
         )
         result = repair(binned, flux, ivar, mask, **OPTIONS)
         assert same(result.blocks, single.blocks & (bins == low)[:, np.newaxis])
+
+
+def test_two_identical_bins_repair_as_one_bin():
+    # Each bin runs step 3 on its own spectra, so the re-test of rows 1, 2, 5 and 6
+    # must test x, not x1, in both bins.
+    model, flux, ivar, mask = artifact_case()
+    ratio = np.median(flux * np.sqrt(ivar), axis=1)
+    thresholds = np.repeat(model.blocks.thresholds, 2, axis=0)
+    binned = Model(
+        np.repeat(model.mean, 2, axis=0),
+        model.cov * 2,
+        model.n_train * 2,
+        edges=(ratio[3],),
+        blocks=dataclasses.replace(model.blocks, thresholds=thresholds),
+    )
+    single = repair(model, flux, ivar, mask, **OPTIONS)
+    result = repair(binned, flux, ivar, mask, **OPTIONS)
+    assert same(result.replaced, single.replaced)
+    assert same(result.ignored, single.ignored)
+    assert np.allclose(result.flux, single.flux, rtol=1e-12, atol=0)
 
 
 def test_the_block_pass_flags_blocks_until_no_ratio_exceeds_1():
@@ -785,12 +862,12 @@ def test_a_covariance_that_fails_the_check_of_its_precision_matrix_raises_at_onc
 
 
 def test_inflate_raises_before_the_final_infill_where_f_s_is_not_defined():
-    # Design section 8. Rows 1 to 5 condition on at most 96 pixels, and row 6, with
-    # its two cosmic rays, on 113, so that N_s - N_k - 3 <= 0 at N_s = 100.
+    # Design section 8. Rows 1 to 5 condition on at most 95 pixels, and row 6, with
+    # its two cosmic rays, on 116, so that N_s - N_k - 3 <= 0 at N_s = 100.
     model, flux, ivar, mask = artifact_case()
     model = dataclasses.replace(model, n_train=(100,))
     calls = []
-    error = r"^inflate: .*, got N_s = 100 and N_k = 113 at row 6$"
+    error = r"^inflate: .*, got N_s = 100 and N_k = 116 at row 6$"
     with pytest.raises(ValueError, match=error):
         repair(
             model,

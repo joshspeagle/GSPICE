@@ -122,23 +122,12 @@ def compute(path):
     clean_rep = gspice.repair(model, clean[test], clean_ivar[test])
     st, at = strong[test], artifacts[test]
     has_shift = shift[test].any(axis=1)
-    false = rep.replaced & ~at
-    without = np.where(at, clean[test], flux[test])
-    z_without = gspice.pixelwise(model, without, ivar[test]).z
     num["repair"] = {
         "nblock": int(model.blocks.starts.size),
         "false": (rep.replaced & ~at).sum() / (~at).sum(),
         "strong_replaced": rep.replaced[st].mean(),
         "strong_handled": (rep.replaced | rep.ignored)[st].mean(),
         "clean_spectra_touched": clean_rep.replaced.any(axis=1).mean(),
-        "false_spectra": int((rep.replaced & ~at).any(axis=1).sum()),
-        "false_spectra_with_artifact": int((false.any(axis=1) & at.any(axis=1)).sum()),
-        "false_spectra_with_cosmic": int(
-            (false.any(axis=1) & kinds["cosmic"][test].any(axis=1)).sum()
-        ),
-        "test_spectra_with_cosmic": kinds["cosmic"][test].any(axis=1).mean(),
-        "false_z_above_10": np.mean(np.abs(p.z[false]) > 10),
-        "false_z_above_10_without_artifacts": np.mean(np.abs(z_without[false]) > 10),
         "strong_replaced_by_type": {
             name: rep.replaced[st & kind[test]].mean() for name, kind in kinds.items()
         },

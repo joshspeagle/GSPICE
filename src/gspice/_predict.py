@@ -747,16 +747,18 @@ def predict(
     predicted: NDArray[np.float64],
     var: NDArray[np.float64] | None,
     z: NDArray[np.float64] | None,
+    Y: NDArray[np.float64] | None = None,
 ) -> None:
     # The pixelwise prediction of the working vectors X of a chunk of spectra, with
     # inflation (nbin, npix) the factor of the variance, or None for 1: its mean into
-    # predicted, its variance into var (working units) and z into z, at every pixel,
-    # bad pixels included (design decision A12). var or z None is not computed, and z
-    # may be predicted, which then ends as z. The caller computed the guard weights of a
-    # model without noise.
+    # predicted, its variance into var (working units) and the z of Y, X if None,
+    # into z, at every pixel, bad pixels included (design decision A12). var or z None
+    # is not computed, and z may be predicted, which then ends as z. The caller
+    # computed the guard weights of a model without noise.
+    Y = X if Y is None else Y
     if len(model.cov) == 1:
         factor = None if inflation is None else inflation[0]
-        _predict(model, 0, nguard, X, factor, predicted, var, z)
+        _predict(model, 0, nguard, X, factor, predicted, var, z, Y)
         return
     # The temporaries of a bin end with its iteration.
     for b in np.unique(bins).tolist():
@@ -766,7 +768,7 @@ def predict(
             None if out is None else np.empty_like(mean) for out in (var, z)
         )
         factor = None if inflation is None else inflation[b]
-        _predict(model, b, nguard, X[at], factor, mean, part_var, part_z)
+        _predict(model, b, nguard, X[at], factor, mean, part_var, part_z, Y[at])
         predicted[at] = mean
         if var is not None:
             var[at] = part_var
@@ -775,13 +777,18 @@ def predict(
 
 
 def zscores(
-    model: Model, nguard: int, X: NDArray[np.float64], bins: NDArray[np.intp]
+    model: Model,
+    nguard: int,
+    X: NDArray[np.float64],
+    bins: NDArray[np.intp],
+    Y: NDArray[np.float64] | None = None,
 ) -> NDArray[np.float64]:
-    # z of pixelwise at every pixel of the working vectors X of a chunk of spectra,
-    # without inflation. The caller computed the guard weights of a model without
-    # noise.
+    # z of the working vectors Y, X if None, at every pixel against the pixelwise
+    # prediction from the working vectors X of the same chunk of spectra, without
+    # inflation. The caller computed the guard weights of a model
+    # without noise.
     z = np.empty(X.shape)
-    predict(model, nguard, X, bins, None, z, None, z)
+    predict(model, nguard, X, bins, None, z, None, z, Y)
     return z
 
 
@@ -1061,6 +1068,7 @@ def _predict(
     predicted: NDArray[np.float64],
     var: NDArray[np.float64] | None,
     z: NDArray[np.float64] | None,
+    Y: NDArray[np.float64],
 ) -> None:
     if model._label is None or 2 * nguard + 1 > X.shape[1]:
         W, v = model._guard_weights(b, nguard)
@@ -1075,7 +1083,7 @@ def _predict(
     if inflation is not None:
         v = v * inflation
     if z is not None:
-        np.subtract(X, predicted, out=z)
+        np.subtract(Y, predicted, out=z)
         z /= np.sqrt(v)
     if var is not None:
         var[...] = v
