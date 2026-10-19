@@ -59,10 +59,11 @@ def repair(
     """Detect and replace bad pixels.
 
     For a spectrum with the working vector x (see `Model`) and the bad pixels
-    bad = (mask != 0) | (ivar == 0), let z(y) be the z of `pixelwise` with nguard at
-    every pixel of a vector y, its interpolated bad pixels included, and dil(F, d) the
-    pixels within d of a pixel of F along the spectrum. A "conditional mean" is that of
-    `infill`. The steps, in this order, are:
+    bad = (mask != 0) | (ivar == 0), let z(y | w) = (y - mu(w)) / sigma at every pixel
+    of a vector y, its interpolated bad pixels included, with mu(w) and sigma^2 the
+    mean and variance of `pixelwise` with nguard for a vector w, z(y) = z(y | y) the z
+    of `pixelwise`, and dil(F, d) the pixels within d of a pixel of F along the
+    spectrum. A "conditional mean" is that of `infill`. The steps, in this order, are:
 
     1. M1 = dil(|z(x)| > nsigma_replace, dilate) | bad, and
        I1 = dil(|z(x)| > nsigma_ignore, dilate) minus M1.
@@ -74,13 +75,14 @@ def repair(
        replaced by its conditional mean given the other pixels. A block is flagged at
        most once, so there are at most nblock rounds. Without blockwise, M_b is empty.
     3. x1 is x with x at M1 | M_b replaced by its conditional mean given the pixels
-       outside M1 | M_b | I1. M = M1 | M_b | dil(|z(x1)| > nsigma_replace, dilate),
-       and I = dil(|z(x1)| > nsigma_ignore, dilate) minus M.
+       outside M1 | M_b | I1. With z2 = z(x | x1), M = dil((|z2| > nsigma_replace) |
+       ((|z(x)| > nsigma_replace) & (|z2| > nsigma_ignore)), dilate) | M_b | bad, and
+       I = dil(|z2| > nsigma_ignore, dilate) minus M.
     4. If runlength is not None: every run of at least runlength consecutive pixels of
        the counting set K adds every pixel within halfwidth of the run to I, minus M,
        unless fewer than floor(minfrac npix) pixels outside M and I would remain (D-57).
        K is M | I for count_on="all". For "flagged", K holds the pixels outside bad
-       with |z(x)| > nsigma_replace or |z(x1)| > nsigma_ignore, and M_b.
+       with |z2| > nsigma_ignore, and M_b.
     5. The result is that of `infill` with replace=M, ignore=I, and inflate,
        covariance and rng, bit for bit, plus the flagged blocks. For a dense noise
        model whose steps 1 to 4 form P_s, for guard windows or blocks short of all
@@ -329,16 +331,21 @@ def _detect(
     else:
         flagged, Mb, X_b = _block_pass(model, blocks, factors, X, bins, rows, G1)
         X1 = np.where(M1 | Mb, X_b, X)
-    z2 = zscores(model, nguard, X1, bins)
-    M = M1 | Mb | _dilated(z2, nsigma_replace, d)
-    I = _dilated(z2, nsigma_ignore, d) & ~M
+    # z of x against the prediction from x1, so that a pixel of M1 that only an
+    # artifact elsewhere flagged in step 1 leaves M. A pixel that step 1 replaced
+    # stays while |z2| > nsigma_ignore: the ignored neighbours of a smooth extended
+    # artifact keep their values in x1 and pull its prediction toward it.
+    z2 = np.abs(zscores(model, nguard, X1, bins, X))
+    ignore = z2 > nsigma_ignore
+    keep = (np.abs(z1) > nsigma_replace) & ignore
+    M = widen((z2 > nsigma_replace) | keep, d) | Mb | bad
+    I = widen(ignore, d) & ~M
     # Step 4.
     if runlength is not None:
         if count_on == "all":
             K = M | I
         else:
-            core = (np.abs(z1) > nsigma_replace) | (np.abs(z2) > nsigma_ignore)
-            K = (core & ~bad) | Mb
+            K = (ignore & ~bad) | Mb
         I = _exclude_extended(M, I, K, runlength, halfwidth, minfrac)
     return flagged, M, I
 

@@ -80,18 +80,25 @@ The five steps run in this order:
    does not raise the $\chi^2_A$ of its block.
 3. **Second pixelwise pass.** Replace $x$ at $M_1 \cup M_b$ by its conditional mean
    given the pixels outside $M_1 \cup M_b \cup I_1$, which gives $x_1$. Compute $z_2$,
-   the pixelwise z-scores of $x_1$. Then
-   $M = M_1 \cup M_b \cup \mathrm{dil}(|z_2| > \mathtt{nsigma\_replace})$ and
+   the z-scores of $x$ against the pixelwise prediction from $x_1$. Then
+   $M = \mathrm{dil}\big((|z_2| > \mathtt{nsigma\_replace}) \cup
+   ((|z_1| > \mathtt{nsigma\_replace}) \cap (|z_2| > \mathtt{nsigma\_ignore}))\big)
+   \cup M_b \cup \mathrm{bad}$ and
    $I = \mathrm{dil}(|z_2| > \mathtt{nsigma\_ignore}) \setminus M$. The pixels of $M_1$
    and $M_b$ hold their conditional mean in $x_1$, so they do not corrupt the
-   conditioning pixels of $z_2$.
+   predictions of $z_2$. A strong artifact moves the prediction of each pixel whose
+   guard window does not hold it, so step 1 can flag artifact-free pixels. Step 3 tests
+   them again: a pixel above `nsigma_replace` in step 1 stays in the core of $M$ only
+   while its $|z_2|$ exceeds `nsigma_ignore`, and $M$ is the dilation of that core.
+   The lower threshold keeps the pixels of a smooth extended artifact: its
+   ignored pixels keep their values in $x_1$ and pull the prediction toward it.
 4. **Exclusion**, if `runlength` is not None. Each run of at least `runlength`
    consecutive pixels of the counting set $K$ adds every pixel within `halfwidth` of the
    run to $I$, except the pixels of $M$. $K$ is $M \cup I$ with `count_on="all"`. With
    `count_on="flagged"`, $K$ holds the pixels outside the bad set with
-   $|z_1| > \mathtt{nsigma\_replace}$ or $|z_2| > \mathtt{nsigma\_ignore}$, and $M_b$. A
-   spectrum keeps its earlier $I$ if fewer than $\lfloor \mathtt{minfrac} \cdot
-   \mathrm{npix} \rfloor$ pixels outside $M$ and $I$ would remain.
+   $|z_2| > \mathtt{nsigma\_ignore}$, and $M_b$. A spectrum keeps its earlier $I$ if
+   fewer than $\lfloor \mathtt{minfrac} \cdot \mathrm{npix} \rfloor$ pixels outside
+   $M$ and $I$ would remain.
 5. **Final infill.** The result is that of {func}`gspice.infill` with `replace=M` and
    `ignore=I`, and the options `inflate`, `covariance` and `rng`.
 

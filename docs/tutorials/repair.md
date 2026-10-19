@@ -86,15 +86,11 @@ flagged = result.blocks.any(axis=1)
 print(flagged[has_shift].sum(), "of", has_shift.sum(), "shifted spectra flagged")
 ```
 
-On the 2000 test spectra, `repair` replaced 77% of the artifact pixels above 5σ, and
-replaced or ignored 96% of them. It replaced 87% of such pixels in cosmic rays, 72% in
+On the 2000 test spectra, `repair` replaced 78% of the artifact pixels above 5σ, and
+replaced or ignored 96% of them. It replaced 87% of such pixels in cosmic rays, 73% in
 shifted blocks and 6% in hot columns, which the model partly describes
-({doc}`fitting`). It replaced 0.24% of the pixels without an artifact. Of the 536 spectra with such a
-pixel, 513 have an artifact and 509 a cosmic ray, against 44% of all the test spectra.
-The first pixelwise pass predicts each pixel from all the pixels outside its guard
-window, so a strong cosmic ray shifts the prediction of every other pixel. 39% of these
-pixels have $|z| > 10$ in that pass, and 1.2% with the artifacts removed. The block scan flagged a
-block in 7 of the 45 test spectra with a shifted block.
+({doc}`fitting`). It replaced 0.06% of the pixels without an artifact. The block scan
+flagged a block in 7 of the 45 test spectra with a shifted block.
 
 ```{image} ../_static/figures/tutorials/repair-recall-light.svg
 :alt: The fraction of artifact pixels that repair replaced, against the amplitude of the artifact
