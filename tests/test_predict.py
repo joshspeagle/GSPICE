@@ -923,7 +923,7 @@ def test_the_in_sample_mean_of_z2_is_exact_for_any_data(center, weighted):
     # Over the N_s spectra of a fit without clipping, the w-weighted mean of Z^2 / N_*
     # is 1 - V2 / V1^2 for a mean-centred model, which is (N_s - 1) / N_s for unit
     # weights, and 1 for a constant centre, whatever the distribution of the data
-    # (paper l.249, design section 11): at each pixel of pixelwise, and over the
+    # (design section 11): at each pixel of pixelwise, and over the
     # spectra of one infill pattern.
     rng = np.random.default_rng(11)
     nspec = 40

@@ -1,9 +1,10 @@
 # Detection and repair
 
-{func}`gspice.repair` flags the bad pixels of each spectrum and replaces them, with the
-procedure that the paper validates on simulations {cite:p}`finkbeiner2025gspice`. It uses
-two detectors: the pixelwise z-score of {doc}`prediction` for narrow defects, and a
-{term}`block scan` for broad ones.
+{func}`gspice.repair` flags the bad pixels of each spectrum and replaces them. It
+extends the pixelwise repair of the paper's Secs. 2.6 and 3.3
+{cite:p}`finkbeiner2025gspice` with a scan over blocks. It uses two detectors: the
+pixelwise z-score of {doc}`prediction` for narrow defects, and a {term}`block scan` for
+broad ones.
 
 ## Why a block scan
 

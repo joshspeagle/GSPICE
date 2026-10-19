@@ -75,7 +75,7 @@ def rebuild(instance: "DataclassInstance") -> tuple[Callable[[], object], tuple[
 
 @dataclass(frozen=True, eq=False)
 class Blocks:
-    """Block-scan geometry and per-block thresholds (paper 3.2), from `fit_blocks`.
+    """Block-scan geometry and per-block thresholds, from `fit_blocks`.
 
     Block k holds the pixels starts[k] to starts[k] + width - 1. Its statistic chi2_A
     of `fit_blocks` compares the block with its prediction from the pixels farther
@@ -614,8 +614,9 @@ def fit(
     and the final mask is M_{N+1}; with cumulative=False (2022), M_{n+1} = bad | F_n
     and the final mask is bad | F_{N-1} | F_N. nsigma=() fits on the mask bad, without
     clipping.
-    The final fit uses the final mask and the weights w_s; reweighting the clipping
-    raised false flags in the paper (l.548).
+    The final fit uses the final mask and the weights w_s. Without rank, fit logs a
+    warning on the "gspice" logger for each pass whose threshold exceeds the in-sample
+    ceiling of |z| of an outlier in a spectrum of typical leverage.
 
     With noise=True, the passes clip as above, and the final fit estimates the
     covariance of the noise-free flux in flux units (design section 4.1). Let u_si be

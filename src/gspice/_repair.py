@@ -56,7 +56,7 @@ def repair(
     rng: np.random.Generator | None = None,
     progress: Progress | None = None,
 ) -> Repaired:
-    """Detect and replace bad pixels with the procedure the paper validates (l.510).
+    """Detect and replace bad pixels.
 
     For a spectrum with the working vector x (see `Model`) and the bad pixels
     bad = (mask != 0) | (ivar == 0), let z(y) be the z of `pixelwise` with nguard at
@@ -87,11 +87,11 @@ def repair(
        pixels, step 5 conditions on that P_s, where `infill` uses the Cholesky factor
        of C_s, so the two agree to rounding.
 
-    Nothing limits the replaced set; the paper measured calibration up to 1024 of 2415
-    replaced pixels (l.530). Since M and I depend on the data, f_s does not hold for
-    Repaired.chi2 (see `finite_sample_factor`). For a noise model, x is in flux units,
-    and C_s of the spectrum (see `Model`) takes the place of cov[b] in every step:
-    repair runs the five steps one spectrum at a time, with one P_s for all of them.
+    Nothing limits the replaced set. Since M and I depend on the data, f_s does not hold
+    for Repaired.chi2 (see `finite_sample_factor`). For a noise model, x is in flux
+    units, and C_s of the spectrum (see `Model`) takes the place of cov[b] in every
+    step: repair runs the five steps one spectrum at a time, with one P_s for all of
+    them.
 
     Parameters
     ----------
@@ -106,7 +106,8 @@ def repair(
     nsigma_ignore : float, optional
         The threshold of |z| for ignoring a pixel; finite, > 0 and <= nsigma_replace.
     dilate : int, optional
-        The pixels d by which dil widens the flags of z on each side; >= 0.
+        The pixels d by which dil widens the flags of z on each side; >= 0. Paper
+        Fig. 8 uses 2.
     blockwise : bool, optional
         If True, run the block pass of step 2.
     runlength : int or None, optional
