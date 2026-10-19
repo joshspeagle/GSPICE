@@ -5,7 +5,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 ## Layout
 
 - `src/gspice/`: the package. `src/gspice/legacy/` holds the 2022 modules (commit `1fbab9f`).
-- `docs/`: the Sphinx site in MyST Markdown, which a workflow deploys to GitHub Pages from `main`. `docs/design.md`, the design of the new package that Phases 2 to 5 implement, is not part of the site. `docs/scripts/` makes the data of the figures; its scripts download their inputs and run outside CI.
+- `docs/`: the Sphinx site in MyST Markdown, which a workflow deploys to GitHub Pages from `main`. `docs/design.md`, the design of the new package that Phases 2 to 5 implement, is not part of the site. `docs/scripts/` makes the survey of the tutorials and their figures; its scripts run outside CI, `spectra.py` downloads its inputs, and `figures.py` needs the dependency group `figures`.
 - `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
 - `tests/legacy/`: tests of the behaviour changes of `gspice.legacy`.
 - `tools/`: `check_dist.py` checks the contents of the built wheel and sdist, and `smoke.py` is the smoke test of an installed wheel. CI runs both.

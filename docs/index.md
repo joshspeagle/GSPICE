@@ -27,6 +27,20 @@ band is flagged and restored.
 
 ```{toctree}
 installation
+quickstart
+```
+
+```{toctree}
+:caption: Tutorials
+
+tutorials/fitting
+tutorials/pixelwise
+tutorials/infill
+tutorials/repair
+tutorials/calibration
+tutorials/models
+tutorials/saving
+tutorials/migration
 ```
 
 ```{toctree}
