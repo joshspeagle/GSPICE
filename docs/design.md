@@ -178,7 +178,7 @@ Every new-API algorithm uses this identity, except `solve_mean` (below). Schur u
 | `solve_mean(C, G, M, X)` | μ_M = C_MO C_OO⁻¹ x_O, with L Lᵀ = C_OO by `dpotrf` and the solve by `dpotrs`; it reads only x_O. `filled`, the infill of the mean alone in `repair` and `fit_blocks`, takes it instead of `solve_pattern` for a dense model without noise where \|G\| > npix/2. C_OO scaled to unit diagonal is a principal submatrix of C scaled to unit diagonal, so by interlacing its 2-norm condition number is at most that of C, which is at most the 1-norm one whose estimate `precision` checked (A26); `LinAlgError` if `dpotrf` fails | per pattern \|O\|³/3; per spectrum 2\|O\| (\|O\| + npix) |
 | `group_rows(keys)` | rows with identical boolean key rows: `np.unique` of a void view of `np.packbits(keys, axis=1)`; the infill key packs G, M and T, and grouping runs per S/N bin | O(nspec log nspec) |
 
-Guard windows are contiguous, so slices replace gathers; this is the IDL "contiguous" fast path (D-47) and needs no separate code. The trailing-block identities of `solve_pattern` give the variances, covariance and χ² from the one factorization (verified to 1.8e-15 at κ 1e2 to 1e8).
+Guard windows are contiguous, so slices replace gathers; this is the "contiguous" fast path of the IDL code in dfink/gspice (D-47) and needs no separate code. The trailing-block identities of `solve_pattern` give the variances, covariance and χ² from the one factorization (verified to 1.8e-15 at κ 1e2 to 1e8).
 
 **How each operation uses the primitive.**
 
@@ -800,7 +800,6 @@ Each line is one issue, one branch and one pull request with a single goal; line
 - Tutorials and examples, after the docs.
 - Release preparation: CITATION.cff, .zenodo.json, version, licence wording, the Python floor against end-of-life dates; the lead approves before any tag, release or upload.
 - Detection of long shifted regions in `repair` (#68): the block pass rarely flags the interior of a shift longer than a block. This departs from r26 and from section 5.4, so it needs its own adversarial review.
-- IDL (`pro/`) and Julia (`julia/`) updated and modernized, last.
 
 ## 15. Worked examples
 
