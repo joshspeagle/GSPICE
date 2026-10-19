@@ -35,7 +35,7 @@ def check(dist: Path) -> list[str]:
         top = f"{sdist.name.removesuffix('.tar.gz')}/"
         held = {n.removeprefix(top) for n in t.getnames()}
     wanted = tracked("src", "tests")
-    wanted |= {"pyproject.toml", "README.md", "CHANGELOG.md", "LICENSE"}
+    wanted |= {"pyproject.toml", "README.md", "CHANGELOG.md", "CITATION.cff", "LICENSE"}
     problems += [f"sdist lacks {p}" for p in sorted(wanted - held)]
     return problems
 
