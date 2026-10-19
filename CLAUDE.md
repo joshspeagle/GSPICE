@@ -6,7 +6,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 
 - `src/gspice/`: the package. `src/gspice/legacy/` holds the 2022 modules (commit `1fbab9f`).
 - `docs/design.md`: the design of the new package, which Phases 2 to 5 implement.
-- `notebooks/`, `notes/`, `paper/`: 2021-2022 working material.
+- `paper/`: the 2021 draft of the paper.
 - `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
 - `tests/legacy/`: tests of the behaviour changes of `gspice.legacy`.
 - `tools/`: `check_dist.py` checks the contents of the built wheel and sdist, and `smoke.py` is the smoke test of an installed wheel. CI runs both.

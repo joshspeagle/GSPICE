@@ -42,6 +42,7 @@
 ### Removed
 
 - The IDL code in `pro/` and the Julia code in `julia/`.
+- The notebooks and notes of 2021 and 2022 in `notebooks/` and `notes/`.
 - `setup.py`, which `pyproject.toml` replaces.
 - The egg in `dist/` and the 2022 tests in `gspice/tests/`, which could not run and which the golden tests replace.
 - The import of astropy, which the 2022 code did not use.

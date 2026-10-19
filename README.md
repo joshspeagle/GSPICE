@@ -1,6 +1,6 @@
 # GSPICE: Gaussian Pixelwise Conditional Estimation
 
-GSPICE models spectra on a common wavelength grid as a multivariate Gaussian with an empirical covariance, and predicts any set of pixels from the others. The prediction can replace bad pixels, and the distance of a pixel from its prediction can flag artifacts. The method is in Finkbeiner, Speagle & Karim, [arXiv:2511.16754](https://arxiv.org/abs/2511.16754). The package is in development, and its API can still change. The IDL and Julia implementations of 2021 and 2022 are in the upstream repository [dfink/gspice](https://github.com/dfink/gspice/tree/1fbab9f).
+GSPICE models spectra on a common wavelength grid as a multivariate Gaussian with an empirical covariance, and predicts any set of pixels from the others. The prediction can replace bad pixels, and the distance of a pixel from its prediction can flag artifacts. The method is in Finkbeiner, Speagle & Karim, [arXiv:2511.16754](https://arxiv.org/abs/2511.16754). The package is in development, and its API can still change. The IDL and Julia implementations, notebooks and notes of 2021 and 2022 are in the upstream repository [dfink/gspice](https://github.com/dfink/gspice/tree/1fbab9f).
 
 ## Installation
 
