@@ -1,0 +1,86 @@
+# Pixelwise prediction
+
+{func}`gspice.pixelwise` predicts each pixel of each spectrum from the pixels outside a
+guard window of 20 pixels on each side. A pixel far from its prediction is an outlier.
+{doc}`../background/prediction` explains the method.
+
+The tutorial uses the survey and the model of {doc}`fitting`.
+[`docs/scripts/spectra.py`](https://github.com/joshspeagle/GSPICE/blob/main/docs/scripts/spectra.py)
+makes `spectra.npz`.
+
+```python
+import numpy as np
+
+import gspice
+
+data = np.load("spectra.npz")
+pixels = (data["wave"] > 3800) & (data["wave"] < 5370)
+flux = data["flux"][:, pixels]
+ivar = data["ivar"][:, pixels]
+clean = data["clean"][:, pixels]
+clean_ivar = data["clean_ivar"][:, pixels]
+artifacts = (data["cosmic"] | data["column"] | data["shift"])[:, pixels]
+
+n = len(flux)
+train = slice(0, int(0.6 * n))
+test = slice(int(0.8 * n), n)
+model, mask = gspice.fit(flux[train], ivar[train])
+```
+
+## Predict
+
+```python
+prediction = gspice.pixelwise(model, flux[test], ivar[test])
+```
+
+`prediction` is a {class}`gspice.Prediction` with three arrays of the shape of
+`flux[test]`: the prediction `flux`, its variance `var`, which includes the noise of
+the pixel, and the z-score `z`, the distance of the pixel from its prediction in units
+of the square root of `var`.
+
+```{image} ../_static/figures/tutorials/pixelwise-z-light.svg
+:alt: A test spectrum around a cosmic ray, with its pixelwise prediction and z
+:class: only-light
+```
+
+```{image} ../_static/figures/tutorials/pixelwise-z-dark.svg
+:alt: A test spectrum around a cosmic ray, with its pixelwise prediction and z
+:class: only-dark
+```
+
+The figure shows a test spectrum around a cosmic ray. The prediction follows the
+absorption lines, which it predicts from the rest of the spectrum, and not the cosmic
+ray. The z-score of the cosmic ray is far outside the grey band of $|z| < 5$.
+
+## Calibrated z-scores
+
+For Gaussian spectra and the true mean and covariance, the z-scores have a standard
+deviation of 1. On held-out spectra, the estimation error of the fitted model widens
+them by about $\sqrt{f_s}$ ({doc}`../background/prediction`), and `inflate=True`
+includes $f_s$ in `var`:
+
+```python
+z = gspice.pixelwise(model, clean[test], clean_ivar[test]).z
+inflated = gspice.pixelwise(model, clean[test], clean_ivar[test], inflate=True).z
+print(f"standard deviation {np.std(z):.2f}, or {np.std(inflated):.2f} with inflate")
+print(f"|z| > 5: {np.mean(np.abs(z) > 5):.3%}, or {np.mean(np.abs(inflated) > 5):.3%}")
+```
+
+On the 2000 test spectra, the standard deviation is 1.33, close to
+$\sqrt{f_s} = 1.32$, and 1.00 with `inflate=True`. 0.131% of the pixels have
+$|z| > 5$, and 0.033% with `inflate=True`. `inflate` needs a dense, mean-centred,
+unweighted model.
+
+## Outliers
+
+```python
+amplitude = np.abs(flux - clean) * np.sqrt(clean_ivar)
+strong = (artifacts & (amplitude > 5))[test]
+print(f"{np.mean(np.abs(prediction.z[strong]) > 5):.0%} of strong artifact pixels")
+```
+
+`amplitude` is the change that an artifact made to a pixel, in units of its noise, as
+in {doc}`fitting`. 83% of the artifact pixels above 5σ have $|z| > 5$, and 60% of the
+others are in shifted blocks. A shifted block covers many pixels, so it also corrupts
+the pixels that predict it ({doc}`../background/repair`). {func}`gspice.repair` adds a
+block scan for such defects, and {doc}`repair` uses it.

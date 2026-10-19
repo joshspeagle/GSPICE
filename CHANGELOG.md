@@ -12,7 +12,7 @@
 - Type checks with mypy in strict mode for the code outside `gspice.legacy`.
 - A test coverage floor of 90% for the code outside `gspice.legacy`.
 - pre-commit hooks that run ruff.
-- A documentation site in `docs/`, built with Sphinx and deployed to GitHub Pages, with background pages on the method, prediction, repair, fitting and diagnostics, a glossary, an API reference of every public name, and the GSPICE logo.
+- A documentation site in `docs/`, built with Sphinx and deployed to GitHub Pages, with a quickstart, tutorials on fitting, pixelwise prediction, infilling, repair, calibration, the low-rank and noise-aware models, saving and loading, and migrating from the 2022 interface, background pages on the method, prediction, repair, fitting and diagnostics, a glossary, an API reference of every public name, and the GSPICE logo. The tutorials work on simulated LAMOST-like spectra from `docs/scripts/spectra.py`, and `docs/scripts/figures.py` makes their figures.
 - `benchmarks/run.py`, which times `pixelwise`, `infill`, `fit_blocks`, `repair`, `fit`, the noise models, the 2022 `gp_interp` and the 2022 Schur route against `solve_pattern`, and prints the timings and the setup as JSON.
 - `gspice.scale`, `gspice.unscale` and `gspice.snr`. `scale` interpolates each spectrum over its bad pixels and scales it to unit mean noise, `unscale` returns scaled values and variances to flux units, and `snr` gives the median signal-to-noise ratio of each spectrum.
 - `gspice.Model`, which holds the mean, the covariance and the training count of each S/N bin, and `gspice.save` and `gspice.load`, which write and read a model as one .npz file.

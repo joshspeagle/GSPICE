@@ -33,6 +33,8 @@ docs = [
     "sphinx-copybutton==0.5.2",
     "sphinxcontrib-bibtex==2.7.0",
 ]
+# docs/scripts/figures.py
+figures = ["matplotlib==3.11.2"]
 
 [tool.hatch.version]
 path = "src/gspice/__init__.py"

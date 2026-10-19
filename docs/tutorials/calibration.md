@@ -1,0 +1,110 @@
+# Checking calibration
+
+Two functions check a model on held-out spectra. {func}`gspice.calibration` checks the
+predicted uncertainties, and {func}`gspice.noise_audit` checks the reported noise.
+{doc}`../background/diagnostics` explains both.
+
+The tutorial uses the survey and the model of {doc}`fitting`.
+[`docs/scripts/spectra.py`](https://github.com/joshspeagle/GSPICE/blob/main/docs/scripts/spectra.py)
+makes `spectra.npz`. The checks use the test spectra without their artifacts, `clean`.
+
+```python
+import numpy as np
+
+import gspice
+
+data = np.load("spectra.npz")
+pixels = (data["wave"] > 3800) & (data["wave"] < 5370)
+flux = data["flux"][:, pixels]
+ivar = data["ivar"][:, pixels]
+clean = data["clean"][:, pixels]
+clean_ivar = data["clean_ivar"][:, pixels]
+
+n = len(flux)
+train = slice(0, int(0.6 * n))
+test = slice(int(0.8 * n), n)
+model, mask = gspice.fit(flux[train], ivar[train])
+```
+
+## Calibration
+
+For each spectrum and each size $n$, `calibration` predicts a run of $n$ pixels from
+the others, and returns their whitened residual $z^2$. For a correct model, the mean
+of $z^2 / (n f_s)$ is 1 at every size.
+
+```python
+rng = np.random.default_rng(1)
+result = gspice.calibration(model, clean[test], clean_ivar[test], rng=rng)
+every = (result.n > 0).all(axis=1)
+mean, sem = result.ratio(where=every)
+print(result.n[every][0], mean.round(3), sem.round(3))
+print(result.tail(0.99, where=every).round(3))
+```
+
+`result` is a {class}`gspice.Calibration`. `ratio` returns the mean of
+$z^2 / (n f_s)$ and its standard error, and `tail(0.99)` the fraction of $z^2 / f_s$
+above the 99% quantile of $\chi^2_n$. On the 2000 test spectra:
+
+| $n$ | 1 | 4 | 16 | 64 | 256 |
+|---|---|---|---|---|---|
+| mean | 1.032 | 0.982 | 1.023 | 1.000 | 1.004 |
+| standard error | 0.039 | 0.020 | 0.016 | 0.009 | 0.009 |
+| tail | 1.9% | 1.8% | 4.1% | 6.9% | 13.5% |
+
+The default sizes stop at 256, the largest not above half of the 1500 pixels of a
+spectrum. The means are close to 1. The tail fractions are above 1% and grow with $n$:
+$z^2$ has a heavier tail than the Gaussian model gives.
+
+The spectra have a spread of S/N, and one covariance of all of them is a mixture
+({doc}`../background/fitting`). The ratio of each third of the spectra by S/N shows it:
+
+```python
+snr = gspice.snr(clean[test], clean_ivar[test])
+third = np.searchsorted(np.quantile(snr, [1 / 3, 2 / 3]), snr)
+for t in range(3):
+    print(t, result.ratio(where=every & (third == t))[0].round(3))
+```
+
+```{image} ../_static/figures/tutorials/calibration-ratio-light.svg
+:alt: The calibration ratio against the number of predicted pixels, for each third of the test spectra by S/N
+:class: only-light
+```
+
+```{image} ../_static/figures/tutorials/calibration-ratio-dark.svg
+:alt: The calibration ratio against the number of predicted pixels, for each third of the test spectra by S/N
+:class: only-dark
+```
+
+The means are 1.16 to 1.23 for the low-S/N third, and 0.88 to 0.95 for the others: the
+predicted variances are too small at low S/N and too large at high S/N. With
+`snr_bins=3`, each S/N bin has its own covariance, and the means are 1.05 to 1.19,
+0.99 to 1.02 and 1.00 to 1.06. But each bin then has 2000 training spectra, and $f_s$
+of a pixelwise prediction rises from 1.7 to 13.8.
+
+## Noise audit
+
+`noise_audit` returns $\rho$, the root mean of $(f - \hat f)^2\, \mathrm{ivar}$ at each
+pixel, with $\hat f$ the pixelwise prediction. $\rho$ is at least 1 in expectation
+where `ivar` is right, and below 1 where `ivar` reports too much noise.
+
+```python
+rho = gspice.noise_audit(model, clean[test], clean_ivar[test])
+rho_train = gspice.noise_audit(model, clean[train], clean_ivar[train])
+print(np.median(rho).round(3), np.median(rho_train).round(3))
+```
+
+```{image} ../_static/figures/tutorials/noise-audit-rho-light.svg
+:alt: The noise audit rho at each pixel, for held-out and for training spectra
+:class: only-light
+```
+
+```{image} ../_static/figures/tutorials/noise-audit-rho-dark.svg
+:alt: The noise audit rho at each pixel, for held-out and for training spectra
+:class: only-dark
+```
+
+On the test spectra, the median of $\rho$ is 1.19, and its smallest value 1.06. A
+$\rho$ above 1 can come from the error of the prediction or from noise that `ivar`
+omits ({doc}`../background/diagnostics`), but no pixel shows an `ivar` that reports
+too much noise. On the training spectra, the median is 0.91, below 1: each training spectrum helped to fit the model that predicts
+it, so its residuals are too small. The audit holds only for held-out spectra.
