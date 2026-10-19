@@ -38,13 +38,12 @@ def fit_blocks(
     percentile: Real = 99.9,
     progress: Progress | None = None,
 ) -> Model:
-    """Return model with per-block thresholds from artifact-free spectra (paper 3.2).
+    """Return model with block thresholds from artifact-free spectra.
 
     Block k holds the width pixels from starts[k], with the starts 0, stride,
     2 stride, ... <= npix - width, and npix - width if the last of them is smaller:
     31 blocks at npix 2400 with the defaults. fit_blocks first replaces the bad pixels
-    by their conditional mean as `infill` does, and runs no detection by z (paper
-    l.510).
+    by their conditional mean as `infill` does, and runs no detection by z.
     For a spectrum in S/N bin b, let x be the working vector of its infilled flux (see
     `Model`), P the inverse of cov[b], A a block, G the pixels within nguard of A,
     clipped at the ends, and O the pixels outside G. Then::
@@ -58,7 +57,7 @@ def fit_blocks(
     bin b. A clean block then exceeds its threshold with probability
     (m (1 - p/100) + p/100)/(m + 1) when (m - 1) p/100 is an integer, and at most that
     otherwise, for a density that falls beyond the threshold: 0.20% at m = 1000 and
-    0.12% at m = 5000 for p = 99.9 (the paper used 5000). `repair` also infills
+    0.12% at m = 5000 for p = 99.9. `repair` also infills
     z-flagged pixels, which lowers the rate. Use spectra not used for training. For a
     noise model, x is in flux units, and C_s of each spectrum (see `Model`) takes the
     place of cov[b] in its infill and its blocks.

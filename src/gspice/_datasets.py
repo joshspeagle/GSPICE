@@ -59,8 +59,8 @@ def simulate(
     has the depth 0.95 expit(logit(d_k / 0.95) + r_k . theta), with d_k from 0.1 to
     0.6 its depth at theta = 0 and r_k = 0.5 (cos k, sin k), so that the depths are
     correlated, in (0, 0.95), and not Gaussian. Then truth = 1 - sum_k depth_k p_k,
-    in (0, 1]. The continuum S/N has the density p(S/N) ~ (S/N)^-2.5 on [30, 400]
-    (paper l.494), and the noise is Gaussian with sigma = sqrt(truth) / snr.
+    in (0, 1]. The continuum S/N has the density p(S/N) ~ (S/N)^-2.5 on [30, 400],
+    and the noise is Gaussian with sigma = sqrt(truth) / snr.
 
     With gaussian=True, truth = mu + J theta, theta ~ N(0, I), where mu is the truth
     of population 0 at theta = 0 and the columns of J are its derivatives there. Every

@@ -55,7 +55,7 @@ def finite_sample_factor(
 def finite_sample_factor(
     n_train: ArrayLike, n_cond: ArrayLike, n_pred: ArrayLike = 1
 ) -> float | NDArray[np.float64]:
-    """Held-out calibration factor E[Z^2] / N_* for Gaussian data (paper l.247).
+    """Held-out calibration factor E[Z^2] / N_* for Gaussian data.
 
     A spectrum that the training spectra do not include is predicted at N_* pixels from
     N_k conditioning pixels, with the mean and the covariance (divisor N_s - 1) of N_s

@@ -360,7 +360,7 @@ def infill(
         rng.standard_normal((n, npix)) for each chunk of n rows, in row order, and
         nothing else, and each spectrum uses its row of these normals. Calls on
         consecutive slices with one generator give the draws of one call, to
-        rounding. Draws widen the errors of measurements made on them (paper l.550);
+        rounding. Draws widen the errors of measurements made on them;
         var and covariance give the uncertainty of the replaced pixels. None: no
         draws.
     progress : callable, optional

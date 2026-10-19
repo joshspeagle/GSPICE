@@ -25,7 +25,7 @@ Steps:
      + N(0, 0.1), and Teff = Teff0 - 200 K [Fe/H].
    - Red clump: Teff ~ N(4750, 80) K and log g ~ N(2.45, 0.08).
    Radial velocities are N(0, 30) km/s, and S/N has the law p(S/N) ~ (S/N)^-2.5 on
-   [30, 400] of the paper (l.494).
+   [30, 400].
 2. Models: trilinear interpolation in (Teff, log g, [Fe/H]) of the models, converted
    from air to vacuum wavelengths and convolved with a Gaussian to R = 1800.
 3. Instrument, in counts on the observed vacuum grid log10(lambda/A) = 3.57 + 1e-4 k,
