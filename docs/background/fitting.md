@@ -42,8 +42,8 @@ $$
 \qquad N_k = \max(\mathrm{npix} - 2\,\mathrm{nguard} - 1, 0) ,
 $$
 
-in a spectrum of typical leverage. At $N_s = 2401$, npix 2400 and `nguard=20`, this
-ceiling is 6.4, so a pass at 20 flags no pixel. With a constant centre, the ceiling is
+in a spectrum of typical leverage. At $N_s = 2500$, npix 2400 and `nguard=20`, this
+ceiling is 11.8, so a pass at 20 flags no pixel. With a constant centre, the ceiling is
 $\sqrt{N_s - N_k}$. `fit` logs a warning on the `gspice` logger for each pass whose
 threshold exceeds the ceiling. No ceiling is derived for a low-rank model.
 
