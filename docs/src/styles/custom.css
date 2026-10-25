@@ -60,7 +60,8 @@
   --sl-font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   --sl-text-code-sm: 0.875rem;
   --sl-line-height: 1.62;
-  --sl-text-h1: 2.5rem;
+  /* Smaller on a phone, so that a long word such as Troubleshooting fits. */
+  --sl-text-h1: clamp(1.75rem, 8vw, 2.5rem);
   --sl-text-h2: 1.625rem;
   --sl-text-h3: 1.1875rem;
   --sl-text-h4: 1.0625rem;
@@ -458,3 +459,4 @@ mobile-starlight-toc nav {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+

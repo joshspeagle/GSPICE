@@ -1,0 +1,36 @@
+---
+// V-6: the conditional mean and three draws over the gap of one spectrum of Fill known
+// bad pixels. docs/scripts/explainers.py runs the code of the page and writes the data.
+import data from '../data/guide-infill.json'
+import { axesFor, legend, plotMarkup } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+// The mean and the draws at the gap, placed at their pixel numbers.
+const place = (values: number[]) => {
+  const all = new Float64Array(data.flux.length)
+  all.set(values, data.start)
+  return all
+}
+const spectrum = { ...data, mu: place(data.mu), draws: data.draws.map(place) }
+const axes = axesFor([...data.flux, ...data.truth, ...data.draws.flat()], data.flux.length)
+const last = data.start + data.width - 1
+---
+
+<figure class="not-content">
+  <div
+    class="gs-plot"
+    data-npix={data.flux.length}
+    role="img"
+    aria-label={`Pixels ${data.start} to ${last} of a spectrum: the conditional mean and ${data.draws.length} draws`}
+    set:html={plotMarkup(spectrum, axes)}
+  />
+  <figcaption class="gs-caption">
+    <Fragment set:html={legend(['obs', 'blk', 'pred', 'draw', 'truth'])} />
+    <p>
+      Pixels {data.start} to {last} of <code>test.flux[0]</code>, at a signal-to-noise ratio of {data.snr}.
+      The conditional mean and {data.draws.length} draws of the multiple imputation replace them.
+      The mean is smooth. Each draw scatters from pixel to pixel like the observed flux outside the
+      gap.
+    </p>
+  </figcaption>
+</figure>

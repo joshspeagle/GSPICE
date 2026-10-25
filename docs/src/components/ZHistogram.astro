@@ -1,0 +1,68 @@
+---
+// V-7: the distribution of the z-scores of the clean spectra of Find outliers, on a
+// logarithmic scale, with the count that N(0, 1) gives and the threshold. The data come
+// from the code of the page, through docs/scripts/explainers.py.
+import data from '../data/guide-outliers.json'
+import { legend, steps, tickLabels } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { edges, counts, gaussian, threshold } = data
+const nbins = counts.length
+const zmin = edges[0]
+const zmax = edges[nbins]
+// Counts from 0.5 to the next power of ten above the largest, on a log scale; a count
+// of 0 sits on the bottom edge.
+const low = Math.log10(0.5)
+const high = Math.ceil(Math.log10(Math.max(...counts, ...gaussian)))
+// The bins are uniform, so bin k spans x = k to k + 1.
+const x = (z: number) => (nbins * (z - zmin)) / (zmax - zmin)
+const y = (count: number) => (100 * (high - Math.log10(Math.max(count, 0.5)))) / (high - low)
+const decades = Array.from({ length: high + 1 }, (_, k) => k)
+const grid = decades.map((k) => `M0,${y(10 ** k).toFixed(2)}H${nbins}`).join('')
+const flagged = [
+  [zmin, -threshold],
+  [threshold, zmax],
+].map(([a, b]) => `<rect class="flagged" x="${x(a)}" y="0" width="${x(b) - x(a)}" height="100"/>`)
+const svg =
+  `<svg viewBox="0 0 ${nbins} 100" preserveAspectRatio="none" aria-hidden="true">` +
+  flagged.join('') +
+  `<path class="grid" d="${grid}"/>` +
+  `<path class="edge" d="M${x(-threshold)},0V100M${x(threshold)},0V100"/>` +
+  `<path class="ref" d="${steps(gaussian, 0, nbins, y)}"/>` +
+  `<path class="obs" d="${steps(counts, 0, nbins, y)}"/>` +
+  '</svg>'
+const power = (k: number) => (k < 4 ? String(10 ** k) : `10${'⁰¹²³⁴⁵⁶⁷⁸⁹'[k]}`)
+const xticks = [zmin, -threshold, 0, threshold, zmax]
+const labels = tickLabels(
+  decades.map((k) => [y(10 ** k), power(k)]),
+  xticks.map((z, k) => {
+    const text = k === 0 ? `≤ ${z}` : k === xticks.length - 1 ? `≥ ${z}` : String(z)
+    return [(100 * x(z)) / nbins, text.replace('-', '−')]
+  }),
+)
+const pixels = counts.reduce((a, b) => a + b, 0)
+const above = counts.filter((_, k) => edges[k] >= threshold || edges[k + 1] <= -threshold).reduce((a, b) => a + b, 0)
+---
+
+<figure class="not-content">
+  <div
+    class="gs-plot"
+    role="img"
+    aria-label={`Histogram of z for ${pixels} pixels, with ${above} beyond ±${threshold}`}
+    set:html={svg + labels}
+  />
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        ['obs', 'z of the clean spectra'],
+        ['ref', 'Gaussian, N(0, 1)'],
+        ['flagged', `|z| &gt; ${threshold}`],
+      ])}
+    />
+    <p>
+      The number of pixels in each bin of z, for the {pixels} pixels of the clean test spectra, on a
+      logarithmic scale. The end bins also count the z-scores beyond them. {above} pixels lie beyond the
+      threshold of ±{threshold}, where a Gaussian distribution would put almost none.
+    </p>
+  </figcaption>
+</figure>

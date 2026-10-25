@@ -13,6 +13,7 @@ DOCS = Path(__file__).parents[1] / "docs" / "src" / "content" / "docs"
 NOT_SCRIPTS = {"install", "results"}
 PAGES = [
     *sorted(p for p in (DOCS / "start").glob("*.md*") if p.stem not in NOT_SCRIPTS),
+    *sorted((DOCS / "guides").glob("*.md*")),
     *sorted((DOCS / "tutorials").glob("*.md*")),
 ]
 # A fence with the flag output holds the output of the code above it.
@@ -59,7 +60,9 @@ def test_the_page_examples_run(page, survey, tmp_path, monkeypatch, capsys):
     text = page.read_text(encoding="utf-8")
     shutil.copy(survey, tmp_path)
     script = tmp_path / f"{page.stem}.py"
-    script.write_text("".join(re.findall(r"```python\n(.*?)```", text, re.DOTALL)))
+    script.write_text(
+        "".join(re.findall(r"```python\n(.*?)```", text, re.DOTALL)), encoding="utf-8"
+    )
     monkeypatch.chdir(tmp_path)
     runpy.run_path(str(script))
     if shown := OUTPUT.findall(text):

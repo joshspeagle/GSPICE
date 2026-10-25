@@ -1,0 +1,146 @@
+---
+title: Find outliers
+description: Predict each pixel from the rest of its spectrum, and flag the pixels far from their prediction.
+---
+
+import ZHistogram from '../../../components/ZHistogram.astro'
+
+Which pixels disagree with the rest of their spectrum? This guide finds them with
+[`gspice.pixelwise()`](/GSPICE/reference/api/#gspice.pixelwise), on simulated spectra.
+
+## Set up
+
+The model is fitted to 3000 simulated spectra of 200 pixels. Half of the 1000 test
+spectra have one [artifact](/GSPICE/background/glossary/#term-artifact) each: a cosmic
+ray, a bad column or a shifted segment.
+
+```python
+import numpy as np
+from scipy import stats
+from scipy.ndimage import binary_dilation
+
+import gspice
+
+rng = np.random.default_rng(2)
+train = gspice.simulate(3000, 200, rng=rng)
+test = gspice.simulate(1000, 200, rng=rng, artifacts=0.5)
+model, _ = gspice.fit(train.flux, train.ivar)
+```
+
+The training spectra here have no artifacts. In real training spectra, `fit` removes the
+pixels far from their prediction in several passes
+([Outlier clipping](/GSPICE/background/fitting/#outlier-clipping)).
+
+## Predict each pixel
+
+`pixelwise` predicts each pixel of each spectrum from the other pixels of that spectrum:
+
+```python
+prediction = gspice.pixelwise(model, test.flux, test.ivar)
+z = prediction.z
+flagged = (np.abs(z) > 5).any(axis=1)
+print(f"{flagged.mean():.0%} of the spectra have a pixel with |z| > 5")
+```
+
+```text output
+50% of the spectra have a pixel with |z| > 5
+```
+
+`prediction.z` holds the [z-score](/GSPICE/background/glossary/#term-z-score) of each
+pixel: its flux minus its prediction, divided by the square root of the variance. An
+[outlier](/GSPICE/background/glossary/#term-outlier) is a pixel with a large $|z|$. The
+variance `prediction.var` includes the noise of the pixel. The next sections compare the
+flagged pixels with the artifacts.
+
+## Choose a threshold
+
+A low threshold flags good pixels, and a high one misses artifacts. Measure both on your
+own spectra. Each test spectrum has at most one artifact, so the length of the artifact
+tells its type: a cosmic ray covers 1 to 3 pixels.
+
+```python
+length = test.artifacts.sum(axis=1, keepdims=True)
+cosmic = test.artifacts & (length <= 3)
+clean = ~test.artifacts.any(axis=1)
+for threshold in (3, 4, 5, 6, 8):
+    false = np.mean(np.abs(z[clean]) > threshold)
+    found = np.mean(np.abs(z[cosmic]) > threshold)
+    gaussian = 2 * stats.norm.sf(threshold)
+    print(
+        f"{threshold}: {false:.1e} of clean pixels ({gaussian:.1e} if Gaussian), "
+        f"{found:.0%} of cosmic-ray pixels"
+    )
+```
+
+```text output
+3: 6.5e-03 of clean pixels (2.7e-03 if Gaussian), 99% of cosmic-ray pixels
+4: 1.2e-03 of clean pixels (6.3e-05 if Gaussian), 99% of cosmic-ray pixels
+5: 6.3e-04 of clean pixels (5.7e-07 if Gaussian), 95% of cosmic-ray pixels
+6: 4.7e-04 of clean pixels (2.0e-09 if Gaussian), 88% of cosmic-ray pixels
+8: 2.0e-04 of clean pixels (1.2e-15 if Gaussian), 77% of cosmic-ray pixels
+```
+
+A [clean spectrum](/GSPICE/background/glossary/#term-clean-spectrum) is a spectrum
+without an artifact. Its pixels exceed each threshold more often than a Gaussian would.
+So set the threshold from clean spectra, not from a table of the Gaussian distribution.
+
+<ZHistogram />
+
+## The guard window
+
+An artifact also changes the prediction of the pixels near it, if they are predicted
+from it. `pixelwise` therefore predicts each pixel only from the pixels farther than
+`nguard` from it. The pixels within `nguard` form its
+[guard window](/GSPICE/background/glossary/#term-guard-window).
+
+```python
+column = test.artifacts & (length > 3) & (length <= 20)
+near = binary_dilation(column, np.ones((1, 11))) & ~column
+for nguard in (0, 5, 20):
+    zg = gspice.pixelwise(model, test.flux, test.ivar, nguard=nguard).z
+    flags = np.abs(zg) > 5
+    print(
+        f"nguard {nguard:>2}: {flags[column].mean():.0%} of bad-column pixels and "
+        f"{flags[near].mean():.0%} of their neighbours flagged"
+    )
+```
+
+```text output
+nguard  0: 95% of bad-column pixels and 54% of their neighbours flagged
+nguard  5: 100% of bad-column pixels and 48% of their neighbours flagged
+nguard 20: 100% of bad-column pixels and 2% of their neighbours flagged
+```
+
+A bad column covers 5 to 20 pixels. Its neighbours are the good pixels within 5 pixels
+of it. With a small guard window, the bad column pulls the prediction of its neighbours,
+and many of them are flagged. The default, `nguard=20`, suits artifacts up to about 20
+pixels long. A wider window leaves fewer pixels to predict from.
+[Pixelwise prediction](/GSPICE/background/prediction/#pixelwise-prediction) gives the
+equations.
+
+## Held-out spectra and inflate
+
+The option `inflate=True` corrects the variances for the
+[finite-sample factor](/GSPICE/background/glossary/#term-finite-sample-factor), whose
+square root widens the z-scores of [held-out spectra](/GSPICE/background/glossary/#term-held-out-spectrum):
+
+```python
+for inflate in (False, True):
+    zc = gspice.pixelwise(
+        model, test.flux[clean], test.ivar[clean], inflate=inflate
+    ).z
+    print(f"inflate={inflate}: standard deviation of z {np.std(zc):.3f}")
+```
+
+```text output
+inflate=False: standard deviation of z 1.063
+inflate=True: standard deviation of z 1.005
+```
+
+With `inflate=True`, the z-scores of the clean spectra have a standard deviation near 1.
+Use it when you set a threshold on held-out spectra. It needs a dense, mean-centred,
+unweighted model without noise, as [The finite-sample factor](/GSPICE/background/prediction/#the-finite-sample-factor)
+explains.
+
+To find artifacts and replace them in one call, use
+[Find and repair artifacts](/GSPICE/guides/repair/).

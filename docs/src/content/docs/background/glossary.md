@@ -4,6 +4,14 @@ title: Glossary
 
 <dl>
 
+<dt id="term-artifact">artifact</dt>
+<dd>
+
+  A corruption of the data, such as a cosmic ray, a bad column or a shifted segment.
+  [`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) finds artifacts that no mask marks.
+
+</dd>
+
 <dt id="term-bad-pixel">bad pixel</dt>
 <dd>
 
@@ -26,6 +34,14 @@ title: Glossary
 
   The comparison of each block of a spectrum with its prediction from the pixels beyond
   its guard window, by the statistic $\chi^2_A$ of [Detection and repair](/GSPICE/background/repair/).
+
+</dd>
+
+<dt id="term-clean-spectrum">clean spectrum</dt>
+<dd>
+
+  A spectrum without an artifact. [`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks) sets its
+  thresholds from clean spectra.
 
 </dd>
 
@@ -77,6 +93,14 @@ title: Glossary
 
 </dd>
 
+<dt id="term-flagged-pixel">flagged pixel</dt>
+<dd>
+
+  A pixel that [`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) detects as an artifact. It becomes a
+  replaced or an ignored pixel.
+
+</dd>
+
 <dt id="term-guard-window">guard window</dt>
 <dd>
 
@@ -124,6 +148,13 @@ title: Glossary
 
 </dd>
 
+<dt id="term-outlier">outlier</dt>
+<dd>
+
+  A pixel whose flux is many standard deviations from its prediction: a large $|z|$.
+
+</dd>
+
 <dt id="term-pattern">pattern</dt>
 <dd>
 
@@ -164,12 +195,28 @@ title: Glossary
 
 </dd>
 
+<dt id="term-scaled-model">scaled model</dt>
+<dd>
+
+  A model in scaled units, whose one covariance holds both the variation between
+  spectra and the noise. Every model is a scaled model except a noise-aware model.
+
+</dd>
+
 <dt id="term-scaled-units">scaled units</dt>
 <dd>
 
   Flux multiplied by $a_s$, the square root of the mean inverse variance of the good
   pixels of the spectrum. The noise of a spectrum with equal `ivar` at every pixel then
   has the variance 1.
+
+</dd>
+
+<dt id="term-shifted-segment">shifted segment</dt>
+<dd>
+
+  An artifact in which a run of pixels has a shifted wavelength scale, so that its
+  lines are recorded a few pixels off.
 
 </dd>
 

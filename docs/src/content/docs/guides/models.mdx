@@ -1,0 +1,191 @@
+---
+title: Choose a model
+description: Choose between the default model, S/N bins, a low-rank model, a noise-aware model and a constant centre.
+---
+
+import ModelChart from '../../../components/ModelChart.astro'
+
+Default, S/N bins, low rank, noise-aware or constant centre: which one? Answer the
+questions of the chart, then read the section of the model it gives.
+
+<ModelChart />
+
+[Fitting](/GSPICE/background/fitting/) gives the maths of each model, and its table
+[Choosing a model](/GSPICE/background/fitting/#choosing-a-model) lists what each one
+needs.
+
+## Set up
+
+Each example fits a model to 4000 simulated spectra of 100 pixels. It then predicts
+pixels 60 to 69 of 1000 test spectra from their other pixels. `rms_error` measures the
+prediction against the noise-free flux, in units of 10⁻³ of the continuum.
+
+```python
+import numpy as np
+
+import gspice
+
+rng = np.random.default_rng(2)
+train = gspice.simulate(4000, 100, rng=rng)
+test = gspice.simulate(1000, 100, rng=rng)
+gap = np.zeros(100, dtype=bool)
+gap[60:70] = True
+
+
+def rms_error(model, flux, ivar, truth):
+    result = gspice.infill(model, flux, ivar, replace=gap)
+    return 1000 * np.sqrt(np.mean((result.flux - truth)[:, gap] ** 2))
+```
+
+Each comparison below is one run on one training set, without error bars. The constant
+centre, low-rank and noise-aware models do not support `inflate=True`
+([The finite-sample factor](/GSPICE/background/prediction/#the-finite-sample-factor)).
+
+## Default
+
+The default model has one mean and one covariance for all spectra, in
+[scaled units](/GSPICE/background/glossary/#term-scaled-units). Start with it:
+
+```python
+model, _ = gspice.fit(train.flux, train.ivar)
+print(f"default: {rms_error(model, test.flux, test.ivar, test.truth):.1f}")
+```
+
+```text output
+default: 13.4
+```
+
+It needs more training spectra than pixels: at least npix + 1.
+
+## S/N bins
+
+The S/N of the simulated spectra spans 30 to 400. In scaled units, the variation
+between spectra grows with the S/N, so one covariance mixes spectra of different S/N
+([S/N bins](/GSPICE/background/fitting/#sn-bins)). `snr_bins=3` fits one model to each
+third of the spectra by S/N:
+
+```python
+binned, _ = gspice.fit(train.flux, train.ivar, snr_bins=3)
+print(f"S/N bins: {rms_error(binned, test.flux, test.ivar, test.truth):.1f}")
+```
+
+```text output
+S/N bins: 11.4
+```
+
+Each [S/N bin](/GSPICE/background/glossary/#term-S-N-bin) has a third of the training
+spectra, and needs as many as a default model. Use bins when you have several times
+the spectra that one model needs.
+
+## Noise-aware
+
+A default model is a [scaled model](/GSPICE/background/glossary/#term-scaled-model): its
+one covariance holds both the variation between spectra and the noise. A
+[noise-aware model](/GSPICE/background/glossary/#term-noise-aware-model) separates the
+two. It learns the covariance of the noise-free flux, and adds the noise of each
+spectrum from its own `ivar`:
+
+```python
+aware, _ = gspice.fit(train.flux, train.ivar, noise=True)
+print(f"noise-aware: {rms_error(aware, test.flux, test.ivar, test.truth):.1f}")
+```
+
+```text output
+noise-aware: 10.1
+```
+
+The noise can also change shape from spectrum to spectrum, for example with sky lines
+of different strengths. S/N bins cannot follow such a change. Here the second half of
+the training and test spectra get six times the noise at pixels 30 to 59:
+
+```python
+def noisier(sim):
+    flux, ivar = np.array(sim.flux), np.array(sim.ivar)
+    half, pixels = slice(len(flux) // 2, None), slice(30, 60)
+    noise = (sim.flux - sim.truth)[half, pixels]
+    flux[half, pixels] = sim.truth[half, pixels] + 6 * noise
+    ivar[half, pixels] /= 36
+    return flux, ivar
+
+
+flux, ivar = noisier(train)
+test_flux, test_ivar = noisier(test)
+half = slice(500, None)
+for name, options in [
+    ("default", {}),
+    ("S/N bins", {"snr_bins": 3}),
+    ("noise-aware", {"noise": True}),
+]:
+    fitted, _ = gspice.fit(flux, ivar, **options)
+    error = rms_error(fitted, test_flux[half], test_ivar[half], test.truth[half])
+    print(f"{name}: {error:.1f}")
+```
+
+```text output
+default: 21.5
+S/N bins: 19.9
+noise-aware: 17.1
+```
+
+The errors are those of the 500 test spectra with the extra noise. Choose a noise-aware
+model when the noise differs a lot between spectra, in level or in shape, and:
+
+- `ivar` does not depend on the observed flux
+  ([Noise-aware model](/GSPICE/background/fitting/#noise-aware-model)).
+- You can afford one factorization per spectrum, or pass `rank=K` too
+  ([Choosing a model](/GSPICE/background/fitting/#choosing-a-model)).
+- You need no S/N bins and no constant centre
+  ([Noise-aware model](/GSPICE/background/fitting/#noise-aware-model)).
+
+## Low rank
+
+With too few training spectra for a default model, `fit` raises a `ValueError`:
+
+```python
+few = gspice.simulate(60, 100, rng=rng)
+try:
+    gspice.fit(few.flux, few.ivar)
+except ValueError as error:
+    print(error)
+```
+
+```text output
+fit: pass 1 needs at least 101 spectra for a mean-centred model of 100 pixels, got 60: of 60 spectra, maxbadpix removed 0, weight 0 removed 0 and full masks removed 0
+```
+
+A [low-rank model](/GSPICE/background/glossary/#term-low-rank-model) describes the
+correlations between pixels with $K$ components, and needs only $K + 2$ spectra. Choose
+$K$ by the error on held-out spectra:
+
+```python
+for rank in (2, 5, 20):
+    lowrank, _ = gspice.fit(few.flux, few.ivar, rank=rank)
+    error = rms_error(lowrank, test.flux, test.ivar, test.truth)
+    print(f"rank {rank}: {error:.1f}")
+```
+
+```text output
+rank 2: 51.4
+rank 5: 13.5
+rank 20: 17.6
+```
+
+Too few components miss part of the variation between spectra. Too many fit the noise
+of the 60 training spectra. `rank` also works with `snr_bins` or `noise=True`.
+
+## Constant centre
+
+A default model subtracts the mean of the training spectra. `center=c` subtracts a
+constant $c$ in flux units instead, such as the continuum level 1 of normalized spectra:
+
+```python
+centred, _ = gspice.fit(train.flux, train.ivar, center=1.0)
+error = rms_error(centred, test.flux, test.ivar, test.truth)
+print(f"constant centre: {error:.1f}")
+```
+
+```text output
+constant centre: 12.8
+```
+
+The model then estimates no mean, and needs at least npix training spectra.

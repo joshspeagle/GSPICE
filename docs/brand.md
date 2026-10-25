@@ -26,7 +26,7 @@ Dark mode is designed first, on a cool blue-black ground. Light mode keeps the n
 | `--gs-mask-fill` | #1A2438 | #E9EDF3 | masked block |
 | `--gs-mask-edge` | #6B7A99 | #7A879C | edge of the masked block |
 | `--gs-header` | #0B111C | #111A2A | header band |
-| `--gs-strip-lo`, `--gs-strip-hi` | #3B465C, #C9D1DE | #6B7588, #E1E6EE | ends of the footer cell strip |
+| `--gs-strip-lo`, `--gs-strip-hi` | #3B465C, #C9D1DE | #6B7588, #E1E6EE | ends of the footer cell strip; `--gs-strip-lo` also fills observed cells in diagrams |
 
 The header band is navy in both themes, so its text and edges keep the dark values. Its focus ring is #FF8A5C, because #C2410C is too dark on navy. The masked block of the header lockup is #1E2A42, because the mask fill #1A2438 nearly vanishes on the light theme's #111A2A band.
 
@@ -128,9 +128,13 @@ The theme of #142 builds the header, the sidebar, "On this page", the page title
 | Label | A small square tag in mono: function, class, the version. |
 | Previous and next | Two tiles with a solid top edge. |
 | Figure | A rule above, a hairline below, and the caption in secondary text. The legend uses cell swatches. |
+| Decision chart | Questions on surfaces with a 3 px top rule, model tiles with a 3 px ink left edge, and "no" connectors from each question down to the next (ModelChart). |
+| Step list | Numbered rows, each with a strip of cells (CalibrationSteps). |
 
 ## Figures
 
-- Scripts draw every figure from data, as SVG in the theme tokens, so one file serves both themes. The tutorial figures still come in light and dark pairs until they are redrawn.
+- Scripts draw every figure from data, as SVG in the theme tokens, so one file serves both themes. The figures of tutorials/fitting still come in light and dark pairs until they are redrawn.
 - All text in a figure is HTML at 12 px or more, placed over the plot, so it does not shrink on a phone.
 - Pixel boundaries inside the masked block are hidden when a pixel is narrower than 4 px.
+- A draw is a thin orange step line, drawn under the prediction.
+- The reference curve of a histogram, class `ref`, is a thin ink-2 step line.

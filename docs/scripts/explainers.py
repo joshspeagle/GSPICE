@@ -1,10 +1,10 @@
-"""Write the data of the mask explainer and of the quickstart figure.
+"""Write the data of the mask explainer and of the figures of the quickstart and guides.
 
     python docs/scripts/explainers.py
 
 It fits a model with gspice.fit to spectra of gspice.simulate(gaussian=True), which
-all have the same ivar, and runs the code of the quickstart page. It writes to
-docs/src/data/:
+all have the same ivar, and runs the code of the quickstart page and of two guides. It
+writes to docs/src/data/:
 
 - explainer.json: the mean and the covariance of the model in flux units, held-out
   spectra with their noise-free flux, rounded, and the range of the ±2σ bands over
@@ -12,7 +12,11 @@ docs/src/data/:
 - explainer-check.json: for docs/tests/gauss.test.mjs, the conditional mean and
   standard deviation of a few masks on the rounded data, from numpy and from
   gspice.infill;
-- quickstart.json: one spectrum of the quickstart, with its prediction.
+- quickstart.json: one spectrum of the quickstart, with its prediction;
+- guide-infill.json: one spectrum of Fill known bad pixels, with the conditional mean
+  and three draws of its gap;
+- guide-outliers.json: the histogram of the z-scores of the clean spectra of Find
+  outliers, and the count that a Gaussian distribution gives in each bin.
 
 It prints the sizes of the files and the largest change of the explainer's prediction
 and standard deviation that the rounding makes, and fails if that change reaches 1e-3.
@@ -29,13 +33,14 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy import stats
 from scipy.linalg import cho_factor, cho_solve
 
 import gspice
 
 DOCS = Path(__file__).parents[1]
 OUT = DOCS / "src" / "data"
-QUICKSTART = DOCS / "src" / "content" / "docs" / "start" / "quickstart.mdx"
+PAGES = DOCS / "src" / "content" / "docs"
 NPIX, NTRAIN, NEXAMPLE = 120, 4000, 8
 # Decimals kept in explainer.json: flux and mean, then the covariance (flux^2).
 DECIMALS, COV_DECIMALS = 6, 7
@@ -43,6 +48,13 @@ DECIMALS, COV_DECIMALS = 6, 7
 WIDEST = 100
 # The spectrum of the quickstart that its figure shows.
 SHOWN = 3
+# The draws that the figure of Fill known bad pixels shows.
+DRAWS = 3
+# The bins of the z-scores of Find outliers, and the threshold that its figure marks;
+# the first and last bins also count the z-scores beyond them.
+Z_EDGES = np.linspace(-10, 10, 41)
+# Copies the `> 5` of `flagged = (np.abs(z) > 5)` in guides/outliers.mdx.
+THRESHOLD = 5
 
 Floats = NDArray[np.float64]
 
@@ -162,17 +174,25 @@ def check(
     return {"cases": cases}
 
 
-def quickstart() -> None:
+def run(page: str) -> dict[str, Any]:
     # The Python blocks of the page, run as one script, as tests/test_docs.py does.
     code = "".join(
-        re.findall(r"```python\n(.*?)```", QUICKSTART.read_text(), re.DOTALL)
+        re.findall(
+            r"```python\n(.*?)```",
+            (PAGES / page).read_text(encoding="utf-8"),
+            re.DOTALL,
+        )
     )
     # ruff forbids exec (S102), so the code runs from a file.
     with tempfile.TemporaryDirectory() as tmp:
-        script = Path(tmp) / "quickstart.py"
-        script.write_text(code)
+        script = Path(tmp) / "page.py"
+        script.write_text(code, encoding="utf-8")
         with contextlib.redirect_stdout(io.StringIO()):
-            page = runpy.run_path(str(script))
+            return runpy.run_path(str(script))
+
+
+def quickstart() -> None:
+    page = run("start/quickstart.mdx")
     test, result, mask = page["test"], page["result"], page["mask"][SHOWN]
     data = {
         "spectrum": SHOWN,
@@ -187,6 +207,39 @@ def quickstart() -> None:
     write("quickstart.json", data)
 
 
+def infill_guide() -> None:
+    # `result` is the last infill of the page, of the gap; the draws are those of its
+    # multiple imputation, of spectrum 0.
+    page = run("guides/infill.mdx")
+    test, gap = page["test"], page["gap"]
+    data = {
+        "snr": round(float(test.snr[0])),
+        "start": int(np.argmax(gap)),
+        "width": int(gap.sum()),
+        "flux": np.round(test.flux[0], DECIMALS).tolist(),
+        "truth": np.round(test.truth[0], DECIMALS).tolist(),
+        "mu": np.round(page["result"].flux[0, gap], DECIMALS).tolist(),
+        "draws": [np.round(d[gap], DECIMALS).tolist() for d in page["draws"][:DRAWS]],
+    }
+    write("guide-infill.json", data)
+
+
+def outliers_guide() -> None:
+    page = run("guides/outliers.mdx")
+    z = page["z"][page["clean"]].ravel()
+    counts, _ = np.histogram(np.clip(z, Z_EDGES[0], Z_EDGES[-1]), Z_EDGES)
+    # The expected count of each bin for z ~ N(0, 1), with the tails in the end bins.
+    cdf = stats.norm.cdf(Z_EDGES)
+    cdf[0], cdf[-1] = 0.0, 1.0
+    data = {
+        "edges": Z_EDGES.tolist(),
+        "counts": counts.tolist(),
+        "gaussian": np.round(z.size * np.diff(cdf), 3).tolist(),
+        "threshold": THRESHOLD,
+    }
+    write("guide-outliers.json", data)
+
+
 def write(name: str, data: dict[str, Any]) -> None:
     path = OUT / name
     path.write_text(json.dumps(data, separators=(",", ":")) + "\n")
@@ -197,6 +250,8 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     explainer(np.random.default_rng(11))
     quickstart()
+    infill_guide()
+    outliers_guide()
 
 
 if __name__ == "__main__":
