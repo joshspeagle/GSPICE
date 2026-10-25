@@ -42,7 +42,15 @@ const links = [
   const button = document.querySelector<HTMLButtonElement>('.gs-theme')
   const select = document.querySelector<HTMLSelectElement>('starlight-theme-select select')
   const key = 'starlight-theme'
-  const current = () => select?.value ?? (localStorage.getItem(key) || 'auto')
+  // Storage can throw, for example when site data is blocked.
+  function stored() {
+    try {
+      return localStorage.getItem(key) || 'auto'
+    } catch {
+      return 'auto'
+    }
+  }
+  const current = () => select?.value ?? stored()
   const next = (theme: string) => order[(order.indexOf(theme) + 1) % order.length]
   function show(theme: string) {
     button?.setAttribute('data-state', theme)
@@ -50,13 +58,17 @@ const links = [
     button?.setAttribute('title', `Theme: ${theme}`)
   }
   show(current())
+  // A choice in the mobile menu's select also changes the toggle.
+  select?.addEventListener('change', () => show(select.value))
   button?.addEventListener('click', () => {
     const theme = next(current())
     if (select) {
       select.value = theme
       select.dispatchEvent(new Event('change'))
     } else {
-      localStorage.setItem(key, theme)
+      try {
+        localStorage.setItem(key, theme)
+      } catch {}
       const light = matchMedia('(prefers-color-scheme: light)').matches
       document.documentElement.dataset.theme = theme === 'auto' ? (light ? 'light' : 'dark') : theme
     }
