@@ -63,7 +63,7 @@ noise-aware model
 
 pattern
   The pixel sets $G$, $M$ and $T$ of an infill. Spectra of one S/N bin with one pattern
-  share one factorization.
+  share one factorization within each chunk of spectra.
 
 precision matrix
   $P = C^{-1}$, the inverse of the covariance. GSPICE computes the conditional
