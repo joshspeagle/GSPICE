@@ -554,7 +554,7 @@ BC marks a change of a 2022 result in `gspice.legacy` (section 7.1). BC-new mark
 | S11.6 | (nspec, npix) | all existing Python and Julia code | none |
 | S11.7 | Import and distribution name `gspice` | continuity | none |
 | S11.8 | `license = "GPL-3.0-or-later"`, chosen by the lead before release (#131): the most permissive form of the GPL v3 of the 2022 code | the 2022 code ships the GPL v3 text with no "-only" notice | "-only" |
-| S11.9 | Sphinx; the docs phase picks the theme after it compares the comparables the lead named, PyData by default | all six comparables use Sphinx, with different themes | MkDocs |
+| S11.9 | Astro Starlight, chosen by the lead in #137, with the API pages generated from the docstrings by griffe; it replaced Sphinx in #140 | a custom design and interactive explainers, which the Sphinx themes support only through overrides that Furo calls unstable | Sphinx with a custom theme; MkDocs |
 | S11.10 | Python ≥ 3.11; PR 2.1 drops 3.10 from CI, which changes the CI decision of #9 | 3.10 reached end of life on 2026-10-01; the oldest-stack CI job runs 3.11, so the floors of Python, numpy and scipy are tested together | 3.10 |
 | Q1 | A spectrum without a good pixel raises (sections 3.1 and 7.1); `fit` checks only the spectra it uses, and drops a spectrum that a pass mask or the final mask covers completely, where legacy raises (section 5.1); no `on_empty` option. **BC**, **BC-new** | NaN in every row helps nobody; the filter is one line, for the new API `bad = (ivar == 0) if mask is None else (np.asarray(mask) != 0) \| (ivar == 0); keep = ~bad.all(axis=1)`, and for legacy without the `\| (ivar == 0)` term | `on_empty="raise"\|"drop"`, default "raise" (inventory default) |
 | Q2 | The requirements of section 4.1, per bin; legacy keeps the 2022 check nmask ≥ npix (section 7.1). Near the minimum, A26 can still refuse the covariance. **BC-new** | otherwise S is singular: 2022 accepted nmask = npix, then raised LinAlgError or flagged most pixels silently (D-15) | the same requirement in legacy; a higher minimum |
@@ -800,7 +800,7 @@ Each line is one issue, one branch and one pull request with a single goal; line
 
 **Later phases**
 
-- Docs: Sphinx with the theme chosen in the docs phase (S11.9), built in CI with `sphinx-build -W`; background, glossary, SVG schematics in currentColor, figures built from data.
+- Docs: Astro Starlight (S11.9), built in CI with a build that fails on a broken link, citation or API reference; background, glossary, SVG schematics in currentColor, figures built from data.
 - Tutorials and examples, after the docs.
 - Release preparation: CITATION.cff (Zenodo reads it, so there is no .zenodo.json), version, licence wording, the Python floor against end-of-life dates; the lead approves before any tag, release or upload.
 - Detection of long shifted regions in `repair` (#68): the block pass rarely flags the interior of a shift longer than a block. The lead chose to keep the procedure of section 5.4 and document the limit (A31).

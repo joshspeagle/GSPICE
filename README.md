@@ -4,7 +4,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 
 ## Installation
 
-See the [installation page](https://joshspeagle.github.io/GSPICE/installation.html) of the documentation.
+See the [installation page](https://joshspeagle.github.io/GSPICE/installation/) of the documentation.
 
 ## Example
 

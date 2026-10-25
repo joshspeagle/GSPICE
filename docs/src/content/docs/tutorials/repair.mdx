@@ -1,10 +1,14 @@
-# Finding and repairing artifacts
+---
+title: Finding and repairing artifacts
+---
 
-{func}`gspice.repair` flags the artifacts of each spectrum, with pixelwise z-scores
-and a block scan, and replaces them. {doc}`../background/repair` explains the
+import ThemeImage from '../../../components/ThemeImage.astro'
+
+[`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) flags the artifacts of each spectrum, with pixelwise z-scores
+and a block scan, and replaces them. [Detection and repair](/GSPICE/background/repair/) explains the
 procedure.
 
-The tutorial uses the survey and the model of {doc}`fitting`.
+The tutorial uses the survey and the model of [Fitting a model](/GSPICE/tutorials/fitting/).
 [`docs/scripts/spectra.py`](https://github.com/joshspeagle/GSPICE/blob/main/docs/scripts/spectra.py)
 makes `spectra.npz`.
 
@@ -32,7 +36,7 @@ model, mask = gspice.fit(flux[train], ivar[train])
 ## Block thresholds
 
 The block scan compares each block of 150 pixels with its prediction from the pixels
-beyond a guard window. {func}`gspice.fit_blocks` sets the threshold of each block from
+beyond a guard window. [`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks) sets the threshold of each block from
 spectra without artifacts that the model was not fitted to:
 
 ```python
@@ -40,7 +44,7 @@ model = gspice.fit_blocks(model, clean[blocks], clean_ivar[blocks])
 print(model.blocks.starts, model.blocks.thresholds.shape)
 ```
 
-`model.blocks` is a {class}`gspice.Blocks`: here 19 blocks, 75 pixels apart, with
+`model.blocks` is a [`gspice.Blocks`](/GSPICE/reference/api/#gspice.Blocks): here 19 blocks, 75 pixels apart, with
 one threshold for each block in each S/N bin. The thresholds are the 99.9th
 percentile of the block statistic over these 2000 spectra.
 
@@ -50,18 +54,10 @@ percentile of the block statistic over these 2000 spectra.
 result = gspice.repair(model, flux[test], ivar[test])
 ```
 
-`result` is a {class}`gspice.Repaired`, as from {func}`gspice.infill`, with the
+`result` is a [`gspice.Repaired`](/GSPICE/reference/api/#gspice.Repaired), as from [`gspice.infill()`](/GSPICE/reference/api/#gspice.infill), with the
 flagged blocks of each spectrum in `result.blocks`.
 
-```{image} ../_static/figures/tutorials/repair-spectrum-light.svg
-:alt: A test spectrum with a shifted block, before and after repair, with its flagged blocks
-:class: only-light
-```
-
-```{image} ../_static/figures/tutorials/repair-spectrum-dark.svg
-:alt: A test spectrum with a shifted block, before and after repair, with its flagged blocks
-:class: only-dark
-```
+<ThemeImage src="figures/tutorials/repair-spectrum" alt="A test spectrum with a shifted block, before and after repair, with its flagged blocks" />
 
 The figure shows a test spectrum with a shifted block, whose lines are recorded up to
 3 pixels off. The lower panel shows the difference from the same spectrum without the
@@ -89,18 +85,10 @@ print(flagged[has_shift].sum(), "of", has_shift.sum(), "shifted spectra flagged"
 On the 2000 test spectra, `repair` replaced 78% of the artifact pixels above 5σ, and
 replaced or ignored 96% of them. It replaced 87% of such pixels in cosmic rays, 73% in
 shifted blocks and 6% in hot columns, which the model partly describes
-({doc}`fitting`). It replaced 0.06% of the pixels without an artifact. The block scan
+([Fitting a model](/GSPICE/tutorials/fitting/)). It replaced 0.06% of the pixels without an artifact. The block scan
 flagged a block in 7 of the 45 test spectra with a shifted block.
 
-```{image} ../_static/figures/tutorials/repair-recall-light.svg
-:alt: The fraction of artifact pixels that repair replaced, against the amplitude of the artifact
-:class: only-light
-```
-
-```{image} ../_static/figures/tutorials/repair-recall-dark.svg
-:alt: The fraction of artifact pixels that repair replaced, against the amplitude of the artifact
-:class: only-dark
-```
+<ThemeImage src="figures/tutorials/repair-recall" alt="The fraction of artifact pixels that repair replaced, against the amplitude of the artifact" />
 
 The figure shows the fraction of artifact pixels that `repair` replaced, and replaced
 or ignored, against their amplitude. Most pixels above 10σ are replaced, and most above

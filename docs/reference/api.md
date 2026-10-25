@@ -1,104 +1,78 @@
-# API reference
+---
+title: API reference
+tableOfContents:
+  maxHeadingLevel: 4
+editUrl: https://github.com/joshspeagle/GSPICE/edit/main/docs/reference/api.md
+---
 
-Every name in `gspice.__all__` except the submodule `gspice.legacy`, which has [its own page](legacy.md).
-
-```{eval-rst}
-.. currentmodule:: gspice
-```
+Every name in `gspice.__all__` except the submodule `gspice.legacy`, which has [its own page](/GSPICE/reference/legacy/).
 
 ## Models and fitting
 
 Fit a model of the spectra.
 
-```{eval-rst}
-.. autoclass:: Model
-   :members:
+::: gspice.Model
 
-.. autoclass:: LowRank
-   :members:
+::: gspice.LowRank
 
-.. autoclass:: Blocks
-   :members:
+::: gspice.Blocks
 
-.. autofunction:: fit
+::: gspice.fit
 
-.. autofunction:: fit_blocks
-```
-
+::: gspice.fit_blocks
 
 ## Prediction
 
 Predict pixels from other pixels.
 
-```{eval-rst}
-.. autoclass:: Prediction
-   :members:
+::: gspice.Prediction
 
-.. autoclass:: Repaired
-   :members:
+::: gspice.Repaired
 
-.. autofunction:: pixelwise
+::: gspice.pixelwise
 
-.. autofunction:: infill
-```
-
+::: gspice.infill
 
 ## Repair
 
 Flag and replace bad pixels.
 
-```{eval-rst}
-.. autofunction:: repair
-```
-
+::: gspice.repair
 
 ## Diagnostics
 
 Check that the predicted uncertainties are calibrated.
 
-```{eval-rst}
-.. autoclass:: Calibration
-   :members:
+::: gspice.Calibration
 
-.. autofunction:: calibration
+::: gspice.calibration
 
-.. autofunction:: finite_sample_factor
+::: gspice.finite_sample_factor
 
-.. autofunction:: noise_audit
-```
-
+::: gspice.noise_audit
 
 ## Scaling
 
 Scale spectra before fitting, and undo the scaling.
 
-```{eval-rst}
-.. autofunction:: scale
+::: gspice.scale
 
-.. autofunction:: unscale
+::: gspice.unscale
 
-.. autofunction:: snr
-```
-
+::: gspice.snr
 
 ## Simulation
 
 Make synthetic spectra for tests and examples.
 
-```{eval-rst}
-.. autoclass:: Simulation
-   :members:
+::: gspice.Simulation
 
-.. autofunction:: simulate
-```
-
+::: gspice.simulate
 
 ## Input and output
 
 Write a model to a file, and read it back.
 
-```{eval-rst}
-.. autofunction:: save
+::: gspice.save
 
-.. autofunction:: load
-```
+::: gspice.load

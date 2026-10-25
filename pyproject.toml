@@ -32,13 +32,8 @@ dev = [
     "scipy-stubs==1.18.1.1; python_version >= '3.12'",
     "pre-commit",
 ]
-docs = [
-    "sphinx==9.1.0",
-    "myst-parser==5.1.0",
-    "furo==2025.12.19",
-    "sphinx-copybutton==0.5.2",
-    "sphinxcontrib-bibtex==2.7.0",
-]
+# docs/scripts/api.py
+docs = ["griffe==2.4.1"]
 # docs/scripts/figures.py
 figures = ["matplotlib==3.11.2"]
 

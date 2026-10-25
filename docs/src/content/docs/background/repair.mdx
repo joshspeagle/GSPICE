@@ -1,9 +1,14 @@
-# Detection and repair
+---
+title: Detection and repair
+---
 
-{func}`gspice.repair` flags the bad pixels of each spectrum and replaces them. It
+import Blocks from '../../../assets/figures/blocks.svg'
+import Repair from '../../../assets/figures/repair.svg'
+
+[`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) flags the bad pixels of each spectrum and replaces them. It
 extends the pixelwise repair of the paper's Secs. 2.6 and 3.3
-{cite:p}`finkbeiner2025gspice` with a scan over blocks. It uses two detectors: the
-pixelwise z-score of {doc}`prediction` for narrow defects, and a {term}`block scan` for
+[@finkbeiner2025gspice] with a scan over blocks. It uses two detectors: the
+pixelwise z-score of [Prediction](/GSPICE/background/prediction/) for narrow defects, and a [block scan](/GSPICE/background/glossary/#term-block-scan) for
 broad ones.
 
 ## Why a block scan
@@ -15,14 +20,12 @@ its prediction from the pixels beyond a guard window.
 
 ## The block statistic
 
-A {term}`block` holds `width` consecutive pixels. The blocks start at 0, `stride`,
+A [block](/GSPICE/background/glossary/#term-block) holds `width` consecutive pixels. The blocks start at 0, `stride`,
 2 `stride`, ... up to npix − `width`, and one more block ends at the last pixel if the
 last start is smaller than npix − `width`. The defaults, `width=150`, `stride=75` and
 `nguard=20`, give 31 blocks at npix 2400.
 
-```{raw} html
-:file: ../_static/figures/blocks.svg
-```
+<Blocks />
 
 For block $A$, $G$ holds the pixels within `nguard` of $A$, clipped at the ends, and $O$
 holds the other pixels. The statistic is
@@ -37,7 +40,7 @@ guard pixels are marginalized.
 
 ## Block thresholds
 
-{func}`gspice.fit_blocks` sets a {term}`threshold` for each block and S/N bin: the
+[`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks) sets a [threshold](/GSPICE/background/glossary/#term-threshold) for each block and S/N bin: the
 percentile `percentile` (99.9 by default) of $\chi^2_A$ over the $m$ spectra of the bin.
 Give it spectra without artifacts that the model was not fitted to. It replaces their bad
 pixels by the conditional mean first, and flags no pixel by z-score. A percentile of the
@@ -46,20 +49,18 @@ data needs no assumption about the distribution of $\chi^2_A$.
 Each bin needs $m (100 - p) \ge 100$ spectra for the percentile $p$: 1000 spectra at
 99.9. A clean block then exceeds its threshold with a probability of 0.20% at
 $m = 1000$, and 0.12% at $m = 5000$. The docstring of `fit_blocks` gives the formula.
-`fit_blocks` returns a new model whose `blocks` field, a {class}`gspice.Blocks`, holds
+`fit_blocks` returns a new model whose `blocks` field, a [`gspice.Blocks`](/GSPICE/reference/api/#gspice.Blocks), holds
 the blocks and the thresholds.
 
 ## The procedure
 
 `repair` uses two thresholds of $|z|$. A pixel above `nsigma_replace` (10 by default) is
 replaced. A pixel above `nsigma_ignore` (5 by default) and not replaced is ignored: it is
-neither replaced nor used as a conditioning pixel {cite:p}`finkbeiner2025gspice`.
+neither replaced nor used as a conditioning pixel [@finkbeiner2025gspice].
 $\mathrm{dil}(F)$ is the set $F$ plus every pixel within `dilate` pixels of a pixel of
-$F$ along the spectrum. A "conditional mean" is that of {func}`gspice.infill`.
+$F$ along the spectrum. A "conditional mean" is that of [`gspice.infill()`](/GSPICE/reference/api/#gspice.infill).
 
-```{raw} html
-:file: ../_static/figures/repair.svg
-```
+<Repair />
 
 The five steps run in this order:
 
@@ -99,7 +100,7 @@ The five steps run in this order:
    $|z_2| > \mathtt{nsigma\_ignore}$, and $M_b$. A spectrum keeps its earlier $I$ if
    fewer than $\lfloor \mathtt{minfrac} \cdot \mathrm{npix} \rfloor$ pixels outside
    $M$ and $I$ would remain.
-5. **Final infill.** The result is that of {func}`gspice.infill` with `replace=M` and
+5. **Final infill.** The result is that of [`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) with `replace=M` and
    `ignore=I`, and the options `inflate`, `covariance` and `rng`.
 
 ## Long defects
@@ -128,7 +129,7 @@ many of its strong pixels stay in the output.
 
 ## The result
 
-`repair` returns a {class}`gspice.Repaired`, as `infill` does. `replaced` is $M$, which
+`repair` returns a [`gspice.Repaired`](/GSPICE/reference/api/#gspice.Repaired), as `infill` does. `replaced` is $M$, which
 always holds the bad pixels, and `ignored` is $I$. `blocks` holds the flagged blocks of
 each spectrum, or None with `blockwise=False`. The pixels outside $M$ keep their input
 values, bit for bit.

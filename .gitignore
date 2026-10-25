@@ -1,6 +1,9 @@
 dist
 .vscode
-docs/_build/
+# The npm packages and cache of the site, and the API pages of docs/scripts/api.py
+docs/node_modules/
+docs/.astro/
+docs/src/content/docs/reference/
 # The 2021 draft of the paper, kept out of the repository
 paper/
 # Local environments and caches

@@ -1,7 +1,9 @@
-# Quickstart
+---
+title: Quickstart
+---
 
-{doc}`installation` installs GSPICE. This example simulates spectra with
-{func}`gspice.simulate`, so it needs no download.
+[Installation](/GSPICE/installation/) installs GSPICE. This example simulates spectra with
+[`gspice.simulate()`](/GSPICE/reference/api/#gspice.simulate), so it needs no download.
 
 ```python
 import numpy as np
@@ -14,7 +16,7 @@ clean = gspice.simulate(1000, 500, rng=rng)
 test = gspice.simulate(500, 500, rng=rng, artifacts=0.3)
 ```
 
-Each call returns a {class}`gspice.Simulation`: `flux` and `ivar`, the inverse
+Each call returns a [`gspice.Simulation`](/GSPICE/reference/api/#gspice.Simulation): `flux` and `ivar`, the inverse
 variance, of shape (nspec, npix), with the noise-free `truth` and the injected
 `artifacts`. `artifacts=0.3` gives an artifact to 30% of the spectra.
 
@@ -46,10 +48,10 @@ print(f"{hit[~has].mean():.1%} of the others have replaced pixels")
 0.9% of the others have replaced pixels
 ```
 
-`result` is a {class}`gspice.Repaired`. `result.flux` holds the conditional mean at
+`result` is a [`gspice.Repaired`](/GSPICE/reference/api/#gspice.Repaired). `result.flux` holds the conditional mean at
 the replaced pixels and the input flux elsewhere, `result.var` the variance of each
 pixel, `result.replaced` and `result.ignored` the masks, and `result.blocks` the
 blocks that the block scan flagged.
 
-{doc}`tutorials/repair` measures what `repair` finds on a realistic survey, and the
-other tutorials work through each step. {doc}`background/method` explains the model.
+[Finding and repairing artifacts](/GSPICE/tutorials/repair/) measures what `repair` finds on a realistic survey, and the
+other tutorials work through each step. [The model](/GSPICE/background/method/) explains the model.
