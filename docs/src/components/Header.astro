@@ -36,42 +36,23 @@ const links = [
 
 <script>
   // The toggle cycles auto, dark, light. Starlight's theme select, in the mobile menu of
-  // each page with a sidebar, holds the choice, stores it and applies it. The 404 page has
-  // no sidebar, so there the toggle stores and applies the choice itself.
+  // every page, holds the choice, stores it and applies it.
   const order = ['auto', 'dark', 'light']
-  const button = document.querySelector<HTMLButtonElement>('.gs-theme')
-  const select = document.querySelector<HTMLSelectElement>('starlight-theme-select select')
-  const key = 'starlight-theme'
-  // Storage can throw, for example when site data is blocked.
-  function stored() {
-    try {
-      return localStorage.getItem(key) || 'auto'
-    } catch {
-      return 'auto'
-    }
-  }
-  const current = () => select?.value ?? stored()
+  const button = document.querySelector<HTMLButtonElement>('.gs-theme')!
+  const select = document.querySelector<HTMLSelectElement>('starlight-theme-select select')!
   const next = (theme: string) => order[(order.indexOf(theme) + 1) % order.length]
   function show(theme: string) {
-    button?.setAttribute('data-state', theme)
-    button?.setAttribute('aria-label', `Theme: ${theme}. Switch to ${next(theme)}.`)
-    button?.setAttribute('title', `Theme: ${theme}`)
+    button.setAttribute('data-state', theme)
+    button.setAttribute('aria-label', `Theme: ${theme}. Switch to ${next(theme)}.`)
+    button.setAttribute('title', `Theme: ${theme}`)
   }
-  show(current())
+  show(select.value)
   // A choice in the mobile menu's select also changes the toggle.
-  select?.addEventListener('change', () => show(select.value))
-  button?.addEventListener('click', () => {
-    const theme = next(current())
-    if (select) {
-      select.value = theme
-      select.dispatchEvent(new Event('change'))
-    } else {
-      try {
-        localStorage.setItem(key, theme)
-      } catch {}
-      const light = matchMedia('(prefers-color-scheme: light)').matches
-      document.documentElement.dataset.theme = theme === 'auto' ? (light ? 'light' : 'dark') : theme
-    }
+  select.addEventListener('change', () => show(select.value))
+  button.addEventListener('click', () => {
+    const theme = next(select.value)
+    select.value = theme
+    select.dispatchEvent(new Event('change'))
     show(theme)
   })
 
