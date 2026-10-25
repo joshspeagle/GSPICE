@@ -102,9 +102,9 @@ guard = (pixel >= npix // 2 - 20) & ~red
 result = gspice.infill(model, flux, ivar, mask, replace=red, ignore=guard)
 ```
 
-Spectra of one S/N bin with equal $G$, $M$ and $T$ form a {term}`pattern`, and share
-one factorization of $P_{GG}$. An infill is therefore fast where many spectra share
-their masks.
+Spectra of one S/N bin with equal $G$, $M$ and $T$ form a {term}`pattern`. The spectra
+of a pattern in one chunk of `max(1, 2**24 // npix)` rows share one factorization of
+$P_{GG}$. An infill is therefore fast where many spectra share their masks.
 
 Two options describe the uncertainty of the replaced pixels:
 
