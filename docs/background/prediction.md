@@ -132,9 +132,9 @@ f_s = \left(1 + \frac{1}{N_s}\right) \frac{N_s - 2}{N_s - N_k - 2} \cdot
 $$
 
 The {term}`finite-sample factor` $f_s$ is exact for a dense, mean-centred, unweighted
-model, Gaussian working vectors and pixel sets that do not depend on the data. Guard and
-ignored pixels do not count in $N_k$. `inflate=True` multiplies the variances and
-covariances by $f_s(N_s, N_k, 1)$. `Repaired.fs` holds $f_s(N_s, N_k, \mathrm{dof})$,
-divided by $f_s(N_s, N_k, 1)$ with `inflate=True`, so that `chi2 / (dof * fs)` has the
-mean 1 in both cases. Models of other kinds report 1 and reject `inflate=True`.
-{func}`gspice.finite_sample_factor` computes $f_s$.
+model without noise, Gaussian working vectors and pixel sets that do not depend on the
+data. Guard and ignored pixels do not count in $N_k$. `inflate=True` multiplies the
+variances and covariances by $f_s(N_s, N_k, 1)$. `Repaired.fs` holds
+$f_s(N_s, N_k, \mathrm{dof})$, divided by $f_s(N_s, N_k, 1)$ with `inflate=True`, so
+that `chi2 / (dof * fs)` has the mean 1 in both cases. Models of other kinds report 1
+and reject `inflate=True`. {func}`gspice.finite_sample_factor` computes $f_s$.

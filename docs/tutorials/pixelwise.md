@@ -69,7 +69,7 @@ print(f"|z| > 5: {np.mean(np.abs(z) > 5):.3%}, or {np.mean(np.abs(inflated) > 5)
 On the 2000 test spectra, the standard deviation is 1.33, close to
 $\sqrt{f_s} = 1.32$, and 1.00 with `inflate=True`. 0.131% of the pixels have
 $|z| > 5$, and 0.033% with `inflate=True`. `inflate` needs a dense, mean-centred,
-unweighted model.
+unweighted model without noise.
 
 ## Outliers
 
