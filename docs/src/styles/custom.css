@@ -424,6 +424,20 @@ mobile-starlight-toc nav {
   font-weight: 650;
 }
 
+/* A page with a hero, the home page or 404, keeps the splash layout. Its sidebar
+   (route-middleware.ts) shows only as the phone menu. */
+:root[data-has-hero] {
+  --sl-content-width: 67.5rem;
+
+  @media (min-width: 50em) {
+    --sl-content-inline-start: 0rem;
+
+    & .sidebar-pane {
+      display: none;
+    }
+  }
+}
+
 /* The home page: the three page cards, then the example beside the map of functions. */
 .gs-cards {
   display: grid;

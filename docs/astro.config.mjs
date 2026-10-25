@@ -67,6 +67,7 @@ export default defineConfig({
         { icon: 'github', label: 'GitHub', href: 'https://github.com/joshspeagle/GSPICE' },
       ],
       editLink: { baseUrl: 'https://github.com/joshspeagle/GSPICE/edit/main/docs/' },
+      routeMiddleware: './src/route-middleware.ts',
       components: {
         Header: './src/components/Header.astro',
         Hero: './src/components/Hero.astro',
