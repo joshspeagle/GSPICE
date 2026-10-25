@@ -8,6 +8,7 @@ import remarkHeadingId from 'remark-heading-id'
 import remarkMath from 'remark-math'
 import linksValidator from 'starlight-links-validator'
 import { rehypeKnownCitations, rehypeReferencesPage } from './plugins/citations.mjs'
+import * as codeThemes from './plugins/code-themes.mjs'
 
 const base = '/GSPICE'
 // The Sphinx site served each page at <page>.html: keep those addresses working.
@@ -39,13 +40,51 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'GSPICE',
-      logo: {
-        light: './src/assets/logo-light.svg',
-        dark: './src/assets/logo-dark.svg',
-        replacesTitle: true,
-      },
+      // The header band is navy in both themes.
+      logo: { src: './src/assets/lockup-dark.svg', replacesTitle: true },
+      social: [
+        { icon: 'document', label: 'Paper', href: 'https://arxiv.org/abs/2511.16754' },
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/joshspeagle/GSPICE' },
+      ],
       editLink: { baseUrl: 'https://github.com/joshspeagle/GSPICE/edit/main/docs/' },
-      customCss: ['katex/dist/katex.min.css', './src/styles/custom.css'],
+      components: {
+        Header: './src/components/Header.astro',
+        PageTitle: './src/components/PageTitle.astro',
+        Footer: './src/components/Footer.astro',
+      },
+      expressiveCode: {
+        themes: [codeThemes.dark, codeThemes.light],
+        // The tab of each block names its language; shell commands get the same frame.
+        defaultProps: {
+          overridesByLang: {
+            python: { title: 'Python' },
+            sh: { title: 'Shell', frame: 'code' },
+            text: { title: 'Text' },
+          },
+        },
+        styleOverrides: {
+          borderColor: 'var(--gs-rule)',
+          frames: {
+            frameBoxShadowCssValue: 'none',
+            editorTabsMarginInlineStart: '0',
+            editorTabBarBackground: 'var(--gs-bg-2)',
+            editorTabBarBorderBottomColor: 'var(--gs-rule)',
+            editorActiveTabBackground: 'var(--gs-bg-2)',
+            editorActiveTabForeground: 'var(--gs-ink-2)',
+            editorActiveTabBorderColor: 'transparent',
+            editorActiveTabIndicatorTopColor: 'transparent',
+            editorActiveTabIndicatorBottomColor: 'transparent',
+          },
+        },
+      },
+      customCss: [
+        '@fontsource-variable/archivo/wdth.css',
+        '@fontsource-variable/archivo/wdth-italic.css',
+        '@fontsource/ibm-plex-mono/400.css',
+        '@fontsource/ibm-plex-mono/500.css',
+        'katex/dist/katex.min.css',
+        './src/styles/custom.css',
+      ],
       sidebar: [
         'installation',
         'quickstart',

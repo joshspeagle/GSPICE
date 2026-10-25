@@ -14,6 +14,7 @@ Dark mode is designed first, on a cool blue-black ground. Light mode keeps the n
 | `--gs-bg-2` | #111A2A | #F2F5F9 | surfaces: code, callouts, cards |
 | `--gs-bg-3` | #18233A | #E6EBF2 | raised: labels, hover |
 | `--gs-rule` | #26324A | #D6DDE6 | hairlines |
+| `--gs-rule-2` | #3A4868 | #A9B4C4 | solid edges, inactive cells |
 | `--gs-ink` | #E8ECF2 | #111827 | text |
 | `--gs-ink-2` | #A7B1C2 | #4A5568 | secondary text |
 | `--gs-ink-3` | #7F8AA0 | #5F6B7F | tertiary text, scatter points |
@@ -25,6 +26,9 @@ Dark mode is designed first, on a cool blue-black ground. Light mode keeps the n
 | `--gs-mask-fill` | #1A2438 | #E9EDF3 | masked block |
 | `--gs-mask-edge` | #6B7A99 | #7A879C | edge of the masked block |
 | `--gs-header` | #0B111C | #111A2A | header band |
+| `--gs-strip-lo`, `--gs-strip-hi` | #3B465C, #C9D1DE | #6B7588, #E1E6EE | ends of the footer cell strip |
+
+The header band is navy in both themes, so its text and edges keep the dark values. Its focus ring is #FF8A5C, because #C2410C is too dark on navy. The masked block of the header lockup is #1E2A42, because the mask fill #1A2438 nearly vanishes on the light theme's #111A2A band.
 
 ### Contrast
 
@@ -40,6 +44,15 @@ These ratios follow WCAG 2.
 | ink-2 on header | 8.74 | 8.06 | 4.5 |
 | prediction line on bg-2 | 6.74 | 3.71 | 3 (graphic) |
 | mask edge on bg-2 | 4.04 | 3.33 | 3 (graphic) |
+
+### Code
+
+Keywords and constants are steel blue, strings are green, comments are ink-3, and all other code is ink.
+
+| Role | Dark | Light | Contrast on bg-2 |
+|---|---|---|---|
+| keyword, constant | #9DB8E0 | #2F5B99 | 8.60 / 6.24 |
+| string | #A9D3B0 | #2E6B3F | 10.48 / 5.84 |
 
 ### Heat map
 
@@ -76,7 +89,10 @@ The logo is a G on a 5 × 5 grid of cells. A masked block covers its left stroke
 | 48 px and larger | Open cells with 1 px gaps. Hollow orange cells beside the stroke show the uncertainty, and the block has a solid edge. |
 
 - The gap between the G and "SPICE" is fixed, 3 px at header size, so the name never reads "G SPICE".
-- The files are outlined SVG, with no live text: the full logo, the header lockup, and the favicon at 16, 32 and 64 px, each for the dark and the light ground.
+- The files are outlined SVG, with no live text. `docs/scripts/logo.py` writes them:
+  - the full logo, for the dark and the light ground;
+  - the header lockup, for the navy band;
+  - the favicon, a 32 px design that follows the colour scheme of the browser. One SVG favicon serves every size, so there is no separate 16 or 64 px file.
 
 ## Motif
 
@@ -97,6 +113,8 @@ The motif appears in these places:
 
 ## Components
 
+The theme of #142 builds the header, the sidebar, "On this page", the page title, code and output, and the figure frame. The callout, the term card, the page card, the label and the covariance square come with the pages and explainers that use them (#137).
+
 | Component | Form |
 |---|---|
 | Header | A navy band with the lockup, a square search box with a `/` key label, text links, and a theme toggle drawn in cells. |
@@ -104,7 +122,7 @@ The motif appears in these places:
 | On this page | The column of cells. |
 | Page title | A breadcrumb of the page's group, then the title. API pages set the title in mono. |
 | Callout | A surface with a square label, "Note" or "Warning", and a 3 px left edge in ink-3 or orange. |
-| Code and output | The code sits on a surface with a header bar for the language and copy. Its output joins below it on the ground, with a square "Output" tag. |
+| Code and output | The code sits on a surface with a header bar that names the language and holds the word "Copy". A text block right after a Python block is its output: it joins below it on the ground, with a square "Output" tag and no header bar. |
 | Term | A dotted underline. On hover or focus, a card shows the glossary entry and its link. |
 | Page card | A surface with a solid top edge, a cell glyph, the group, the title and one line. |
 | Label | A small square tag in mono: function, class, the version. |
@@ -113,6 +131,6 @@ The motif appears in these places:
 
 ## Figures
 
-- Scripts draw every figure from data, as SVG in the theme tokens. One file serves both themes.
+- Scripts draw every figure from data, as SVG in the theme tokens, so one file serves both themes. The tutorial figures still come in light and dark pairs until they are redrawn.
 - All text in a figure is HTML at 12 px or more, placed over the plot, so it does not shrink on a phone.
 - Pixel boundaries inside the masked block are hidden when a pixel is narrower than 4 px.
