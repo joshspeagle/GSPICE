@@ -117,7 +117,7 @@ The theme of #142 builds the header, the sidebar, "On this page", the page title
 
 | Component | Form |
 |---|---|
-| Header | A navy band with the lockup, a square search box with a `/` key label, text links, and a theme toggle drawn in cells. |
+| Header | A navy band with the lockup, a square search box with a `/` key label, text links, and a theme toggle drawn in cells that cycles auto, dark and light. |
 | Sidebar | Square group markers. The current page has a 3 px orange left edge. |
 | On this page | The column of cells. |
 | Page title | A breadcrumb of the page's group, then the title. API pages set the title in mono. |

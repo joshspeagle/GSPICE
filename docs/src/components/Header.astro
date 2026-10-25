@@ -21,26 +21,46 @@ const links = [
   <nav class="gs-links" aria-label="Site">
     {links.map(({ label, href, current }) => <a href={href} aria-current={current ? 'true' : undefined}>{label}</a>)}
   </nav>
-  <button class="gs-theme" type="button" aria-label="Switch between dark and light theme">
+  <button class="gs-theme" type="button" data-state="auto" aria-label="Theme: auto. Switch to dark.">
     <svg width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-      <rect x="1" y="4" width="7" height="8" fill="currentColor"></rect>
-      <rect x="8.5" y="4.5" width="6" height="7" fill="none" stroke="currentColor"></rect>
+      <!-- auto: half filled, half hollow; dark: filled; light: hollow -->
+      <g class="auto">
+        <rect x="1" y="4" width="7" height="8" fill="currentColor"></rect>
+        <rect x="8.5" y="4.5" width="6" height="7" fill="none" stroke="currentColor"></rect>
+      </g>
+      <rect class="dark" x="1" y="4" width="14" height="8" fill="currentColor"></rect>
+      <rect class="light" x="1.5" y="4.5" width="13" height="7" fill="none" stroke="currentColor"></rect>
     </svg>
   </button>
 </div>
 
 <script>
-  // Starlight's theme select, in the mobile menu of each page with a sidebar, stores and
-  // applies the choice. The 404 page has no sidebar, so there the toggle only applies it.
+  // The toggle cycles auto, dark, light. Starlight's theme select, in the mobile menu of
+  // each page with a sidebar, holds the choice, stores it and applies it. The 404 page has
+  // no sidebar, so there the toggle stores and applies the choice itself.
+  const order = ['auto', 'dark', 'light']
+  const button = document.querySelector<HTMLButtonElement>('.gs-theme')
   const select = document.querySelector<HTMLSelectElement>('starlight-theme-select select')
-  document.querySelector('.gs-theme')?.addEventListener('click', () => {
-    const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'
-    if (!select) {
-      document.documentElement.dataset.theme = theme
-      return
+  const key = 'starlight-theme'
+  const current = () => select?.value ?? (localStorage.getItem(key) || 'auto')
+  const next = (theme: string) => order[(order.indexOf(theme) + 1) % order.length]
+  function show(theme: string) {
+    button?.setAttribute('data-state', theme)
+    button?.setAttribute('aria-label', `Theme: ${theme}. Switch to ${next(theme)}.`)
+    button?.setAttribute('title', `Theme: ${theme}`)
+  }
+  show(current())
+  button?.addEventListener('click', () => {
+    const theme = next(current())
+    if (select) {
+      select.value = theme
+      select.dispatchEvent(new Event('change'))
+    } else {
+      localStorage.setItem(key, theme)
+      const light = matchMedia('(prefers-color-scheme: light)').matches
+      document.documentElement.dataset.theme = theme === 'auto' ? (light ? 'light' : 'dark') : theme
     }
-    select.value = theme
-    select.dispatchEvent(new Event('change'))
+    show(theme)
   })
 
   const search = document.querySelector<HTMLButtonElement>('button[data-open-modal]')
@@ -93,6 +113,11 @@ const links = [
   }
   .gs-theme:hover {
     background: var(--gs-header-raised);
+  }
+  .gs-theme:not([data-state='auto']) .auto,
+  .gs-theme:not([data-state='dark']) .dark,
+  .gs-theme:not([data-state='light']) .light {
+    display: none;
   }
   @media (min-width: 50rem) {
     .gs-header {
