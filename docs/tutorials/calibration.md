@@ -84,8 +84,9 @@ of a pixelwise prediction rises from 1.7 to 13.8.
 ## Noise audit
 
 `noise_audit` returns $\rho$, the root mean of $(f - \hat f)^2\, \mathrm{ivar}$ at each
-pixel, with $\hat f$ the pixelwise prediction. $\rho$ is at least 1 in expectation
-where `ivar` is right, and below 1 where `ivar` reports too much noise.
+pixel, with $\hat f$ the pixelwise prediction. $\rho^2$ is at least 1 in
+expectation where `ivar` is right. A $\rho$ below 1 shows that `ivar` reports more noise
+than the spectra have.
 
 ```python
 rho = gspice.noise_audit(model, clean[test], clean_ivar[test])
