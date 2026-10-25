@@ -1,0 +1,110 @@
+---
+title: Prepare your spectra
+description: Turn survey spectra into the arrays flux, ivar and mask, and split them into training, threshold and held-out spectra.
+---
+
+import SpectrumSets from '../../../components/SpectrumSets.astro'
+
+This page turns the spectra of a survey into the three arrays that every GSPICE function
+takes. It also splits them into the sets that the functions need.
+
+## The three arrays
+
+Every function that takes spectra takes three arrays of the same shape (nspec, npix).
+Here nspec is the number of spectra and npix the number of pixels.
+
+| Array | Holds | Unit | Required |
+|---|---|---|---|
+| `flux` | The flux of each pixel | any flux unit | yes |
+| `ivar` | The inverse variance of the noise, 1/σ², where σ is its standard deviation | flux⁻² | yes |
+| `mask` | Nonzero at each bad pixel | none | no |
+
+A [bad pixel](/GSPICE/background/glossary/#term-bad-pixel) has a nonzero `mask` or
+`ivar == 0`. GSPICE never reads `flux` or `ivar` there, so `flux` may hold NaN at a bad
+pixel. `ivar` may hold NaN only where `mask` is nonzero. The arrays may be float32.
+
+## One wavelength grid
+
+The covariance describes pixels, so pixel $i$ must have the same wavelength in every
+spectrum. GSPICE does not resample spectra. Resample them to one grid before you call
+it.
+
+- **Rest frame.** If the spectra have different redshifts or radial velocities, shift
+  each one to its rest frame first. Each absorption line then falls on the same pixels
+  in every spectrum.
+- **Observed frame.** Keep the observed frame only if the shifts between the spectra
+  are much smaller than a pixel.
+
+## Continuum normalization
+
+GSPICE does not need continuum-normalized flux. Before it fits, it multiplies each
+spectrum by $a_s$, the square root of the mean `ivar` of its good pixels. Two spectra that differ
+only by a constant factor of flux, at the same signal-to-noise ratio (S/N), then become
+equal. A [noise-aware model](/GSPICE/background/glossary/#term-noise-aware-model) is the
+exception: it works in flux units.
+
+The spectra of [`gspice.simulate()`](/GSPICE/reference/api/#gspice.simulate) and of the
+tutorials are continuum-normalized. If the continuum shape differs between your
+spectra, the covariance also describes those differences.
+
+## A pipeline bitmask
+
+Many pipelines mark each pixel with a bitmask, in which each bit is one flag. Suppose
+that a pipeline sets bit 0 for a cosmic ray, bit 3 for a bad column and bit 5 near a sky
+line. Choose the bits that mark pixels you cannot trust, and test them:
+
+```python
+import numpy as np
+
+COSMIC_RAY, BAD_COLUMN, NEAR_SKY_LINE = 1 << 0, 1 << 3, 1 << 5
+bitmask = np.array(
+    [
+        [0, COSMIC_RAY, 0, NEAR_SKY_LINE],
+        [BAD_COLUMN | NEAR_SKY_LINE, 0, 0, 0],
+    ]
+)
+mask = (bitmask & (COSMIC_RAY | BAD_COLUMN)) != 0
+print(mask)
+```
+
+```text output
+[[False  True False False]
+ [ True False False False]]
+```
+
+The pixel with only the bit `NEAR_SKY_LINE` stays good.
+
+## Training, threshold and held-out spectra
+
+Split your spectra into three separate sets:
+
+<SpectrumSets />
+
+- **Training spectra** go to [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit). They may
+  contain artifacts: `fit` removes the pixels far from their prediction in several
+  passes. An artifact is a corruption of the data, such as a cosmic ray.
+- **Threshold spectra** go to [`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks).
+  `fit_blocks` sets the thresholds of the [block scan](/GSPICE/background/glossary/#term-block-scan)
+  of `repair`, for artifacts that cover many pixels.
+- **Held-out spectra** are the spectra that you repair or check. A
+  [held-out spectrum](/GSPICE/background/glossary/#term-held-out-spectrum) is a spectrum
+  that `fit` did not use.
+
+The threshold spectra must be clean spectra, without artifacts, that `fit` did not use.
+`fit_blocks` sets each threshold at the 99.9th percentile of a statistic of these
+spectra. Spectra that `fit` used have smaller residuals than new spectra, so their
+thresholds would be too low. Artifacts in the threshold spectra can raise the
+thresholds, so that the block scan flags fewer blocks.
+
+Simulated spectra are clean by construction. For real spectra, GSPICE cannot tell
+which spectra are clean. If you have no clean spectra, skip `fit_blocks`, and call
+`repair(..., blockwise=False)`. It then skips the block scan, and finds artifacts only
+by the pixelwise test of each pixel.
+
+## How many spectra
+
+| Set | Minimum | Why |
+|---|---|---|
+| Training | See [What GSPICE needs](/GSPICE/start/fit/#what-gspice-needs) | |
+| Threshold | 1000 per S/N bin | `fit_blocks` requires it at its default percentile, 99.9 |
+| Held-out | none | |

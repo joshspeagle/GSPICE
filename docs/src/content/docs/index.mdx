@@ -1,18 +1,57 @@
 ---
 title: GSPICE
+description: GSPICE predicts the bad pixels of a spectrum from its other pixels, with an uncertainty.
+template: splash
+hero:
+  title: Hide some pixels. The others predict them.
+  tagline: Survey spectra contain pixels that you cannot trust, such as cosmic rays, hot columns and pixels that the pipeline masked. GSPICE learns from your own spectra how the pixels vary together, and predicts any pixels from the others, with an uncertainty.
 ---
 
-import ThemeImage from '../../components/ThemeImage.astro'
+import FunctionMap from '../../components/FunctionMap.astro'
+import PageCard from '../../components/PageCard.astro'
 
-<ThemeImage src="logo" alt="GSPICE" class="align-center" />
+<div class="gs-cards">
+  <PageCard path="start/quickstart/" title="Fix bad pixels" page="Quickstart" glyph="fill">
+    Predict the pixels that you mark, with a variance for each.
+  </PageCard>
+  <PageCard path="tutorials/repair/" title="Find artifacts in a survey" page="Finding and repairing artifacts" glyph="flag">
+    Find the pixels far from their prediction, then replace them.
+  </PageCard>
+  <PageCard path="background/method/" title="Understand the method" page="The model" glyph="covariance">
+    See how a mean and a covariance predict any pixels from the others.
+  </PageCard>
+</div>
 
-GSPICE models spectra on a common wavelength grid as a multivariate Gaussian with an
-empirical covariance, and predicts any set of pixels from the others
-[@finkbeiner2025gspice]. The prediction can replace bad pixels, and the distance
-of a pixel from its prediction can flag artifacts. The method needs no model of the
-spectra and no knowledge of the instrument: the covariance of the training spectra
-carries both.
+<div class="gs-split">
+<div>
 
-The logo shows the method. The G is drawn in pixel cells, a masked block hides its left
-stroke, and the stroke comes back as orange cells: the conditional mean, with its
-uncertainty beside it.
+## Fit, then fill
+
+Fit a model to training spectra, then predict the masked pixels of other spectra.
+
+```python
+import gspice
+
+model, clipped = gspice.fit(train.flux, train.ivar)
+result = gspice.infill(model, flux, ivar, mask=mask)
+result.flux  # the input, with the masked pixels replaced
+result.var  # the variance of each pixel
+```
+
+Each array has the shape (number of spectra, number of pixels). The
+[Quickstart](/GSPICE/start/quickstart/) runs this code on simulated spectra.
+
+</div>
+<div>
+
+## How the pieces connect
+
+<FunctionMap />
+
+</div>
+</div>
+
+## Cite GSPICE
+
+If you use GSPICE in your research, cite the paper by Finkbeiner, Speagle and Karim
+[@finkbeiner2025gspice].

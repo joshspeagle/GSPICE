@@ -1,0 +1,112 @@
+---
+// A page card of docs/brand.md: a surface with a solid top edge, a glyph drawn in cells,
+// the title, one line, and the page it opens.
+import { href } from '../lib/href.ts'
+
+interface Props {
+  // The path of the page under the site's base, such as start/quickstart/.
+  path: string
+  title: string
+  page: string
+  glyph: 'fill' | 'flag' | 'covariance'
+}
+
+const { path, title, page, glyph } = Astro.props
+// The cells of each glyph on a grid of 9 px: [column, row, class].
+const cells: Record<Props['glyph'], [number, number, string][]> = {
+  // A run of pixels whose middle two are predicted.
+  fill: [0, 1, 2, 3, 4].map((x) => [x, 2, x === 2 || x === 3 ? 'pred' : 'ink']),
+  // A run of pixels with one masked, and a flag above it.
+  flag: [
+    ...[0, 1, 2, 3, 4].map((x): [number, number, string] => [x, 2, x === 3 ? 'blk' : 'ink']),
+    [3, 0.5, 'flag'],
+  ],
+  // A 3 x 3 covariance in the heat ramp.
+  covariance: [
+    [4, 3, 1],
+    [3, 4, 0],
+    [1, 0, 4],
+  ].flatMap((row, y) => row.map((level, x): [number, number, string] => [x + 1, y + 0.5, `h${level}`])),
+}
+---
+
+<a class="gs-card not-content" href={href(path)}>
+  <svg viewBox="0 0 44 32" width="44" height="32" shape-rendering="crispEdges" aria-hidden="true">
+    {
+      cells[glyph].map(([x, y, kind]) =>
+        kind === 'flag' ? (
+          <rect class="flag" x={x * 9 + 0.75} y={y * 9 - 0.75} width="5.5" height="5.5" />
+        ) : (
+          <rect class={kind} x={x * 9} y={y * 9 - 3} width="7" height="7" />
+        ),
+      )
+    }
+  </svg>
+  <span class="title">{title}</span>
+  <span class="line"><slot /></span>
+  <span class="page">{page}</span>
+</a>
+
+<style>
+  .gs-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 0.875rem;
+    align-content: start;
+    padding: 1rem 1.125rem 1.125rem;
+    border-top: 3px solid var(--gs-rule-2);
+    background: var(--gs-bg-2);
+    color: var(--gs-ink);
+    text-decoration: none;
+  }
+  .gs-card:hover {
+    border-top-color: var(--gs-accent);
+    background: var(--gs-bg-3);
+  }
+  svg {
+    grid-row: span 3;
+    padding-top: 0.125rem;
+  }
+  .title {
+    font-size: 1.09375rem;
+    font-weight: 650;
+    font-stretch: 106%;
+    line-height: 1.25;
+  }
+  .line {
+    color: var(--gs-ink-2);
+    font-size: 0.90625rem;
+    line-height: 1.45;
+  }
+  .page {
+    color: var(--gs-accent-text);
+    font-size: 0.90625rem;
+  }
+  .ink {
+    fill: var(--gs-ink-2);
+  }
+  .pred {
+    fill: var(--gs-accent);
+  }
+  .blk {
+    fill: var(--gs-mask-fill);
+    stroke: var(--gs-mask-edge);
+  }
+  .flag {
+    fill: none;
+    stroke: var(--gs-accent);
+    stroke-width: 1.5;
+  }
+  .h0 {
+    fill: var(--gs-heat-0);
+  }
+  .h1 {
+    fill: var(--gs-heat-1);
+  }
+  .h3 {
+    fill: var(--gs-heat-3);
+  }
+  .h4 {
+    fill: var(--gs-heat-4);
+  }
+</style>

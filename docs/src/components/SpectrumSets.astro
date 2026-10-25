@@ -1,0 +1,84 @@
+---
+// V-5: the three sets of spectra, and the function that each one goes to.
+import { api } from '../lib/href.ts'
+
+const sets = [
+  { name: 'Training', fns: ['fit'], gives: 'the model' },
+  { name: 'Threshold', fns: ['fit_blocks'], gives: 'the block thresholds' },
+  { name: 'Held-out', fns: ['infill', 'repair', 'calibration'], gives: 'the results' },
+]
+---
+
+<figure class="not-content">
+  <ol class="gs-sets" aria-label="The three sets of spectra">
+    {
+      sets.map(({ name, fns, gives }) => (
+        <li>
+          <span class="name">{name}</span>
+          <span class="rows" aria-hidden="true">
+            {[0, 1, 2, 3].map(() => (
+              <i />
+            ))}
+          </span>
+          <span class="fns">
+            {fns.map((fn, k) => (
+              <>
+                {k > 0 && ', '}
+                <a href={api(fn)}>
+                  <code>{fn}</code>
+                </a>
+              </>
+            ))}
+          </span>
+          <span class="gives">{gives}</span>
+        </li>
+      ))
+    }
+  </ol>
+  <figcaption class="gs-caption">Each set is a separate group of spectra. Each row stands for a spectrum.</figcaption>
+</figure>
+
+<style>
+  figure {
+    margin-block: 1.5rem;
+  }
+  .gs-sets {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  li {
+    display: grid;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0.75rem;
+    border-top: 3px solid var(--gs-rule-2);
+    background: var(--gs-bg-2);
+    font-size: 0.875rem;
+  }
+  .name {
+    font-weight: 650;
+  }
+  .rows {
+    display: grid;
+    gap: 3px;
+  }
+  .rows i {
+    height: 6px;
+    background: var(--gs-strip-lo);
+  }
+  .fns a {
+    color: var(--gs-accent-text);
+  }
+  .gives {
+    color: var(--gs-ink-2);
+  }
+  @media (max-width: 30rem) {
+    .gs-sets {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

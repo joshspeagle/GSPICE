@@ -1,0 +1,49 @@
+---
+// The opening of a page with a hero: the headline and the tagline. The home page adds
+// the install line and the mask explainer; the 404 page shows only the first two.
+import { Code } from '@astrojs/starlight/components'
+import MaskExplainer from './MaskExplainer.astro'
+
+const { id, entry } = Astro.locals.starlightRoute
+const { title = entry.data.title, tagline } = entry.data.hero ?? {}
+// Starlight gives the home page, index.mdx, the route id ''.
+const home = id === ''
+---
+
+<div class:list={['gs-hero', { 'gs-home': home }]}>
+  <div class="gs-hero-copy">
+    <h1 id="_top" data-page-title set:html={title} />
+    <p class="gs-tagline" set:html={tagline} />
+    {home && <Code code="pip install git+https://github.com/joshspeagle/GSPICE" lang="sh" />}
+  </div>
+  {home && <MaskExplainer />}
+</div>
+
+<style>
+  .gs-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2rem;
+    padding-block: 1.5rem 2.5rem;
+  }
+  h1 {
+    font-size: clamp(2.125rem, 1.5rem + 2vw, 2.75rem);
+    font-weight: 720;
+    font-stretch: 112%;
+    line-height: 1.1;
+    letter-spacing: -0.012em;
+  }
+  .gs-tagline {
+    margin: 1.25rem 0 1.5rem;
+    font-size: 1.125rem;
+    line-height: 1.6;
+  }
+  @media (min-width: 64rem) {
+    .gs-home {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+      gap: 3rem;
+      align-items: start;
+      padding-block: 3rem 3.5rem;
+    }
+  }
+</style>

@@ -36,6 +36,9 @@ jobs:
           cache-dependency-path: docs/package-lock.json
       - run: npm ci
         working-directory: docs
+      - name: Test the conditioning of the explainers
+        run: node --test 'tests/*.test.mjs'
+        working-directory: docs
       - name: Build, with broken references as errors
         run: npm run build
         working-directory: docs

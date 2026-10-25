@@ -11,6 +11,15 @@
   --gs-ink-3: #7f8aa0;
   --gs-accent: #f0592a;
   --gs-accent-text: #ff8a5c;
+  --gs-pred: #ff7a45;
+  --gs-band-1: #a8401e;
+  --gs-band-2: #4a2219;
+  --gs-mask-fill: #1a2438;
+  --gs-mask-edge: #6b7a99;
+  --gs-heat-0: #22355e;
+  --gs-heat-1: #3e5276;
+  --gs-heat-3: #d2653a;
+  --gs-heat-4: #ffb892;
   --gs-strip-lo: #3b465c;
   --gs-strip-hi: #c9d1de;
   --gs-header: #0b111c;
@@ -69,6 +78,15 @@
   --gs-ink-2: #4a5568;
   --gs-ink-3: #5f6b7f;
   --gs-accent-text: #c2410c;
+  --gs-pred: #e2481a;
+  --gs-band-1: #f9a47f;
+  --gs-band-2: #fdd9c8;
+  --gs-mask-fill: #e9edf3;
+  --gs-mask-edge: #7a879c;
+  --gs-heat-0: #d5dfee;
+  --gs-heat-1: #a6b4c9;
+  --gs-heat-3: #c0501c;
+  --gs-heat-4: #7e2a0c;
   --gs-strip-lo: #6b7588;
   --gs-strip-hi: #e1e6ee;
   --gs-header: #111a2a;
@@ -332,9 +350,9 @@ mobile-starlight-toc nav {
   }
 }
 
-/* Output: a text block right after a Python block joins it, on the ground, with a
-   square "Output" tag. */
-.expressive-code:has(pre[data-language='python']) + .expressive-code:has(pre[data-language='text']) {
+/* Output: a block marked output (plugins/output-blocks.mjs) joins the code block above
+   it, on the ground, with a square "Output" tag. */
+.expressive-code.gs-output {
   margin-top: 0;
 
   & .frame {
@@ -371,6 +389,16 @@ mobile-starlight-toc nav {
   padding-block: 0.25em;
 }
 
+/* The caption of the figure components. */
+.gs-caption {
+  margin-top: 0.75rem;
+  color: var(--gs-ink-2);
+  font-size: 0.875rem;
+}
+.gs-caption p {
+  margin: 0.5rem 0 0;
+}
+
 /* Figures: a rule above, a hairline below. */
 .sl-markdown-content > figure {
   padding-block: 1rem 0.75rem;
@@ -396,6 +424,23 @@ mobile-starlight-toc nav {
   font-weight: 650;
 }
 
-.align-center {
-  margin-inline: auto;
+/* The home page: the three page cards, then the example beside the map of functions. */
+.gs-cards {
+  display: grid;
+  margin-bottom: 2.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+.gs-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem 3.5rem;
+}
+.gs-split > * {
+  margin: 0;
+}
+@media (min-width: 64rem) {
+  .gs-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }

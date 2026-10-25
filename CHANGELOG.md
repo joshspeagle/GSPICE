@@ -4,8 +4,9 @@
 
 ### Changed
 
-- The documentation site is built with Astro Starlight instead of Sphinx. Its API pages come from the docstrings, as before. Page addresses end in `/` instead of `.html`, for example `https://joshspeagle.github.io/GSPICE/installation/`, and the anchors of the API and glossary entries are unchanged.
+- The documentation site is built with Astro Starlight instead of Sphinx. Its API pages come from the docstrings, as before. Page addresses end in `/` instead of `.html`, for example `https://joshspeagle.github.io/GSPICE/start/install/`, and the anchors of the API and glossary entries are unchanged.
 - The documentation site has the visual design of `docs/brand.md`: dark and light themes on a navy header, the Archivo and IBM Plex Mono fonts, square corners, a new logo and favicon drawn in pixel cells, output blocks joined to their code, and framed figures.
+- The documentation site opens with a Getting started group: Is GSPICE right for my data?, Install, Quickstart, Prepare your spectra, and What you get back. The home page has an interactive figure that predicts the pixels under a block that you drag over a spectrum. The installation and quickstart pages moved to `start/install/` and `start/quickstart/`, and their old addresses redirect there.
 
 ## 2.0.0 - 2026-10-19
 

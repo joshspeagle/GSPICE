@@ -9,7 +9,14 @@ import pytest
 import gspice
 
 DOCS = Path(__file__).parents[1] / "docs" / "src" / "content" / "docs"
-PAGES = [DOCS / "quickstart.md", *sorted((DOCS / "tutorials").glob("*.md*"))]
+# install.md runs shell commands, and results.md shows a call without its inputs.
+NOT_SCRIPTS = {"install", "results"}
+PAGES = [
+    *sorted(p for p in (DOCS / "start").glob("*.md*") if p.stem not in NOT_SCRIPTS),
+    *sorted((DOCS / "tutorials").glob("*.md*")),
+]
+# A fence with the flag output holds the output of the code above it.
+OUTPUT = re.compile(r"```text output\n(.*?)```", re.DOTALL)
 
 
 @pytest.fixture(scope="module")
@@ -48,12 +55,17 @@ def survey(tmp_path_factory):
 def test_the_page_examples_run(page, survey, tmp_path, monkeypatch, capsys):
     # The Python blocks of the page, in order, as one script in a directory that holds
     # spectra.npz. The migration page catches the DeprecationWarning that it shows. A
-    # page with text blocks shows the output of its code there.
+    # page with output blocks shows the output of its code there.
     text = page.read_text(encoding="utf-8")
     shutil.copy(survey, tmp_path)
     script = tmp_path / f"{page.stem}.py"
     script.write_text("".join(re.findall(r"```python\n(.*?)```", text, re.DOTALL)))
     monkeypatch.chdir(tmp_path)
     runpy.run_path(str(script))
-    if shown := re.findall(r"```text\n(.*?)```", text, re.DOTALL):
+    if shown := OUTPUT.findall(text):
         assert capsys.readouterr().out == "".join(shown)
+
+
+def test_the_install_page_shows_the_version():
+    text = (DOCS / "start" / "install.md").read_text(encoding="utf-8")
+    assert OUTPUT.findall(text) == [f"{gspice.__version__}\n"]

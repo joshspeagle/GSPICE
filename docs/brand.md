@@ -122,9 +122,9 @@ The theme of #142 builds the header, the sidebar, "On this page", the page title
 | On this page | The column of cells. |
 | Page title | A breadcrumb of the page's group, then the title. API pages set the title in mono. |
 | Callout | A surface with a square label, "Note" or "Warning", and a 3 px left edge in ink-3 or orange. |
-| Code and output | The code sits on a surface with a header bar that names the language and holds the word "Copy". A text block right after a Python block is its output: it joins below it on the ground, with a square "Output" tag and no header bar. |
+| Code and output | The code sits on a surface with a header bar that names the language and holds the word "Copy". An output block has the flag `output` on its fence, as in `text output`: it joins the code block above it on the ground, with a square "Output" tag and no header bar. |
 | Term | A dotted underline. On hover or focus, a card shows the glossary entry and its link. |
-| Page card | A surface with a solid top edge, a cell glyph, the group, the title and one line. |
+| Page card | A surface with a solid top edge, a cell glyph, the title, one line, and the name of the page it opens. |
 | Label | A small square tag in mono: function, class, the version. |
 | Previous and next | Two tiles with a solid top edge. |
 | Figure | A rule above, a hairline below, and the caption in secondary text. The legend uses cell swatches. |
