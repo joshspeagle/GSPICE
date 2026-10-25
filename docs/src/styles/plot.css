@@ -23,7 +23,7 @@
   stroke: var(--gs-ink);
   stroke-width: 1.5;
 }
-.gs-plot .truth {
+.gs-plot :is(.truth, .ref) {
   stroke: var(--gs-ink-2);
 }
 .gs-plot .pred {
@@ -45,8 +45,13 @@
 .gs-plot .cellgap {
   stroke: var(--gs-mask-fill);
 }
-/* Pixel boundaries show only where a pixel is 4 px wide or more: 120 pixels on 480 px,
-   200 on 800 px. */
+/* Pixel boundaries show only where a pixel is 4 px wide or more: 100 pixels on 400 px,
+   120 on 480 px, 200 on 800 px. */
+@container (max-width: 399px) {
+  .gs-plot[data-npix='100'] .cellgap {
+    display: none;
+  }
+}
 @container (max-width: 479px) {
   .gs-plot[data-npix='120'] .cellgap {
     display: none;
@@ -115,7 +120,7 @@
   height: 2px;
   background: var(--gs-ink);
 }
-.gs-legend .truth {
+.gs-legend :is(.truth, .ref) {
   height: 1px;
   background: var(--gs-ink-2);
 }
@@ -132,5 +137,25 @@
 .gs-legend .blk {
   background: var(--gs-mask-fill);
   outline: 1px solid var(--gs-mask-edge);
+  outline-offset: -1px;
+}
+.gs-plot .draw {
+  stroke: var(--gs-accent);
+}
+.gs-legend .draw {
+  height: 1px;
+  background: var(--gs-accent);
+}
+
+/* The histogram of z: the flagged range and its edges. */
+.gs-plot .flagged {
+  fill: var(--gs-bg-3);
+}
+.gs-plot .edge {
+  stroke: var(--gs-ink-2);
+}
+.gs-legend .flagged {
+  background: var(--gs-bg-3);
+  outline: 1px solid var(--gs-ink-2);
   outline-offset: -1px;
 }

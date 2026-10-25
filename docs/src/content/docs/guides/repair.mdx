@@ -1,0 +1,199 @@
+---
+title: Find and repair artifacts
+description: Set block thresholds from clean spectra, then find the artifacts of each spectrum and replace them with repair.
+---
+
+I don't know where the artifacts are. How do I find and replace them? This guide uses
+[`gspice.repair()`](/GSPICE/reference/api/#gspice.repair), on simulated spectra.
+
+## Set up
+
+An [artifact](/GSPICE/background/glossary/#term-artifact) is a corruption of the data,
+such as a cosmic ray. The examples use three sets of simulated spectra of 400 pixels.
+[Prepare your spectra](/GSPICE/start/spectra/#training-threshold-and-held-out-spectra)
+explains why each set is separate.
+
+```python
+import numpy as np
+
+import gspice
+
+rng = np.random.default_rng(4)
+train = gspice.simulate(2000, 400, rng=rng)
+clean = gspice.simulate(1000, 400, rng=rng)
+test = gspice.simulate(500, 400, rng=rng, artifacts=0.5)
+model, _ = gspice.fit(train.flux, train.ivar)
+```
+
+- `train` holds the training spectra of the model.
+- `clean` holds [clean spectra](/GSPICE/background/glossary/#term-clean-spectrum), which
+  have no artifacts.
+- `test` holds the spectra to repair. Half of them have one artifact each: a cosmic ray,
+  a bad column or a [shifted segment](/GSPICE/background/glossary/#term-shifted-segment).
+
+## Block thresholds from clean spectra
+
+An artifact that covers many pixels also corrupts the pixels that predict it, so a test
+of each pixel can miss it. `repair` therefore also runs a
+[block scan](/GSPICE/background/glossary/#term-block-scan). It compares each
+[block](/GSPICE/background/glossary/#term-block) of consecutive pixels with its
+prediction from the pixels beyond a guard window. Here
+[`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks) sets a threshold for
+each of five blocks of 150 pixels from the clean spectra:
+
+```python
+model = gspice.fit_blocks(model, clean.flux, clean.ivar)
+print(model.blocks.starts, model.blocks.width)
+```
+
+```text output
+[  0  75 150 225 250] 150
+```
+
+### Where to get clean spectra
+
+[Training, threshold and held-out spectra](/GSPICE/start/spectra/#training-threshold-and-held-out-spectra)
+states which spectra are clean enough, and how many `fit_blocks` needs. If you have no
+clean spectra, skip `fit_blocks` and read [Without clean spectra](#without-clean-spectra).
+
+## Repair
+
+`repair` finds the artifacts of each spectrum and replaces them:
+
+```python
+result = gspice.repair(model, test.flux, test.ivar)
+amplitude = np.abs(test.flux - test.truth) * np.sqrt(test.ivar)
+strong = test.artifacts & (amplitude > 5)
+found = result.replaced | result.ignored
+other = ~test.artifacts
+print(f"replaced: {result.replaced[strong].mean():.0%} of artifact pixels over 5σ")
+print(f"replaced or ignored: {found[strong].mean():.0%}")
+print(f"replaced: {result.replaced[other].mean():.2%} of the other pixels")
+```
+
+```text output
+replaced: 80% of artifact pixels over 5σ
+replaced or ignored: 96%
+replaced: 0.62% of the other pixels
+```
+
+`amplitude` is the change that the artifact made to a pixel, in units of its noise.
+`result` is a [`gspice.Repaired`](/GSPICE/reference/api/#gspice.Repaired), as from
+`infill`. Each pixel that `repair` detects is a
+[flagged pixel](/GSPICE/background/glossary/#term-flagged-pixel), and it has one of two
+fates:
+
+- A [replaced pixel](/GSPICE/background/glossary/#term-replaced-pixel), in
+  `result.replaced`, holds its prediction in `result.flux`.
+- An [ignored pixel](/GSPICE/background/glossary/#term-ignored-pixel), in
+  `result.ignored`, keeps its input value, and no prediction uses it.
+
+`result.replaced` also holds every bad pixel of the input. `result.blocks` marks the
+blocks that the scan flagged in each spectrum.
+
+A clean spectrum can get a replaced pixel too:
+
+```python
+none = ~test.artifacts.any(axis=1)
+flagged = result.replaced[none].any(axis=1)
+print(f"{flagged.mean():.1%} of the clean test spectra")
+```
+
+```text output
+0.4% of the clean test spectra
+```
+
+This is the fraction of the test spectra without an artifact that got a replaced pixel.
+
+## Without clean spectra
+
+Without clean spectra, you cannot set block thresholds. Call `repair` with
+`blockwise=False`: it then finds artifacts only by the z-score of each pixel. This
+compares the two on the pixels of the shifted segments:
+
+```python
+length = test.artifacts.sum(axis=1, keepdims=True)
+types = {
+    "cosmic ray": length <= 3,
+    "bad column": (length > 3) & (length <= 20),
+    "shifted segment": length > 20,
+}
+shifted = test.artifacts & types["shifted segment"]
+plain = gspice.repair(model, test.flux, test.ivar, blockwise=False)
+print(f"with the block scan: {result.replaced[shifted].mean():.0%} replaced")
+print(f"without it: {plain.replaced[shifted].mean():.0%} replaced")
+```
+
+```text output
+with the block scan: 25% replaced
+without it: 21% replaced
+```
+
+Each test spectrum has at most one artifact, and a shifted segment is the only one
+longer than 20 pixels. The block scan replaces more of each segment. A model without
+blocks needs `blockwise=False`; otherwise `repair` raises a `ValueError`.
+
+## Tuning
+
+`repair` replaces a pixel whose $|z|$ exceeds `nsigma_replace`, 10 by default. It
+ignores a pixel whose $|z|$ exceeds `nsigma_ignore`, 5 by default. A lower
+`nsigma_replace` replaces more artifacts, and more good pixels:
+
+```python
+for nsigma in (10, 8, 6):
+    tuned = gspice.repair(model, test.flux, test.ivar, nsigma_replace=nsigma)
+    print(
+        f"nsigma_replace={nsigma:>2}: {tuned.replaced[strong].mean():.0%} of the "
+        f"artifact pixels, {tuned.replaced[other].mean():.2%} of the others"
+    )
+```
+
+```text output
+nsigma_replace=10: 80% of the artifact pixels, 0.62% of the others
+nsigma_replace= 8: 89% of the artifact pixels, 0.67% of the others
+nsigma_replace= 6: 95% of the artifact pixels, 0.72% of the others
+```
+
+Change one option at a time, and measure the result as above on spectra whose artifacts
+you know. The other options are:
+
+| Option | Default | Effect |
+|---|---|---|
+| `dilate` | 1 | Also flags this many pixels on each side of each flagged pixel |
+| `nguard` | 20 | The half-width of the guard window of the z-scores, in pixels |
+| `runlength`, `halfwidth` | 5, 150 | A run of at least `runlength` flagged pixels also ignores the `halfwidth` pixels on each side |
+| `minfrac` | 0.5 | The run rule applies only where it leaves this fraction of the pixels to predict from |
+
+[The procedure](/GSPICE/background/repair/#the-procedure) states each step of `repair`.
+
+## What it misses
+
+`repair` finds an artifact only where its pixels disagree with their prediction. This
+shows the result for each type of artifact:
+
+```python
+for name, kind in types.items():
+    pixels = strong & kind
+    print(
+        f"{name:>15}: {result.replaced[pixels].mean():.0%} replaced, "
+        f"{found[pixels].mean():.0%} replaced or ignored"
+    )
+```
+
+```text output
+     cosmic ray: 89% replaced, 100% replaced or ignored
+     bad column: 100% replaced, 100% replaced or ignored
+shifted segment: 76% replaced, 96% replaced or ignored
+```
+
+Here a cosmic ray covers 1 to 3 pixels, a bad column 5 to 20, and a shifted segment 200
+to 399. Three kinds of artifact stay in the output:
+
+- **Weak artifacts.** A pixel with $|z|$ below `nsigma_ignore` is not flagged, unless
+  it lies near a flagged pixel or in a block that the block scan flags.
+- **Long shifted segments.** Inside a segment, the pixels that predict each pixel are
+  shifted too. `repair` replaced 76% of their pixels over 5σ above, but 25% of all their
+  pixels in [Without clean spectra](#without-clean-spectra).
+  [Long defects](/GSPICE/background/repair/#long-defects) measures this limit.
+- **Artifacts at the same pixels in every training spectrum.** The model learns them as
+  part of the spectra.

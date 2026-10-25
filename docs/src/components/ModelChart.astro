@@ -1,0 +1,151 @@
+---
+// V-10: which model to fit. Each question leads to a model on yes and to the next
+// question on no; each model links to its section of Choose a model.
+interface Model {
+  name: string
+  code: string
+  href: string
+}
+// The last step has no question: its model is the one left.
+const steps: { question?: string; yes: Model; or?: Model }[] = [
+  {
+    question: 'Do you have no more training spectra than pixels?',
+    yes: { name: 'Low rank', code: 'rank=K', href: '#low-rank' },
+  },
+  {
+    question: 'Is the noise alike in all spectra, in level and in shape?',
+    yes: { name: 'Default', code: 'fit(flux, ivar)', href: '#default' },
+    or: { name: 'Constant centre', code: 'center=c', href: '#constant-centre' },
+  },
+  {
+    question: 'Does ivar depend on the observed flux?',
+    yes: { name: 'S/N bins', code: 'snr_bins=n', href: '#sn-bins' },
+  },
+  { yes: { name: 'Noise-aware', code: 'noise=True', href: '#noise-aware' } },
+]
+---
+
+<figure class="gs-chart not-content">
+  <ol>
+    {
+      steps.map(({ question, yes, or }) => (
+        <li class:list={{ end: !question }}>
+          {question && <p class="q">{question}</p>}
+          <div class="yes">
+            {question && <span class="tag">yes</span>}
+            <a class="model" href={yes.href}>
+              {yes.name} <code>{yes.code}</code>
+            </a>
+            {or && (
+              <span class="or">
+                or, to subtract a fixed level,{' '}
+                <a href={or.href}>
+                  {or.name} <code>{or.code}</code>
+                </a>
+              </span>
+            )}
+          </div>
+          {
+            question && (
+              <span class="no" aria-hidden="true">
+                no
+              </span>
+            )
+          }
+        </li>
+      ))
+    }
+  </ol>
+  <figcaption class="gs-caption">
+    Start at the top. A yes gives the model to fit; a no leads to the next question. Each model links to its
+    section below.
+  </figcaption>
+</figure>
+
+<style>
+  .gs-chart {
+    margin-block: 1.5rem;
+  }
+  ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0 1.5rem;
+    align-items: center;
+    margin: 0;
+  }
+  .q {
+    margin: 0;
+    padding: 0.625rem 0.75rem;
+    border-top: 3px solid var(--gs-rule-2);
+    background: var(--gs-bg-2);
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+  .yes {
+    display: grid;
+    gap: 0.375rem;
+    justify-items: start;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+  .tag,
+  .no {
+    color: var(--gs-ink-2);
+    font-family: var(--__sl-font-mono);
+    font-size: 0.75rem;
+  }
+  .model {
+    padding: 0.375rem 0.625rem;
+    border-inline-start: 3px solid var(--gs-ink);
+    background: var(--gs-bg-3);
+    color: var(--gs-ink);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .model:hover {
+    background: var(--gs-rule);
+  }
+  .model code,
+  .or code {
+    font-weight: 400;
+  }
+  .or {
+    color: var(--gs-ink-2);
+  }
+  .or a {
+    color: var(--gs-accent-text);
+  }
+  /* The line down to the next question, with its label. */
+  .no {
+    grid-column: 1;
+    position: relative;
+    margin: 0;
+    padding: 0.5rem 0 0.5rem 1.25rem;
+  }
+  .no::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0.625rem;
+    width: 1px;
+    background: var(--gs-ink-2);
+  }
+  .end {
+    display: block;
+  }
+  @media (max-width: 36rem) {
+    li {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .q + .yes {
+      margin-top: 0.5rem;
+      padding-inline-start: 0.75rem;
+    }
+  }
+</style>

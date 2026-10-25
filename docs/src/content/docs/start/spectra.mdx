@@ -82,7 +82,7 @@ Split your spectra into three separate sets:
 
 - **Training spectra** go to [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit). They may
   contain artifacts: `fit` removes the pixels far from their prediction in several
-  passes. An artifact is a corruption of the data, such as a cosmic ray.
+  passes. An [artifact](/GSPICE/background/glossary/#term-artifact) is a corruption of the data, such as a cosmic ray.
 - **Threshold spectra** go to [`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks).
   `fit_blocks` sets the thresholds of the [block scan](/GSPICE/background/glossary/#term-block-scan)
   of `repair`, for artifacts that cover many pixels.

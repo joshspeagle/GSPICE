@@ -40,7 +40,7 @@ const spectrum = { flux, start: first.start, width: first.width, mu, sd }
   </p>
   <noscript><p class="gs-hint">The block moves only with JavaScript on.</p></noscript>
   <figcaption class="gs-caption">
-    <Fragment set:html={legend(false)} />
+    <Fragment set:html={legend(['obs', 'pred', 'b1', 'b2', 'truth'])} />
     <p>
       The prediction is that of <code>gspice.infill</code> with a model fitted to {data.ntrain} simulated
       spectra of {data.npix} pixels. The ±1σ and ±2σ bands include the noise of the observed

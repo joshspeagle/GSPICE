@@ -1,0 +1,142 @@
+---
+title: Check your model
+description: Check the predicted uncertainties with calibration, and the reported noise with noise_audit.
+---
+
+import CalibrationSteps from '../../../components/CalibrationSteps.astro'
+
+Are the uncertainties right, and is my `ivar` right? Two functions answer on
+[held-out spectra](/GSPICE/background/glossary/#term-held-out-spectrum), which the model
+was not fitted to. [Diagnostics](/GSPICE/background/diagnostics/) gives their equations.
+
+## Set up
+
+The model is fitted to 4000 simulated spectra of 100 pixels. The checks use 1000 other
+[clean spectra](/GSPICE/background/glossary/#term-clean-spectrum), without artifacts.
+
+```python
+import numpy as np
+
+import gspice
+
+rng = np.random.default_rng(6)
+train = gspice.simulate(4000, 100, rng=rng)
+held = gspice.simulate(1000, 100, rng=rng)
+model, _ = gspice.fit(train.flux, train.ivar)
+```
+
+## Check the uncertainties
+
+A prediction comes with a variance, and you need to know whether it is right.
+[`gspice.calibration()`](/GSPICE/reference/api/#gspice.calibration) hides pixels of each
+spectrum at random, predicts them, and compares:
+
+<CalibrationSteps />
+
+```python
+result = gspice.calibration(model, held.flux, held.ivar, rng=rng)
+mean, sem = result.ratio()
+print("n:", result.n[0])
+print("mean:", mean.round(2))
+print("standard error:", sem.round(2))
+print("tail:", result.tail(0.99).round(3))
+```
+
+```text output
+n: [ 1  4 16]
+mean: [0.99 0.92 0.97]
+standard error: [0.05 0.02 0.01]
+tail: [0.012 0.005 0.01 ]
+```
+
+### How to read the numbers
+
+Each column is one number $n$ of hidden pixels, a run of consecutive good pixels.
+
+- **mean** is the mean of $z^2 / (n f_s)$ over the spectra, with $f_s$ the
+  [finite-sample factor](/GSPICE/background/glossary/#term-finite-sample-factor). It is
+  1 for a correct model. Read it with its **standard error**: a mean within about two
+  standard errors of 1 agrees with 1.
+- **tail** is the fraction of spectra with $z^2 / f_s$ above the 99% quantile of the χ²
+  distribution with $n$ degrees of freedom. It is near 0.01 for Gaussian spectra.
+
+Here the means for $n = 4$ and $n = 16$ are 0.92 and 0.97, four and three standard
+errors below 1: the predicted variances of these runs are 3% to 8% too large. The
+simulated spectra are not Gaussian, and
+[Calibration](/GSPICE/background/diagnostics/#calibration) explains how that can move
+the mean.
+
+### When the mean is off
+
+A mean above 1 shows predicted variances that are too small. A mean below 1 shows
+variances that are too large. Artifacts in the checked spectra are a common cause:
+
+```python
+dirty = gspice.simulate(1000, 100, rng=rng, artifacts=0.3)
+mean, _ = gspice.calibration(model, dirty.flux, dirty.ivar, rng=rng).ratio()
+print("mean:", mean.round(1))
+```
+
+```text output
+mean: [89.  50.3 82.8]
+```
+
+Here 30% of the spectra have an artifact, and the means are far above 1. Check the
+causes in this order:
+
+| Cause | Sign | What to do |
+|---|---|---|
+| Artifacts in the checked spectra | above 1 | Check on clean spectra, or mark the artifacts in `mask` |
+| The checked spectra are training spectra | below 1 | Check on held-out spectra |
+| Spectra of very different S/N share one covariance | either, by S/N | Compare the means by S/N with `result.ratio(where=...)`; fit with `snr_bins` |
+| Artifacts in the training spectra widen the covariance | below 1 | Remove the spectra with artifacts from the training set |
+| A mean that changes with $n$ | either | The covariance describes the correlations less well than the variances |
+
+## Check the noise
+
+Every model trusts `ivar`, the inverse variance of the noise. A model without
+`noise=True` takes into its covariance a noise level that all its training spectra
+share. Its z-scores then cannot show an `ivar` that is wrong in all of them.
+[`gspice.noise_audit()`](/GSPICE/reference/api/#gspice.noise_audit) can:
+
+```python
+rho = gspice.noise_audit(model, held.flux, held.ivar)
+print(f"median {np.median(rho):.3f}, smallest {rho.min():.3f}")
+```
+
+```text output
+median 1.051, smallest 0.976
+```
+
+### How to read the numbers
+
+`rho` holds $\rho$ at each pixel: the root mean of the squared residual of the
+pixelwise prediction, times `ivar`, over the spectra. Where `ivar` is right, $\rho^2$ is
+at least 1 in expectation. The error of the prediction adds to it, so $\rho$ is a little
+above 1 here.
+
+$\rho^2$ of one pixel scatters by about $\sqrt{2/m}$ for $m$ spectra, 0.045 for these
+1000. So a pixel slightly below 1 can occur by chance.
+
+### When rho is off
+
+A $\rho$ well below 1 shows that `ivar` reports more noise than the spectra have. In
+this example, `ivar` reports twice the variance at pixels 0 to 49:
+
+```python
+wrong = np.array(held.ivar)
+wrong[:, :50] /= 2
+rho = gspice.noise_audit(model, held.flux, wrong)
+print(f"pixels 0 to 49: {np.median(rho[:50]):.2f}")
+print(f"pixels 50 to 99: {np.median(rho[50:]):.2f}")
+```
+
+```text output
+pixels 0 to 49: 0.75
+pixels 50 to 99: 1.04
+```
+
+Find out how your pipeline computes `ivar` at the pixels with a low $\rho$. A $\rho$
+well above 1 can come from noise that `ivar` omits or from a poor prediction, so compare
+it with the calibration above. Run `noise_audit` only on held-out spectra: on the
+training spectra, the residuals are too small.

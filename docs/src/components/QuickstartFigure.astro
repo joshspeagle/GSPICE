@@ -18,7 +18,7 @@ const axes = axesFor([...data.flux, ...data.truth, ...bands], data.flux.length)
 <figure class="not-content">
   <div class="gs-plot" data-npix={data.flux.length} role="img" aria-label={readout(spectrum)} set:html={plotMarkup(spectrum, axes)} />
   <figcaption class="gs-caption">
-    <Fragment set:html={legend(true)} />
+    <Fragment set:html={legend(['obs', 'blk', 'pred', 'b1', 'b2', 'truth'])} />
     <p>
       The spectrum <code>test.flux[{data.spectrum}]</code> after <code>infill</code>, at a
       signal-to-noise ratio of {data.snr}. {readout(spectrum)} The error is the prediction minus

@@ -1,0 +1,111 @@
+---
+// V-11: what calibration does to each held-out spectrum, for one size n: it hides n
+// pixels at random, predicts them from the others, and compares their values with the
+// prediction. Each cell is a pixel.
+const npix = 16
+const hidden = [6, 7, 8, 9]
+const steps = [
+  { kind: 'hide', text: 'Hide a random run of n good pixels.' },
+  { kind: 'predict', text: 'Predict them from the other pixels, with their covariance C.' },
+  { kind: 'compare', text: 'Compare their values with the prediction: z² = rᵀ C⁻¹ r, for the residuals r.' },
+]
+---
+
+<figure class="gs-calib not-content">
+  <ol>
+    {
+      steps.map(({ kind, text }) => (
+        <li>
+          <span class:list={['strip', kind]} style={`--n: ${npix}`} aria-hidden="true">
+            {Array.from({ length: npix }, (_, i) =>
+              kind === 'hide' && hidden.includes(i) ? null : <i class:list={{ in: hidden.includes(i) }} />,
+            )}
+            {kind === 'hide' && <b class="block" style={`grid-column: ${hidden[0] + 1} / span ${hidden.length}`} />}
+            {kind === 'compare' && hidden.map((i) => <i style={`grid-area: 2 / ${i + 1}`} />)}
+          </span>
+          <span class="text">{text}</span>
+        </li>
+      ))
+    }
+  </ol>
+  <p class="mean">
+    Repeat for every spectrum. For a correct model, the mean of z² / (n f<sub>s</sub>) is 1 at every n.
+  </p>
+  <figcaption class="gs-caption">
+    One spectrum and one size, n = {hidden.length}. Grey cells are observed pixels, the tinted block hides
+    pixels, and orange cells are predicted. In the last step, the grey cells under the predictions are the
+    observed values of the hidden pixels.
+  </figcaption>
+</figure>
+
+<style>
+  .gs-calib {
+    margin-block: 1.5rem;
+  }
+  ol {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+  li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.25rem 1rem;
+    align-items: center;
+    margin: 0;
+    font-size: 0.875rem;
+    counter-increment: step;
+  }
+  .text::before {
+    content: counter(step) '. ';
+    font-weight: 650;
+  }
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(var(--n), 12px);
+    gap: 1px;
+  }
+  .strip i {
+    height: 12px;
+    background: var(--gs-strip-lo);
+  }
+  /* The masked block of docs/brand.md: one flat tint over the hidden cells, with a solid
+     edge and two grips. */
+  .block {
+    position: relative;
+    grid-row: 1;
+    background: var(--gs-mask-fill);
+    outline: 1px solid var(--gs-mask-edge);
+    outline-offset: -1px;
+  }
+  .block::before,
+  .block::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    width: 3px;
+    height: 16px;
+    background: var(--gs-mask-edge);
+  }
+  .block::before {
+    left: -1px;
+  }
+  .block::after {
+    right: -1px;
+  }
+  :is(.predict, .compare) i.in {
+    background: var(--gs-accent);
+  }
+  .mean {
+    margin: 0.75rem 0 0;
+    font-size: 0.875rem;
+  }
+  @media (max-width: 36rem) {
+    li {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
