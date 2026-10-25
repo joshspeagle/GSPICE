@@ -8,8 +8,8 @@ import pytest
 
 import gspice
 
-DOCS = Path(__file__).parents[1] / "docs"
-PAGES = [DOCS / "quickstart.md", *sorted((DOCS / "tutorials").glob("*.md"))]
+DOCS = Path(__file__).parents[1] / "docs" / "src" / "content" / "docs"
+PAGES = [DOCS / "quickstart.md", *sorted((DOCS / "tutorials").glob("*.md*"))]
 
 
 @pytest.fixture(scope="module")

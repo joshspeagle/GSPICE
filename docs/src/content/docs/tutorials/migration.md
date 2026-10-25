@@ -1,8 +1,10 @@
-# Migrating from the 2022 interface
+---
+title: Migrating from the 2022 interface
+---
 
 The 2022 package had 11 functions at the top level of `gspice`, such as
 `gspice.covar_iter_mask` and `gspice.gp_interp`. They now live in `gspice.legacy`,
-which keeps their signatures and their arithmetic. {doc}`../reference/legacy`
+which keeps their signatures and their arithmetic. [Legacy interface](/GSPICE/reference/legacy/)
 documents them, and the
 [changelog](https://github.com/joshspeagle/GSPICE/blob/main/CHANGELOG.md) lists the
 replacement of each one in the new API and the behaviour changes of `gspice.legacy`.
@@ -33,9 +35,9 @@ import from `gspice.legacy`, for example
 
 ## From covar_iter_mask to fit
 
-`covar_iter_mask` returns a covariance and a float mask. {func}`gspice.fit` returns a
-{class}`gspice.Model` and a bool mask. With `cumulative=False`, it uses the 2022 rule
-for the masks of its clipping passes ({doc}`../background/fitting`), and its
+`covar_iter_mask` returns a covariance and a float mask. [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit) returns a
+[`gspice.Model`](/GSPICE/reference/api/#gspice.Model) and a bool mask. With `cumulative=False`, it uses the 2022 rule
+for the masks of its clipping passes ([Fitting](/GSPICE/background/fitting/)), and its
 docstring states the conditions under which the two agree:
 
 ```python
@@ -50,7 +52,7 @@ print(np.array_equal(newmask, finalmask != 0))
 ```
 
 The default, `cumulative=True`, keeps the flags of every pass, as the paper does.
-The model then replaces the 2022 arrays: pass it to {func}`gspice.pixelwise` in place
-of `gp_interp` and `get_chimask`, and to {func}`gspice.infill` in place of
+The model then replaces the 2022 arrays: pass it to [`gspice.pixelwise()`](/GSPICE/reference/api/#gspice.pixelwise) in place
+of `gp_interp` and `get_chimask`, and to [`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) in place of
 `gaussian_estimate`. These take and return flux, where the 2022 functions took and
 returned the scaled spectra of `standard_scale`.

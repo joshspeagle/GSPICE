@@ -1,48 +1,36 @@
-# Legacy interface
+---
+title: Legacy interface
+editUrl: https://github.com/joshspeagle/GSPICE/edit/main/docs/reference/legacy.md
+---
 
 The 2022 functions of `gspice.legacy`, with the arithmetic of commit `1fbab9f`, kept for migration. The [changelog](https://github.com/joshspeagle/GSPICE/blob/main/CHANGELOG.md) lists their replacements in the new API. The 2022 modules stay too, as `gspice.legacy.specUtils`, `gspice.legacy.matrixUtils` and `gspice.legacy.djs_maskinterp`, so each function below can also be imported from its 2022 module.
 
-```{eval-rst}
-.. currentmodule:: gspice.legacy
-```
-
 ## Scaling and covariance
 
-```{eval-rst}
-.. autofunction:: standard_scale
+::: gspice.legacy.standard_scale
 
-.. autofunction:: covar
+::: gspice.legacy.covar
 
-.. autofunction:: covar_iter_mask
-```
-
+::: gspice.legacy.covar_iter_mask
 
 ## Prediction
 
-```{eval-rst}
-.. autofunction:: get_chimask
+::: gspice.legacy.get_chimask
 
-.. autofunction:: gp_interp
+::: gspice.legacy.gp_interp
 
-.. autofunction:: gaussian_estimate
-```
-
+::: gspice.legacy.gaussian_estimate
 
 ## Matrix utilities
 
-```{eval-rst}
-.. autofunction:: cholesky_inv
+::: gspice.legacy.cholesky_inv
 
-.. autofunction:: submatrix_inv
+::: gspice.legacy.submatrix_inv
 
-.. autofunction:: submatrix_inv_mult
-```
-
+::: gspice.legacy.submatrix_inv_mult
 
 ## Interpolation
 
-```{eval-rst}
-.. autofunction:: maskinterp1
+::: gspice.legacy.maskinterp1
 
-.. autofunction:: maskinterp
-```
+::: gspice.legacy.maskinterp

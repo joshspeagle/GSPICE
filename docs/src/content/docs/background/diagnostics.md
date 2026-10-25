@@ -1,8 +1,10 @@
-# Diagnostics
+---
+title: Diagnostics
+---
 
-Two functions check a model on {term}`held-out spectra <held-out spectrum>`, which the
-model was not fitted to. {func}`gspice.calibration` checks the predicted uncertainties.
-{func}`gspice.noise_audit` checks the reported noise, `ivar`. A residual of a training
+Two functions check a model on [held-out spectra](/GSPICE/background/glossary/#term-held-out-spectrum), which the
+model was not fitted to. [`gspice.calibration()`](/GSPICE/reference/api/#gspice.calibration) checks the predicted uncertainties.
+[`gspice.noise_audit()`](/GSPICE/reference/api/#gspice.noise_audit) checks the reported noise, `ivar`. A residual of a training
 spectrum is smaller than that of a held-out one, so neither check holds on the training
 spectra.
 
@@ -12,20 +14,20 @@ For each spectrum and each size $n$, `calibration` draws a set $M$ of $n$ good p
 independently of the data. With `layout="run"`, $M$ is $n$ consecutive good pixels from
 a random start; with `layout="scattered"`, $M$ is $n$ good pixels drawn at random. It
 then predicts $M$ from the pixels outside $G = M \cup \mathrm{bad}$, as
-{func}`gspice.infill` does, and computes
+[`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) does, and computes
 
 $$
 z^2 = r_M^\mathsf{T} C_{MM}^{-1} r_M ,
 $$
 
 with $r_M$ the residuals and $C_{MM}$ their full conditional covariance. It also gives the
-finite-sample factor $f_s = f_s(N_s, \mathrm{npix} - |G|, n)$ of {doc}`prediction`, or 1
+finite-sample factor $f_s = f_s(N_s, \mathrm{npix} - |G|, n)$ of [Prediction](/GSPICE/background/prediction/), or 1
 for a model without a derived factor. The default sizes are those of 1, 4, 16, 64, 256
 and 1024 that are not above half the median number of good pixels per spectrum. The
 `rng` argument, a `numpy.random.Generator`, draws the masks.
 
 For held-out Gaussian spectra and a correct model, $z^2 / (n f_s)$ has the mean 1. The
-methods of {class}`gspice.Calibration` read the result:
+methods of [`gspice.Calibration`](/GSPICE/reference/api/#gspice.Calibration) read the result:
 
 - `ratio()` returns the mean of $z^2 / (n f_s)$ for each size, and its standard error.
   A mean above 1 shows predicted variances that are too small, and a mean below 1
@@ -63,7 +65,7 @@ do not depend on the data, use
 ## Noise audit
 
 `noise_audit` compares the residuals of the pixelwise prediction with the reported noise.
-With $\hat f$ the prediction of {func}`gspice.pixelwise` in flux units, and the mean over
+With $\hat f$ the prediction of [`gspice.pixelwise()`](/GSPICE/reference/api/#gspice.pixelwise) in flux units, and the mean over
 the spectra whose pixel $i$ is good,
 
 $$

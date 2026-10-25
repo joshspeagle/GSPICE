@@ -1,6 +1,8 @@
-# Fitting
+---
+title: Fitting
+---
 
-{func}`gspice.fit` estimates a {class}`gspice.Model` from {term}`training spectra`. It
+[`gspice.fit()`](/GSPICE/reference/api/#gspice.fit) estimates a [`gspice.Model`](/GSPICE/reference/api/#gspice.Model) from [training spectra](/GSPICE/background/glossary/#term-training-spectra). It
 returns the model and the final training mask. Five kinds of model share this function:
 dense (the default), constant centre, S/N bins, low rank and noise-aware.
 
@@ -10,7 +12,7 @@ dense (the default), constant centre, S/N bins, low rank and noise-aware.
 has the weight 0, or has every pixel masked by a clipping pass. $N_s$ counts the spectra
 that a fit uses. A dense, mean-centred model needs $N_s - 1 \ge \mathrm{npix}$, and a
 good pixel in at least one spectrum at every pixel. Close to that minimum, the
-covariance can still fail the check of its precision matrix ({doc}`method`).
+covariance can still fail the check of its precision matrix ([The model](/GSPICE/background/method/)).
 
 ## Outlier clipping
 
@@ -33,7 +35,7 @@ mask is that final mask, and True at every pixel of a spectrum that `fit` did no
 final mask $\mathrm{bad} \cup F_{N-1} \cup F_N$ for $N$ passes. `nsigma=()` fits
 without clipping.
 
-The z-scores of a pass are {term}`in-sample`: each spectrum helped to fit the covariance
+The z-scores of a pass are [in-sample](/GSPICE/background/glossary/#term-in-sample): each spectrum helped to fit the covariance
 that predicts it. An outlier therefore widens the covariance that judges it. For a dense,
 mean-centred model, the in-sample $|z|$ of an outlier of any amplitude approaches
 
@@ -58,10 +60,10 @@ covariance is $\sum_s x_s x_s^\mathsf{T} / N_s$, and the model needs $N_s \ge \m
 In scaled units, the noise of every spectrum has a variance near 1, but the variation of
 the spectra scales with $a_s^2$, so it grows with the S/N. Spectra of different S/N
 therefore have different covariances in scaled units, and one covariance of all of them
-is a mixture. `snr_bins` fits one model for each {term}`S/N bin`.
+is a mixture. `snr_bins` fits one model for each [S/N bin](/GSPICE/background/glossary/#term-S-N-bin).
 
 The S/N of a spectrum is the median of $f \sqrt{\mathrm{ivar}}$ over its good pixels
-({func}`gspice.snr`). `snr_bins=n` puts the edges between the bins at quantiles of the S/N,
+([`gspice.snr()`](/GSPICE/reference/api/#gspice.snr)). `snr_bins=n` puts the edges between the bins at quantiles of the S/N,
 so that each bin holds about the same number of spectra. A sequence gives the interior
 edges instead. Each bin clips and fits on its own spectra: bin $b$ of the model equals
 the model that `fit` returns for the spectra of bin $b$ alone. At prediction, each
@@ -73,7 +75,7 @@ outliers.
 
 ## Low-rank model
 
-`rank=K` fits a {class}`gspice.LowRank` covariance:
+`rank=K` fits a [`gspice.LowRank`](/GSPICE/reference/api/#gspice.LowRank) covariance:
 
 $$
 C = V \Lambda V^\mathsf{T} + D ,
@@ -86,7 +88,7 @@ every pixel, and the correlations between pixels come from the $K$ components al
 The clipping passes use the same rank.
 
 The model computes the precision matrix by the Woodbury identity
-{cite:p}`woodbury1950`, in npix² $K$ flops, without forming $C$:
+[@woodbury1950], in npix² $K$ flops, without forming $C$:
 
 $$
 P = D^{-1} - D^{-1} V \left(\Lambda^{-1} + V^\mathsf{T} D^{-1} V\right)^{-1}
@@ -139,5 +141,5 @@ $\Sigma_+$, where the other models share one product for all spectra.
 
 Positive `weights` apply to the final fit only, and the clipping passes use unit
 weights. A weighted model has no finite-sample factor either.
-{func}`gspice.save` writes a model to a `.npz` file, and {func}`gspice.load` reads it
+[`gspice.save()`](/GSPICE/reference/api/#gspice.save) writes a model to a `.npz` file, and [`gspice.load()`](/GSPICE/reference/api/#gspice.load) reads it
 back.

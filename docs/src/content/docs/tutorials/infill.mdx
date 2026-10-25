@@ -1,10 +1,14 @@
-# Infilling
+---
+title: Infilling
+---
 
-{func}`gspice.infill` replaces chosen pixels of each spectrum by their conditional mean
-given the other pixels, with its uncertainty. {doc}`../background/prediction` explains
+import ThemeImage from '../../../components/ThemeImage.astro'
+
+[`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) replaces chosen pixels of each spectrum by their conditional mean
+given the other pixels, with its uncertainty. [Prediction](/GSPICE/background/prediction/) explains
 the method.
 
-The tutorial uses the survey and the model of {doc}`fitting`.
+The tutorial uses the survey and the model of [Fitting a model](/GSPICE/tutorials/fitting/).
 [`docs/scripts/spectra.py`](https://github.com/joshspeagle/GSPICE/blob/main/docs/scripts/spectra.py)
 makes `spectra.npz`.
 
@@ -43,10 +47,10 @@ pull = (result.flux - clean[test])[bad] / np.sqrt(result.var[bad])
 print(f"standard deviation of the pulls: {np.std(pull):.2f}")
 ```
 
-`result` is a {class}`gspice.Repaired`. `result.flux` holds the conditional mean at
+`result` is a [`gspice.Repaired`](/GSPICE/reference/api/#gspice.Repaired). `result.flux` holds the conditional mean at
 the replaced pixels and the input flux elsewhere, and `result.var` the conditional
 variance there, which includes the noise of the pixel. `inflate=True` includes the
-finite-sample factor in the variances, as in {doc}`pixelwise`. The pull compares each
+finite-sample factor in the variances, as in [Pixelwise prediction](/GSPICE/tutorials/pixelwise/). The pull compares each
 replaced pixel with the same pixel without its artifact. On the 2000 test spectra, its
 standard deviation is 1.02: the variances describe the errors of the replaced values.
 
@@ -65,15 +69,7 @@ index, cov = result.covariance(0)
 print(f"mean chi2 / (dof fs): {np.mean(result.chi2 / (result.dof * result.fs)):.2f}")
 ```
 
-```{image} ../_static/figures/tutorials/infill-gap-light.svg
-:alt: The conditional mean of the pixels around H-beta, with its uncertainty and a draw
-:class: only-light
-```
-
-```{image} ../_static/figures/tutorials/infill-gap-dark.svg
-:alt: The conditional mean of the pixels around H-beta, with its uncertainty and a draw
-:class: only-dark
-```
+<ThemeImage src="figures/tutorials/infill-gap" alt="The conditional mean of the pixels around H-beta, with its uncertainty and a draw" />
 
 The figure shows the first test spectrum. The conditional mean predicts the line from
 the other pixels alone, and the band is the square root of `result.var`. With
@@ -84,5 +80,5 @@ replaced pixels.
 
 `result.chi2` compares the input values at the replaced pixels with their prediction,
 and `result.dof` counts these pixels. The mean of `chi2 / (dof * fs)` is 1.00 on
-the 2000 test spectra, as it is for a correct model. {doc}`calibration` makes this check at several
+the 2000 test spectra, as it is for a correct model. [Checking calibration](/GSPICE/tutorials/calibration/) makes this check at several
 sizes.

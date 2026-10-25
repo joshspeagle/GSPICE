@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The documentation site is built with Astro Starlight instead of Sphinx. Its API pages come from the docstrings, as before. Page addresses end in `/` instead of `.html`, for example `https://joshspeagle.github.io/GSPICE/installation/`, and the anchors of the API and glossary entries are unchanged.
+
 ## 2.0.0 - 2026-10-19
 
 ### Added

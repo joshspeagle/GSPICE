@@ -3,7 +3,7 @@
     python docs/scripts/figures.py --data DIR/spectra.npz
 
 It runs the computations of the tutorials on the survey, prints the numbers that the
-survey tutorials quote as JSON, and writes each figure to docs/_static/figures/tutorials/ as
+survey tutorials quote as JSON, and writes each figure to docs/src/assets/figures/tutorials/ as
 NAME-light.svg and NAME-dark.svg. It needs matplotlib, from the dependency group
 figures. It took 2 minutes on 4 cores.
 """
@@ -18,7 +18,7 @@ import numpy as np
 
 import gspice
 
-OUT = Path(__file__).parents[1] / "_static" / "figures" / "tutorials"
+OUT = Path(__file__).parents[1] / "src" / "assets" / "figures" / "tutorials"
 ACCENT = "#F0592A"
 THEMES = {
     "light": {

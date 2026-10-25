@@ -1,8 +1,10 @@
-# Saving and loading
+---
+title: Saving and loading
+---
 
-{func}`gspice.save` writes a {class}`gspice.Model` to one `.npz` file, and
-{func}`gspice.load` reads it back. This example simulates its spectra with
-{func}`gspice.simulate`.
+[`gspice.save()`](/GSPICE/reference/api/#gspice.save) writes a [`gspice.Model`](/GSPICE/reference/api/#gspice.Model) to one `.npz` file, and
+[`gspice.load()`](/GSPICE/reference/api/#gspice.load) reads it back. This example simulates its spectra with
+[`gspice.simulate()`](/GSPICE/reference/api/#gspice.simulate).
 
 ```python
 import numpy as np
@@ -19,7 +21,7 @@ gspice.save(model, "model.npz")
 loaded = gspice.load("model.npz")
 ```
 
-The file holds every field of the model, the blocks of {func}`gspice.fit_blocks`
+The file holds every field of the model, the blocks of [`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks)
 included. The docstring of `save` lists its arrays, which `numpy.load` also reads:
 
 ```python
