@@ -1,0 +1,142 @@
+---
+// The navy band: the lockup, the search box with its "/" key, the main links and a
+// two-state theme toggle. The links after Docs and API come from the social option.
+import config from 'virtual:starlight/user-config'
+import Search from 'virtual:starlight/components/Search'
+import SiteTitle from 'virtual:starlight/components/SiteTitle'
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+// The Reference group of the sidebar: reference/api, reference/legacy and references.
+const api = Astro.locals.starlightRoute.id.startsWith('reference')
+const links = [
+  { label: 'Docs', href: `${base}/installation/`, current: !api },
+  { label: 'API', href: `${base}/reference/api/`, current: api },
+  ...(config.social ?? []).map(({ label, href }) => ({ label, href, current: false })),
+]
+---
+
+<div class="gs-header">
+  <SiteTitle />
+  <Search />
+  <nav class="gs-links" aria-label="Site">
+    {links.map(({ label, href, current }) => <a href={href} aria-current={current ? 'true' : undefined}>{label}</a>)}
+  </nav>
+  <button class="gs-theme" type="button" data-state="auto" aria-label="Theme: auto. Switch to dark.">
+    <svg width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+      <!-- auto: half filled, half hollow; dark: filled; light: hollow -->
+      <g class="auto">
+        <rect x="1" y="4" width="7" height="8" fill="currentColor"></rect>
+        <rect x="8.5" y="4.5" width="6" height="7" fill="none" stroke="currentColor"></rect>
+      </g>
+      <rect class="dark" x="1" y="4" width="14" height="8" fill="currentColor"></rect>
+      <rect class="light" x="1.5" y="4.5" width="13" height="7" fill="none" stroke="currentColor"></rect>
+    </svg>
+  </button>
+</div>
+
+<script>
+  // The toggle cycles auto, dark, light. Starlight's theme select, in the mobile menu of
+  // each page with a sidebar, holds the choice, stores it and applies it. The 404 page has
+  // no sidebar, so there the toggle stores and applies the choice itself.
+  const order = ['auto', 'dark', 'light']
+  const button = document.querySelector<HTMLButtonElement>('.gs-theme')
+  const select = document.querySelector<HTMLSelectElement>('starlight-theme-select select')
+  const key = 'starlight-theme'
+  // Storage can throw, for example when site data is blocked.
+  function stored() {
+    try {
+      return localStorage.getItem(key) || 'auto'
+    } catch {
+      return 'auto'
+    }
+  }
+  const current = () => select?.value ?? stored()
+  const next = (theme: string) => order[(order.indexOf(theme) + 1) % order.length]
+  function show(theme: string) {
+    button?.setAttribute('data-state', theme)
+    button?.setAttribute('aria-label', `Theme: ${theme}. Switch to ${next(theme)}.`)
+    button?.setAttribute('title', `Theme: ${theme}`)
+  }
+  show(current())
+  // A choice in the mobile menu's select also changes the toggle.
+  select?.addEventListener('change', () => show(select.value))
+  button?.addEventListener('click', () => {
+    const theme = next(current())
+    if (select) {
+      select.value = theme
+      select.dispatchEvent(new Event('change'))
+    } else {
+      try {
+        localStorage.setItem(key, theme)
+      } catch {}
+      const light = matchMedia('(prefers-color-scheme: light)').matches
+      document.documentElement.dataset.theme = theme === 'auto' ? (light ? 'light' : 'dark') : theme
+    }
+    show(theme)
+  })
+
+  const search = document.querySelector<HTMLButtonElement>('button[data-open-modal]')
+  search?.setAttribute('aria-keyshortcuts', `/ ${search.getAttribute('aria-keyshortcuts')}`)
+  window.addEventListener('keydown', (event) => {
+    const target = event.target as HTMLElement
+    const typing = target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)
+    if (event.key !== '/' || typing || event.ctrlKey || event.metaKey || event.altKey) return
+    event.preventDefault()
+    search?.click()
+  })
+</script>
+
+<style>
+  .gs-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    height: 100%;
+  }
+  .gs-links {
+    display: none;
+    gap: 1.375rem;
+    margin-inline-start: auto;
+    font-size: 0.90625rem;
+  }
+  .gs-links a {
+    padding-block: 1.125rem;
+    border-bottom: 2px solid transparent;
+    color: var(--gs-header-ink-2);
+    text-decoration: none;
+  }
+  .gs-links a:hover {
+    color: var(--gs-header-ink);
+  }
+  .gs-links a[aria-current] {
+    border-bottom-color: var(--gs-accent);
+    color: var(--gs-header-ink);
+  }
+  .gs-theme {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid var(--gs-header-rule-2);
+    background: transparent;
+    color: var(--gs-header-ink);
+    cursor: pointer;
+  }
+  .gs-theme:hover {
+    background: var(--gs-header-raised);
+  }
+  .gs-theme:not([data-state='auto']) .auto,
+  .gs-theme:not([data-state='dark']) .dark,
+  .gs-theme:not([data-state='light']) .light {
+    display: none;
+  }
+  @media (min-width: 50rem) {
+    .gs-header {
+      gap: 1.5rem;
+    }
+    .gs-links {
+      display: flex;
+    }
+  }
+</style>

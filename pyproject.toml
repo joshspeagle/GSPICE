@@ -36,6 +36,8 @@ dev = [
 docs = ["griffe==2.4.1"]
 # docs/scripts/figures.py
 figures = ["matplotlib==3.11.2"]
+# docs/scripts/logo.py; woff adds brotli, which reads the woff2 font
+logo = ["fonttools[woff]==4.67.0"]
 
 [tool.hatch.version]
 path = "src/gspice/__init__.py"

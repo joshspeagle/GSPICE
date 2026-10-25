@@ -4,7 +4,7 @@ title: GSPICE
 
 import ThemeImage from '../../components/ThemeImage.astro'
 
-<ThemeImage src="logo" alt="GSPICE" width="420" class="align-center" />
+<ThemeImage src="logo" alt="GSPICE" class="align-center" />
 
 GSPICE models spectra on a common wavelength grid as a multivariate Gaussian with an
 empirical covariance, and predicts any set of pixels from the others
@@ -13,6 +13,6 @@ of a pixel from its prediction can flag artifacts. The method needs no model of 
 spectra and no knowledge of the instrument: the covariance of the training spectra
 carries both.
 
-The logo shows the two uses. A masked block cuts the G, and its stroke comes back as the
-conditional mean with its uncertainty. The top band of "SPICE" was shifted, and the whole
-band is flagged and restored.
+The logo shows the method. The G is drawn in pixel cells, a masked block hides its left
+stroke, and the stroke comes back as orange cells: the conditional mean, with its
+uncertainty beside it.

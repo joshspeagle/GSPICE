@@ -1,6 +1,7 @@
 ---
 // The figure of each theme: src names the pair <src>-light.svg and <src>-dark.svg in
-// src/assets. Lazy loading keeps the browser from fetching the hidden one.
+// src/assets. Lazy loading keeps the browser from fetching the hidden one. A file under
+// figures/ gets the figure frame; the logo of the home page does not.
 import type { ImageMetadata } from 'astro'
 
 interface Props {
@@ -20,7 +21,10 @@ const [light, dark] = ['light', 'dark'].map((theme) => {
   if (!file) throw new Error(`ThemeImage: no file src/assets/${src}-${theme}.svg`)
   return file
 })
+const Frame = src.startsWith('figures/') ? 'figure' : Fragment
 ---
 
-<img class:list={['dark:sl-hidden', className]} src={light.src} alt={alt} width={width} loading="lazy" />
-<img class:list={['light:sl-hidden', className]} src={dark.src} alt={alt} width={width} loading="lazy" />
+<Frame>
+  <img class:list={['dark:sl-hidden', className]} src={light.src} alt={alt} width={width} loading="lazy" />
+  <img class:list={['light:sl-hidden', className]} src={dark.src} alt={alt} width={width} loading="lazy" />
+</Frame>

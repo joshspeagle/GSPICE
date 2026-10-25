@@ -1,0 +1,31 @@
+---
+// The sidebar group of the page, then its title; the API pages set the title in mono.
+import Default from '@astrojs/starlight/components/PageTitle.astro'
+
+const { id, sidebar } = Astro.locals.starlightRoute
+const group = sidebar.find(
+  (entry) => entry.type === 'group' && entry.entries.some((link) => link.type === 'link' && link.isCurrent),
+)
+const mono = id === 'reference/api' || id === 'reference/legacy'
+---
+
+{group && <p class="gs-crumb" data-pagefind-ignore>{group.label}</p>}
+<div class:list={{ 'gs-mono': mono }}><Default /></div>
+
+<style>
+  .gs-crumb {
+    margin-top: 1rem;
+    font-size: 0.875rem;
+    color: var(--sl-color-gray-2);
+  }
+  .gs-crumb + div :global(h1) {
+    margin-top: 0.375rem;
+  }
+  .gs-mono :global(h1#_top) {
+    font-family: var(--__sl-font-mono);
+    font-size: 2.25rem;
+    font-weight: 500;
+    font-stretch: 100%;
+    letter-spacing: -0.01em;
+  }
+</style>

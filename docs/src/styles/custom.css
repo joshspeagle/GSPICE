@@ -1,3 +1,401 @@
+/* The tokens of docs/brand.md, mapped onto Starlight's custom properties. Starlight
+   always sets data-theme, so dark is the default and light the override. */
+:root {
+  --gs-bg: #0b111c;
+  --gs-bg-2: #111a2a;
+  --gs-bg-3: #18233a;
+  --gs-rule: #26324a;
+  --gs-rule-2: #3a4868;
+  --gs-ink: #e8ecf2;
+  --gs-ink-2: #a7b1c2;
+  --gs-ink-3: #7f8aa0;
+  --gs-accent: #f0592a;
+  --gs-accent-text: #ff8a5c;
+  --gs-strip-lo: #3b465c;
+  --gs-strip-hi: #c9d1de;
+  --gs-header: #0b111c;
+
+  /* The header is navy in both themes, so its colours do not follow the theme. */
+  --gs-header-ink: #e8ecf2;
+  --gs-header-ink-2: #a7b1c2;
+  --gs-header-rule-2: #3a4868;
+  --gs-header-surface: #111a2a;
+  --gs-header-raised: #18233a;
+  --gs-header-focus: #ff8a5c;
+
+  --sl-color-white: var(--gs-ink);
+  --sl-color-gray-1: var(--gs-ink);
+  --sl-color-gray-2: var(--gs-ink-2);
+  --sl-color-gray-3: var(--gs-ink-3);
+  --sl-color-gray-4: var(--gs-rule-2);
+  --sl-color-gray-5: var(--gs-rule);
+  --sl-color-gray-6: var(--gs-bg-2);
+  --sl-color-black: var(--gs-bg);
+  --sl-color-accent-low: var(--gs-bg-3);
+  --sl-color-accent: var(--gs-accent);
+  --sl-color-accent-high: var(--gs-accent-text);
+  --sl-color-text: var(--gs-ink);
+  --sl-color-text-accent: var(--gs-accent-text);
+  --sl-color-text-invert: var(--gs-bg);
+  --sl-color-bg-nav: var(--gs-header);
+  --sl-color-bg-sidebar: var(--gs-bg);
+  --sl-color-bg-inline-code: var(--gs-bg-2);
+  --sl-color-hairline: var(--gs-rule);
+  --sl-color-hairline-light: var(--gs-rule);
+  --sl-color-hairline-shade: var(--gs-rule);
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: none;
+
+  --sl-font: 'Archivo Variable', 'Helvetica Neue', Arial, sans-serif;
+  --sl-font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --sl-text-code-sm: 0.875rem;
+  --sl-line-height: 1.62;
+  --sl-text-h1: 2.5rem;
+  --sl-text-h2: 1.625rem;
+  --sl-text-h3: 1.1875rem;
+  --sl-text-h4: 1.0625rem;
+  --sl-nav-height: 3.75rem;
+  --sl-menu-button-size: 2.25rem;
+}
+
+:root[data-theme='light'] {
+  --gs-bg: #ffffff;
+  --gs-bg-2: #f2f5f9;
+  --gs-bg-3: #e6ebf2;
+  --gs-rule: #d6dde6;
+  --gs-rule-2: #a9b4c4;
+  --gs-ink: #111827;
+  --gs-ink-2: #4a5568;
+  --gs-ink-3: #5f6b7f;
+  --gs-accent-text: #c2410c;
+  --gs-strip-lo: #6b7588;
+  --gs-strip-hi: #e1e6ee;
+  --gs-header: #111a2a;
+}
+
+/* Corners are square everywhere. */
+*,
+::before,
+::after {
+  border-radius: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--gs-accent-text);
+  outline-offset: 2px;
+}
+
+/* Type */
+.sl-markdown-content {
+  font-size: 1.03125rem;
+}
+h1#_top {
+  font-weight: 720;
+  font-stretch: 112%;
+  letter-spacing: -0.012em;
+}
+.sl-markdown-content h2 {
+  font-weight: 660;
+  font-stretch: 108%;
+  letter-spacing: -0.006em;
+}
+.sl-markdown-content h3 {
+  font-weight: 620;
+}
+.sl-markdown-content a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.sl-markdown-content a:hover {
+  color: var(--gs-accent-text);
+  text-decoration-thickness: 2px;
+}
+.sl-markdown-content code:not(:where(.not-content *)) {
+  padding: 0.05em 0.3em;
+  border: 1px solid var(--gs-rule);
+}
+/* On the API pages, the headings of objects are code. */
+main:has(.gs-mono) .sl-markdown-content :is(h3, h4) {
+  font-family: var(--__sl-font-mono);
+  font-weight: 500;
+}
+
+/* Glossary terms */
+.sl-markdown-content a[href*='/glossary/#'] {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline dotted var(--gs-ink-2);
+  text-decoration-thickness: 1.5px;
+}
+.sl-markdown-content a[href*='/glossary/#']:is(:hover, :focus-visible) {
+  text-decoration-color: var(--gs-accent-text);
+}
+
+/* Header */
+.header {
+  padding-inline-start: 1.5rem;
+}
+.site-title {
+  flex: none;
+}
+.site-title img {
+  height: 27px;
+}
+button[data-open-modal] {
+  flex: none;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-inline-start: auto;
+  border: 1px solid var(--gs-header-rule-2);
+  color: var(--gs-header-ink);
+}
+button[data-open-modal] > :is(svg, kbd) {
+  display: none;
+}
+/* A square stands for the magnifier. */
+button[data-open-modal]::before {
+  content: '';
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+}
+@media (min-width: 50rem) {
+  .site-title {
+    width: calc(var(--sl-sidebar-width) - 3rem);
+  }
+  button[data-open-modal] {
+    flex: 0 1 26.25rem;
+    justify-content: flex-start;
+    gap: 0.625rem;
+    margin-inline-start: 0;
+    padding-inline: 0.75rem 0.5rem;
+    background: var(--gs-header-surface);
+    color: var(--gs-header-ink-2);
+    font-size: 0.90625rem;
+  }
+  button[data-open-modal]:hover {
+    border-color: var(--gs-header-ink-2);
+    color: var(--gs-header-ink);
+  }
+  button[data-open-modal]::after {
+    content: '/';
+    margin-inline-start: auto;
+    padding: 0 0.375rem;
+    border: 1px solid var(--gs-header-rule-2);
+    background: var(--gs-header);
+    font-family: var(--__sl-font-mono);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+}
+
+/* On the navy band, the focus ring keeps the dark theme's orange text colour. */
+.header :focus-visible,
+.sl-menu-button {
+  outline-color: var(--gs-header-focus);
+}
+
+/* The menu button of narrow screens matches the theme toggle. */
+.sl-menu-button {
+  border: 1px solid var(--gs-header-rule-2);
+  background-color: var(--gs-header);
+  color: var(--gs-header-ink);
+}
+.sl-menu-button:has(~ :popover-open) {
+  background-color: var(--gs-header-raised);
+}
+
+/* Search results */
+#starlight__search {
+  --pagefind-ui-tag: var(--gs-bg-3);
+}
+#starlight__search mark {
+  color: var(--gs-ink);
+  text-decoration: underline 2px var(--gs-accent);
+  text-underline-offset: 3px;
+}
+#starlight__search .pagefind-ui__result-excerpt {
+  color: var(--gs-ink-2);
+}
+#starlight__search .pagefind-ui__result-title:not(:where(.pagefind-ui__result-nested *)),
+#starlight__search .pagefind-ui__result-nested {
+  background-color: var(--gs-bg-2);
+}
+
+/* Sidebar: square group markers, and a 3 px orange left edge on the current page. */
+.sidebar-content {
+  font-size: 0.90625rem;
+}
+.sidebar-content summary {
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+.sidebar-content summary > svg {
+  display: none;
+}
+.sidebar-content summary::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--gs-rule-2);
+}
+.sidebar-content details[open] > summary::before {
+  background: var(--gs-ink-2);
+}
+.sidebar-content .group-label .large {
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+.sidebar-content a {
+  border-inline-start: 3px solid transparent;
+  font-size: 0.90625rem;
+}
+.sidebar-content a:hover {
+  background: var(--gs-bg-2);
+}
+.sidebar-content a[aria-current='page'] {
+  border-inline-start-color: var(--gs-accent);
+  background: var(--gs-bg-2);
+  color: var(--gs-ink);
+  font-weight: 620;
+}
+
+/* On this page: a column of cells, the current one orange. */
+starlight-toc h2 {
+  font-size: 0.84375rem;
+  font-weight: 650;
+}
+:is(starlight-toc, mobile-starlight-toc) a {
+  --cell: 8px;
+  display: grid;
+  grid-template-columns: var(--cell) 1fr;
+  gap: 0.625rem;
+  align-items: baseline;
+  color: var(--gs-ink-2);
+  font-size: 0.875rem;
+}
+:is(starlight-toc, mobile-starlight-toc) a::before {
+  content: '';
+  width: var(--cell);
+  height: var(--cell);
+  background: var(--gs-rule-2);
+}
+:is(starlight-toc, mobile-starlight-toc) ul ul a {
+  --cell: 6px;
+}
+:is(starlight-toc, mobile-starlight-toc) a:hover {
+  color: var(--gs-ink);
+}
+:is(starlight-toc, mobile-starlight-toc) a[aria-current='true'] {
+  color: var(--gs-ink);
+  font-weight: 600;
+}
+:is(starlight-toc, mobile-starlight-toc) a[aria-current='true']::before {
+  background: var(--gs-accent);
+}
+/* The bar of the page list on narrow screens sits on the ground, below the band. */
+mobile-starlight-toc nav {
+  background-color: var(--gs-bg);
+}
+
+/* Code: the word "Copy" replaces the icon of the copy button, which always shows. The
+   tab names the language (expressiveCode.defaultProps in astro.config.mjs). */
+.expressive-code .frame {
+  & .copy {
+    inset-block-start: 0;
+    inset-inline-end: 0;
+  }
+  & .copy button {
+    width: auto;
+    /* The height of the tab bar. */
+    height: 2.1875rem;
+    padding-inline: 0.875rem;
+    border-inline-start: 1px solid var(--gs-rule);
+    opacity: 1;
+  }
+  & .copy button::before {
+    display: none;
+  }
+  & .copy button::after {
+    content: 'Copy';
+    position: static;
+    margin: 0;
+    background: none;
+    color: var(--gs-ink-2);
+    font-size: 0.8125rem;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+/* Output: a text block right after a Python block joins it, on the ground, with a
+   square "Output" tag. */
+.expressive-code:has(pre[data-language='python']) + .expressive-code:has(pre[data-language='text']) {
+  margin-top: 0;
+
+  & .frame {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    border: 1px solid var(--gs-rule);
+    border-top: 0;
+  }
+  & .frame::before {
+    content: 'Output';
+    padding: 0.75rem 0.625rem 0 1.8125rem;
+    border-inline-end: 1px solid var(--gs-rule);
+    /* The square of the tag. */
+    background: linear-gradient(var(--gs-ink-2), var(--gs-ink-2)) 0.875rem 1.125rem / 8px 8px
+      no-repeat;
+    color: var(--gs-ink-2);
+    font-size: 0.78125rem;
+    font-weight: 600;
+  }
+  & .header,
+  & .copy {
+    display: none;
+  }
+  & pre {
+    border: 0;
+    background: var(--gs-bg);
+  }
+}
+
+/* A wide equation scrolls by itself, so the page never scrolls sideways. */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25em;
+}
+
+/* Figures: a rule above, a hairline below. */
+.sl-markdown-content > figure {
+  padding-block: 1rem 0.75rem;
+  border-top: 1px solid var(--gs-rule-2);
+  border-bottom: 1px solid var(--gs-rule);
+}
+
+/* Previous and next: two tiles with a solid top edge. */
+.pagination-links a {
+  border: 0;
+  border-top: 3px solid var(--gs-rule-2);
+  background: var(--gs-bg-2);
+  font-size: 0.8125rem;
+}
+.pagination-links a:hover {
+  border-top-color: var(--gs-accent);
+}
+.pagination-links a > svg {
+  display: none;
+}
+.pagination-links .link-title {
+  font-size: 1.03125rem;
+  font-weight: 650;
+}
+
 .align-center {
   margin-inline: auto;
 }
