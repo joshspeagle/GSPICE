@@ -1,0 +1,92 @@
+---
+title: Quickstart
+description: Fit a model to simulated spectra, then predict a range of pixels that you hide.
+---
+
+import QuickstartFigure from '../../../components/QuickstartFigure.astro'
+
+This page shows a first run of GSPICE: it fits a model to simulated spectra, then
+predicts a range of pixels that you hide. It needs no download. [Install](/GSPICE/start/install/)
+GSPICE first.
+
+## Simulate spectra
+
+A model learns from many spectra. [`gspice.simulate()`](/GSPICE/reference/api/#gspice.simulate)
+makes 3000 training spectra and 5 test spectra, each of 200 pixels.
+
+```python
+import numpy as np
+
+import gspice
+
+rng = np.random.default_rng(2026)
+train = gspice.simulate(3000, 200, rng=rng)
+test = gspice.simulate(5, 200, rng=rng)
+```
+
+Each call returns a [`gspice.Simulation`](/GSPICE/reference/api/#gspice.Simulation) of
+continuum-normalized spectra. These three of its fields have the shape (number of
+spectra, number of pixels):
+
+- `flux` holds the flux, with noise.
+- `ivar` holds the inverse variance of the noise, 1/σ².
+- `truth` holds the flux without noise.
+
+## Fit a model
+
+GSPICE predicts pixels from a mean spectrum and a covariance between every pair of
+pixels. [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit) estimates both from the
+training spectra.
+
+```python
+model, clipped = gspice.fit(train.flux, train.ivar)
+```
+
+`fit` returns a [`gspice.Model`](/GSPICE/reference/api/#gspice.Model) and `clipped`,
+the mask of the pixels that it left out. [What you get back](/GSPICE/start/results/#model)
+describes both.
+
+## Predict hidden pixels
+
+Suppose that pixels 80 to 109 of every test spectrum are bad. Mark them in a mask, and
+[`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) predicts them from the other
+pixels.
+
+```python
+mask = np.zeros(test.flux.shape, dtype=bool)
+mask[:, 80:110] = True
+result = gspice.infill(model, test.flux, test.ivar, mask=mask)
+print(f"{result.replaced.sum()} pixels replaced")
+```
+
+```text output
+150 pixels replaced
+```
+
+`infill` replaced the 30 masked pixels of each of the 5 test spectra.
+
+<QuickstartFigure />
+
+## What happened
+
+`fit` treated each training spectrum as one draw from a multivariate Gaussian
+distribution over its 200 pixels. It estimated the mean and the covariance of that
+distribution. The covariance records how the flux at each pixel varies with the flux at
+every other pixel.
+
+For each test spectrum, `infill` then computed the distribution of the masked pixels,
+given the other 170 pixels, its
+[conditioning pixels](/GSPICE/background/glossary/#term-conditioning-pixels). `result` is
+a [`gspice.Repaired`](/GSPICE/reference/api/#gspice.Repaired):
+
+- `result.flux` holds the mean of that distribution at the masked pixels, and the input
+  flux elsewhere.
+- `result.var` holds its variance at the masked pixels, which includes the noise.
+
+## Next steps
+
+- [Prepare your spectra](/GSPICE/start/spectra/) turns your own data into `flux`, `ivar`
+  and `mask`.
+- [What you get back](/GSPICE/start/results/) lists every field of `result` and `model`.
+- [Finding and repairing artifacts](/GSPICE/tutorials/repair/) finds artifacts that no
+  mask marks.

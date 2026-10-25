@@ -1,0 +1,136 @@
+/* The spectrum plots of src/lib/spectrum-plot.ts. The plot area leaves room on the
+   left for the flux labels and below for the pixel labels. */
+.gs-plot {
+  position: relative;
+  height: var(--gs-plot-height, 16rem);
+  margin: 0 0 1.75rem 2.25rem;
+  container-type: inline-size;
+}
+.gs-plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.gs-plot path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.gs-plot .grid {
+  stroke: var(--gs-rule);
+}
+.gs-plot .obs {
+  stroke: var(--gs-ink);
+  stroke-width: 1.5;
+}
+.gs-plot .truth {
+  stroke: var(--gs-ink-2);
+}
+.gs-plot .pred {
+  stroke: var(--gs-pred);
+  stroke-width: 2.25;
+}
+.gs-plot .b1 {
+  fill: var(--gs-band-1);
+}
+.gs-plot .b2 {
+  fill: var(--gs-band-2);
+}
+.gs-plot .blk {
+  fill: var(--gs-mask-fill);
+}
+.gs-plot .blk-edge {
+  stroke: var(--gs-mask-edge);
+}
+.gs-plot .cellgap {
+  stroke: var(--gs-mask-fill);
+}
+/* Pixel boundaries show only where a pixel is 4 px wide or more: 120 pixels on 480 px,
+   200 on 800 px. */
+@container (max-width: 479px) {
+  .gs-plot[data-npix='120'] .cellgap {
+    display: none;
+  }
+}
+@container (max-width: 799px) {
+  .gs-plot[data-npix='200'] .cellgap {
+    display: none;
+  }
+}
+.gs-plot .grip {
+  position: absolute;
+  top: calc(50% - 9px);
+  width: 4px;
+  height: 18px;
+  margin-inline-start: -2px;
+  background: var(--gs-ink-2);
+}
+.gs-plot :is(.ytick, .xtick) {
+  position: absolute;
+  color: var(--gs-ink-2);
+  font-family: var(--__sl-font-mono);
+  font-size: 0.75rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+.gs-plot .ytick {
+  right: calc(100% + 0.375rem);
+  transform: translateY(-50%);
+}
+.gs-plot .xtick {
+  top: calc(100% + 0.5rem);
+  transform: translateX(-50%);
+}
+/* The labels at the ends stay inside the plot. */
+.gs-plot .xtick.first {
+  transform: none;
+}
+.gs-plot .xtick.last {
+  transform: translateX(-100%);
+}
+
+/* The legend: cell swatches. */
+.gs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.125rem;
+  margin: 0;
+  padding: 0;
+  color: var(--gs-ink-2);
+  font-size: 0.8125rem;
+  list-style: none;
+}
+.gs-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  margin: 0;
+}
+.gs-legend i {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+}
+.gs-legend .obs {
+  height: 2px;
+  background: var(--gs-ink);
+}
+.gs-legend .truth {
+  height: 1px;
+  background: var(--gs-ink-2);
+}
+.gs-legend .pred {
+  height: 3px;
+  background: var(--gs-pred);
+}
+.gs-legend .b1 {
+  background: var(--gs-band-1);
+}
+.gs-legend .b2 {
+  background: var(--gs-band-2);
+}
+.gs-legend .blk {
+  background: var(--gs-mask-fill);
+  outline: 1px solid var(--gs-mask-edge);
+  outline-offset: -1px;
+}

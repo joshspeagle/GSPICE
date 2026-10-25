@@ -1,0 +1,89 @@
+---
+title: Is GSPICE right for my data?
+description: What GSPICE needs from your spectra, what it fixes, and where it fails.
+---
+
+import PixelGrid from '../../../components/PixelGrid.astro'
+
+GSPICE suits a large set of similar spectra on one wavelength grid, in which some pixels
+are bad. This page lists what it needs, what it fixes and where it fails.
+
+## What GSPICE needs
+
+GSPICE learns from your spectra how the flux at each pixel varies with the flux at every
+other pixel. It treats each pixel as one variable, measured once in every spectrum:
+
+<PixelGrid />
+
+So the spectra must agree pixel by pixel:
+
+- **One wavelength grid.** Pixel $i$ has the same wavelength in every spectrum, for
+  example after a shift to the rest frame. [Prepare your spectra](/GSPICE/start/spectra/)
+  explains the choice of frame.
+- **A similar line-spread function.** A line of the same depth must cover the same
+  pixels in every spectrum.
+- **Many training spectra.** [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit)
+  estimates a covariance between every pair of pixels from the
+  [training spectra](/GSPICE/background/glossary/#term-training-spectra).
+
+The default model needs at least npix + 1 training spectra, for npix pixels. By default,
+`fit` uses a training spectrum only if it has at most 64 bad pixels. It raises a
+`ValueError` if too few spectra remain.
+
+At that minimum the covariance is noisy. The uncertainty of a prediction for a held-out
+spectrum is then too small. This code shows by how much, for a spectrum of 200 pixels:
+
+```python
+import gspice
+
+npix = 200
+for n_train in (300, 1000, 3000, 10000):
+    factor = gspice.finite_sample_factor(n_train, npix - 1)
+    print(f"{n_train:>6} training spectra: {factor:.2f}")
+```
+
+```text output
+   300 training spectra: 9.21
+  1000 training spectra: 1.57
+  3000 training spectra: 1.15
+ 10000 training spectra: 1.04
+```
+
+Each factor is the mean squared error of a prediction divided by its variance from
+GSPICE. It holds for one pixel of a
+[held-out spectrum](/GSPICE/background/glossary/#term-held-out-spectrum), predicted from
+the other 199, if the spectra are Gaussian. With 300 training spectra, the squared
+errors are 9.21 times the variance on average. With 10000, they are 1.04 times the
+variance. [The finite-sample factor](/GSPICE/background/prediction/#the-finite-sample-factor)
+explains this factor, and the option `inflate=True` that corrects for it.
+
+If you have fewer spectra than pixels, fit a
+[low-rank model](/GSPICE/background/glossary/#term-low-rank-model) with `fit(..., rank=K)`.
+It needs only $K + 2$ training spectra. [Low-rank and noise-aware models](/GSPICE/tutorials/models/)
+shows one.
+
+## What GSPICE fixes
+
+- **Bad pixels that you know.** A bad pixel has a nonzero `mask` or `ivar == 0`.
+  [`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) replaces it by its
+  prediction from the other pixels, with a variance.
+- **Artifacts that you do not know.** An artifact is a corruption of the data, such as a
+  cosmic ray or a hot column. [`gspice.repair()`](/GSPICE/reference/api/#gspice.repair)
+  finds the pixels far from their prediction, and replaces them.
+
+## Where GSPICE fails
+
+- **Long shifted segments.** A segment with a shifted wavelength scale can cover hundreds
+  of pixels. Inside it, the pixels that predict each pixel are shifted too, so `repair`
+  misses much of it. [Long defects](/GSPICE/background/repair/#long-defects) measures
+  this limit.
+- **Artifacts at the same pixels in every training spectrum.** `fit` learns them as part
+  of the spectra, so `repair` does not find them.
+
+## GSPICE and interpolation
+
+Linear interpolation across a gap draws a straight line between the two pixels at its
+ends. It cannot restore an absorption line inside the gap, and it gives no uncertainty.
+GSPICE predicts the gap from all the pixels outside it, through the correlations of the
+training spectra. It also gives the variance of each predicted pixel, and the covariance
+between them.

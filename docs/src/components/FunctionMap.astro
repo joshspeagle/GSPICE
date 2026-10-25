@@ -1,0 +1,208 @@
+---
+// V-2: which function takes which object. Boxes are objects and arrays, and names on the
+// arrows are functions; each links to its entry in the API reference.
+import { api } from '../lib/href.ts'
+
+const branches = [
+  { fn: 'pixelwise', out: 'Prediction' },
+  { fn: 'infill', out: 'Repaired' },
+  { fn: 'repair', out: 'Repaired' },
+]
+const others = [
+  { fns: ['fit_blocks'], what: 'adds the block thresholds that repair needs' },
+  { fns: ['calibration', 'noise_audit'], what: 'check the uncertainties and the noise' },
+  { fns: ['save', 'load'], what: 'write a model to a file and read it back' },
+]
+---
+
+<figure class="gs-map not-content">
+  <div class="gs-map-flow">
+    <div class="gs-map-inputs">
+      <span class="gs-obj gs-in">flux</span>
+      <span class="gs-obj gs-in">ivar</span>
+      <span class="gs-obj gs-in">mask</span>
+    </div>
+    <a class="gs-arrow" href={api('fit')}><code>fit</code></a>
+    <a class="gs-obj gs-model" href={api('Model')}>Model</a>
+    <ul class="gs-map-branches">
+      {
+        branches.map(({ fn, out }) => (
+          <li>
+            <a class="gs-arrow" href={api(fn)}>
+              <code>{fn}</code>
+            </a>
+            <a class="gs-obj" href={api(out)}>
+              {out}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+  <ul class="gs-map-others">
+    {
+      others.map(({ fns, what }) => (
+        <li>
+          {fns.map((fn, k) => (
+            <>
+              {k > 0 && ', '}
+              <a href={api(fn)}>
+                <code>{fn}</code>
+              </a>
+            </>
+          ))}{' '}
+          {what}.
+        </li>
+      ))
+    }
+  </ul>
+  <figcaption class="gs-caption">
+    Boxes are objects, and the names on the arrows are functions. The spectra to predict
+    also go into <code>pixelwise</code>, <code>infill</code> and <code>repair</code>.
+  </figcaption>
+</figure>
+
+<style>
+  .gs-map {
+    margin: 1.25rem 0 0;
+    font-size: 0.875rem;
+  }
+  .gs-map-flow {
+    display: grid;
+    grid-template-columns: auto 4.5rem auto 1fr;
+    align-items: center;
+  }
+  .gs-map-inputs {
+    display: grid;
+    gap: 0.375rem;
+  }
+  .gs-obj {
+    display: inline-block;
+    padding: 0.375rem 0.625rem;
+    border-inline-start: 3px solid var(--gs-ink-2);
+    background: var(--gs-bg-3);
+    color: var(--gs-ink);
+    font-family: var(--__sl-font-mono);
+    font-size: 0.84375rem;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .gs-in {
+    border-inline-start-color: var(--gs-rule-2);
+  }
+  .gs-model {
+    padding-block: 0.625rem;
+    border-inline-start-color: var(--gs-ink);
+    font-weight: 500;
+  }
+  a.gs-obj:hover {
+    background: var(--gs-rule);
+  }
+  /* An arrow: a line with the function name above it and a head at its end. */
+  .gs-arrow {
+    position: relative;
+    display: block;
+    height: 1px;
+    margin-inline: 0.375rem;
+    background: var(--gs-ink-2);
+    text-decoration: none;
+  }
+  .gs-arrow::after {
+    content: '';
+    position: absolute;
+    inset-inline-end: -1px;
+    top: -3px;
+    border: 3.5px solid transparent;
+    border-inline-start: 6px solid var(--gs-ink-2);
+    border-inline-end: 0;
+  }
+  .gs-arrow code {
+    position: absolute;
+    bottom: 0.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--gs-accent-text);
+    font-size: 0.8125rem;
+  }
+  .gs-arrow:hover code {
+    text-decoration: underline;
+  }
+  .gs-map-branches {
+    position: relative;
+    display: grid;
+    gap: 1.25rem;
+    margin: 0 0 0 1.25rem;
+    padding: 0.625rem 0;
+    border-inline-start: 1px solid var(--gs-ink-2);
+    list-style: none;
+  }
+  /* The line from the model to the branches. */
+  .gs-map-branches::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    width: 1.25rem;
+    height: 1px;
+    background: var(--gs-ink-2);
+  }
+  .gs-map-branches li {
+    display: grid;
+    grid-template-columns: 6.5rem auto;
+    align-items: center;
+    justify-content: start;
+    margin: 0;
+  }
+  .gs-map-branches .gs-arrow {
+    margin-inline-start: 0;
+  }
+  .gs-map-others {
+    margin: 1.25rem 0 0;
+    padding: 0.75rem 0 0;
+    border-top: 1px solid var(--gs-rule);
+    color: var(--gs-ink-2);
+    list-style: none;
+  }
+  .gs-map-others li {
+    margin: 0.25rem 0 0;
+  }
+  .gs-map-others a {
+    color: var(--gs-accent-text);
+  }
+  /* On a phone, the flow runs down the page. */
+  @media (max-width: 36rem) {
+    .gs-map-flow {
+      grid-template-columns: auto;
+      justify-items: start;
+    }
+    .gs-map-inputs {
+      grid-auto-flow: column;
+    }
+    .gs-map-flow > .gs-arrow {
+      width: 1px;
+      height: 2.5rem;
+      margin: 0 0 0 1.25rem;
+    }
+    .gs-map-flow > .gs-arrow::after {
+      inset-inline-end: auto;
+      top: auto;
+      bottom: -1px;
+      left: -3px;
+      border: 3.5px solid transparent;
+      border-top: 6px solid var(--gs-ink-2);
+      border-bottom: 0;
+    }
+    .gs-map-flow > .gs-arrow code {
+      bottom: auto;
+      top: 50%;
+      left: 0.75rem;
+      transform: translateY(-50%);
+    }
+    .gs-map-branches {
+      padding-top: 1.25rem;
+    }
+    .gs-map-branches::before {
+      display: none;
+    }
+  }
+</style>

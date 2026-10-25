@@ -4,13 +4,13 @@
 import config from 'virtual:starlight/user-config'
 import Search from 'virtual:starlight/components/Search'
 import SiteTitle from 'virtual:starlight/components/SiteTitle'
+import { href } from '../lib/href.ts'
 
-const base = import.meta.env.BASE_URL.replace(/\/$/, '')
 // The Reference group of the sidebar: reference/api, reference/legacy and references.
 const api = Astro.locals.starlightRoute.id.startsWith('reference')
 const links = [
-  { label: 'Docs', href: `${base}/installation/`, current: !api },
-  { label: 'API', href: `${base}/reference/api/`, current: api },
+  { label: 'Docs', href: href('start/fit/'), current: !api },
+  { label: 'API', href: href('reference/api/'), current: api },
   ...(config.social ?? []).map(({ label, href }) => ({ label, href, current: false })),
 ]
 ---

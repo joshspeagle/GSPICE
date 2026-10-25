@@ -1,0 +1,66 @@
+---
+// V-3: spectra on one grid. Each row is a spectrum and each column a pixel, and the
+// outlined column is the pixel whose flux varies most between the spectra.
+import data from '../data/explainer.json'
+
+const variances = data.cov.map((row, i) => row[i])
+const pixel = variances.indexOf(Math.max(...variances))
+const values = data.examples.flatMap((example) => example.flux)
+const low = Math.min(...values)
+const high = Math.max(...values)
+const level = (flux: number) => `${Math.round((1000 * (flux - low)) / (high - low)) / 10}%`
+---
+
+<figure class="not-content">
+  <div class="gs-grid" role="img" aria-label={`${data.examples.length} spectra of ${data.npix} pixels, one per row, with pixel ${pixel} outlined in every row.`}>
+    {
+      data.examples.map((example) => (
+        <div class="row">
+          {example.flux.map((flux) => (
+            <i style={`--level: ${level(flux)}`} />
+          ))}
+        </div>
+      ))
+    }
+    <span class="column" style={`left: ${(100 * pixel) / data.npix}%; width: ${100 / data.npix}%`} />
+  </div>
+  <figcaption class="gs-caption">
+    {data.examples.length} simulated spectra on one grid of {data.npix} pixels, one spectrum per
+    row. A cell is lighter where the flux is higher. The outlined column is pixel {pixel} in
+    every spectrum, at the core of an absorption line.
+  </figcaption>
+</figure>
+
+<style>
+  .gs-grid {
+    position: relative;
+    display: grid;
+    gap: 3px;
+    container-type: inline-size;
+  }
+  .row {
+    display: flex;
+    height: 0.875rem;
+  }
+  .row i {
+    flex: 1;
+    background: color-mix(in srgb, var(--gs-strip-hi) var(--level), var(--gs-strip-lo));
+  }
+  .row i + i {
+    margin-inline-start: 1px;
+  }
+  /* A cell keeps its 1 px gap only while it is wider than 4 px: 120 cells of 4 px and
+     their 119 gaps take 599 px. */
+  @container (max-width: 599px) {
+    .row i + i {
+      margin-inline-start: 0;
+    }
+  }
+  .column {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    outline: 2px solid var(--gs-ink);
+    outline-offset: 1px;
+  }
+</style>
