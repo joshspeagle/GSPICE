@@ -35,15 +35,18 @@ loaded = gspice.load("model.npz")
 test = gspice.simulate(200, 100, rng=rng, artifacts=0.3)
 before = gspice.repair(model, test.flux, test.ivar)
 after = gspice.repair(loaded, test.flux, test.ivar)
-print(np.array_equal(before.flux, after.flux))
+print(np.array_equal(before.replaced, after.replaced))
+print(np.allclose(before.flux, after.flux, rtol=1e-10, atol=0))
 ```
 
 ```text output
 True
+True
 ```
 
-The loaded model gives the same predictions. The file holds every field of the model,
-the blocks included.
+The file holds every field of the model exactly, the blocks included. The loaded model
+replaces the same pixels, and predicts the same flux to rounding, because it computes its
+precision matrix again ([What the file holds](#what-the-file-holds)).
 
 ## What the file holds
 
