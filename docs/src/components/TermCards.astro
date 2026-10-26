@@ -1,0 +1,74 @@
+---
+// The term cards of docs/brand.md. plugins/terms.mjs adds to each page a hidden card for
+// each glossary entry it links to; this script shows the card of a link on hover with a
+// mouse or a pen, or on keyboard focus, and hides it on leave, on blur or with Escape.
+// A tap follows the link and shows no card.
+---
+
+<script>
+  const container = document.querySelector<HTMLElement>('.gs-term-cards')
+  if (container) {
+    // Cards are placed in page coordinates, so they belong to the body.
+    document.body.append(container)
+    let open: HTMLElement | null = null
+    let timer = 0
+    const hide = () => {
+      clearTimeout(timer)
+      if (open) open.hidden = true
+      open = null
+    }
+    const later = (action: () => void) => {
+      clearTimeout(timer)
+      timer = setTimeout(action, 150)
+    }
+    function show(link: HTMLElement, card: HTMLElement) {
+      hide()
+      card.hidden = false
+      open = card
+      // Below the link, or above it where the window has no room below; inside the
+      // window by 16 px on each side.
+      const box = link.getBoundingClientRect()
+      const below = box.bottom + 6 + card.offsetHeight <= innerHeight || box.top < card.offsetHeight + 6
+      const left = Math.max(16, Math.min(box.left, document.documentElement.clientWidth - 16 - card.offsetWidth))
+      card.style.left = `${left + scrollX}px`
+      card.style.top = `${(below ? box.bottom + 6 : box.top - 6 - card.offsetHeight) + scrollY}px`
+    }
+    for (const link of document.querySelectorAll<HTMLElement>('a[aria-describedby^="gs-card-"]')) {
+      const card = document.getElementById(link.getAttribute('aria-describedby')!)!
+      link.addEventListener('pointerenter', (event) => event.pointerType !== 'touch' && later(() => show(link, card)))
+      link.addEventListener('pointerleave', () => later(hide))
+      link.addEventListener('focus', () => link.matches(':focus-visible') && show(link, card))
+      link.addEventListener('blur', hide)
+      card.addEventListener('pointerenter', () => clearTimeout(timer))
+      card.addEventListener('pointerleave', () => later(hide))
+    }
+    document.addEventListener('keydown', (event) => event.key === 'Escape' && hide())
+  }
+</script>
+
+<style is:global>
+  .gs-term-card {
+    position: absolute;
+    z-index: 50;
+    width: min(22rem, 100vw - 2rem);
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--gs-rule);
+    border-top: 3px solid var(--gs-ink);
+    background: var(--gs-bg-2);
+    color: var(--gs-ink);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+  .gs-term-card[hidden] {
+    display: none;
+  }
+  .gs-term-card p {
+    margin: 0 0 0.5rem;
+  }
+  .gs-term-card .gs-term-name {
+    font-weight: 650;
+  }
+  .gs-term-card code {
+    font-size: 0.8125rem;
+  }
+</style>

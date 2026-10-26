@@ -29,10 +29,18 @@ export interface Axes {
   xticks: readonly number[]
 }
 
-// Axes that hold every value of values with a margin of 5% of their range, with flux
-// ticks at the step of 1, 2 or 5 times a power of ten nearest to a fifth of the range, and
-// pixel ticks at the ends and quarters of the npix pixels.
-export function axesFor(values: readonly number[], npix: number): Axes {
+// The scale of an axis that holds every value of values with a margin of 5% of their
+// range, with ticks at the step of 1, 2 or 5 times a power of ten nearest to a fifth of
+// the range.
+export interface Scale {
+  low: number
+  high: number
+  ticks: readonly number[]
+  // The decimals of the tick labels.
+  digits: number
+}
+
+export function scaleFor(values: readonly number[]): Scale {
   let min = Infinity
   let max = -Infinity
   for (const v of values) {
@@ -46,15 +54,19 @@ export function axesFor(values: readonly number[], npix: number): Axes {
   const step = [1, 2, 5, 10]
     .map((m) => m * power)
     .reduce((best, s) => (Math.abs(Math.log(s / rough)) < Math.abs(Math.log(best / rough)) ? s : best))
-  const yticks: number[] = []
-  for (let k = Math.ceil(low / step); k * step <= high; k++) yticks.push(k * step)
-  return {
-    low,
-    high,
-    yticks,
-    digits: Math.max(0, -Math.floor(Math.log10(step))),
-    xticks: [0, 1, 2, 3, 4].map((k) => Math.round((k * npix) / 4)),
-  }
+  const ticks: number[] = []
+  for (let k = Math.ceil(low / step); k * step <= high; k++) ticks.push(k * step)
+  return { low, high, ticks, digits: Math.max(0, -Math.floor(Math.log10(step))) }
+}
+
+// The ends and quarters of npix pixels.
+export const pixelTicks = (npix: number) => [0, 1, 2, 3, 4].map((k) => Math.round((k * npix) / 4))
+
+// Axes that hold every value of values on the scale of scaleFor, with pixel ticks at the
+// ends and quarters of the npix pixels.
+export function axesFor(values: readonly number[], npix: number): Axes {
+  const { low, high, ticks, digits } = scaleFor(values)
+  return { low, high, yticks: ticks, digits, xticks: pixelTicks(npix) }
 }
 
 // A step path of values[from] to values[to - 1], with y(v) in the units of the SVG.
@@ -64,20 +76,20 @@ export function steps(values: ArrayLike<number>, from: number, to: number, y: (v
   return d
 }
 
-// The scale of an axis, from low to high.
-export interface Scale {
+// The range of an axis, from low to high.
+export interface Range {
   low: number
   high: number
 }
 
 // y(v) in the units of the SVG: 100 at low, at the bottom of the plot area, and 0 at high.
-export function yScale(scale: Scale) {
-  return (v: number) => (100 * (scale.high - v)) / (scale.high - scale.low)
+export function yScale(range: Range) {
+  return (v: number) => (100 * (range.high - v)) / (range.high - range.low)
 }
 
 // x(v) as a percentage of the width of the plot area: 0 at low and 100 at high.
-export function xScale(scale: Scale) {
-  return (v: number) => (100 * (v - scale.low)) / (scale.high - scale.low)
+export function xScale(range: Range) {
+  return (v: number) => (100 * (v - range.low)) / (range.high - range.low)
 }
 
 // The SVG of a plot area width units wide from x0, stretched to its box.
@@ -104,7 +116,7 @@ export function axisLabels(axes: Axes, npix: number, y: (v: number) => number) {
 }
 
 // The ±k sd cell of a prediction mu at x, width units wide.
-export function bandCell(x: number, mu: number, sd: number, k: number, y: (v: number) => number, width = 1) {
+export function bandCell(x: number | string, mu: number, sd: number, k: number, y: (v: number) => number, width = 1) {
   const top = y(mu + k * sd)
   return `<rect class="b${k}" x="${x}" y="${top.toFixed(2)}" width="${width}" height="${(y(mu - k * sd) - top).toFixed(2)}"/>`
 }

@@ -1,0 +1,135 @@
+---
+// V-13, the two-pixel explainer: fix the flux of one pixel with the slider, or by
+// dragging across the plot, and see the distribution of the other pixel shift and
+// narrow. The build renders the first frame; src/lib/two-pixel.ts draws each frame.
+import data from '../../data/explainer.json'
+import pairs from '../../data/two-pixel.json'
+import { legend } from '../../lib/spectrum-plot.ts'
+import { LIMIT, jointMarkup, pair, pairLabel, readout, sideMarkup, value } from '../../lib/two-pixel.ts'
+import '../../styles/explainer.css'
+
+const first = { pair: 0, k: 1.5 }
+const { i, j } = pair(first.pair)
+---
+
+<figure class="gs-explainer gs-two not-content" data-first={JSON.stringify(first)}>
+  <p class="gs-hint" id="gs-two-hint">
+    Move the slider, or drag across the left plot, to fix the flux of one pixel. The plot on the right
+    shows the distribution of the other pixel.
+  </p>
+  <div class="gs-panes">
+    <div class="gs-plot gs-joint" data-joint set:html={jointMarkup(first.pair, first.k)} />
+    <div class="gs-plot gs-side" data-side set:html={sideMarkup(first.pair, first.k)} />
+  </div>
+  <label class="gs-slider">
+    <span>Flux of pixel <span data-fixed>{j}</span>: <output>{value(first.pair, first.k).toFixed(3)}</output></span>
+    <input
+      type="range"
+      min={-LIMIT}
+      max={LIMIT}
+      step="0.05"
+      value={first.k}
+      aria-describedby="gs-two-hint"
+      aria-valuetext={value(first.pair, first.k).toFixed(3)}
+    />
+  </label>
+  <div class="gs-controls">
+    <button type="button" data-action="next">Next pair</button>
+    <span data-count>{pairLabel(first.pair)}</span>
+  </div>
+  <p class="gs-readout" aria-live="polite" data-readout>{readout(first.pair, first.k)}</p>
+  <noscript><p class="gs-hint">The fixed flux changes only with JavaScript on.</p></noscript>
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        ['ref', '1σ and 2σ ellipses; distribution without the fixed pixel'],
+        ['fix', 'fixed flux'],
+        ['pred', 'conditional mean and distribution'],
+        'b1',
+        'b2',
+      ])}
+    />
+    <p>
+      Two pixels of a model fitted to {data.ntrain} simulated spectra of {data.npix} pixels, seed 11. Pixel {i} has
+      the largest variance, and the {pairs.pairs.length} pairs span correlations from about 1 to about −1. The
+      prediction is that of <code>gspice.infill</code> from the fixed pixel alone.
+    </p>
+  </figcaption>
+</figure>
+
+<script>
+  import pairs from '../../data/two-pixel.json'
+  import { announcer, redrawer } from '../../lib/explainer.ts'
+  import { jointMarkup, kAt, pair, pairLabel, readout, sideMarkup, value } from '../../lib/two-pixel.ts'
+
+  for (const root of document.querySelectorAll<HTMLElement>('.gs-two')) {
+    const joint = root.querySelector<HTMLElement>('[data-joint]')!
+    const side = root.querySelector<HTMLElement>('[data-side]')!
+    const slider = root.querySelector<HTMLInputElement>('input')!
+    const output = root.querySelector('output')!
+    const fixed = root.querySelector<HTMLElement>('[data-fixed]')!
+    const count = root.querySelector<HTMLElement>('[data-count]')!
+    const announce = announcer(root.querySelector<HTMLElement>('[data-readout]')!)
+    const state = JSON.parse(root.dataset.first!)
+    const schedule = redrawer(() => {
+      joint.innerHTML = jointMarkup(state.pair, state.k)
+      side.innerHTML = sideMarkup(state.pair, state.k)
+      const flux = value(state.pair, state.k).toFixed(3)
+      output.textContent = flux
+      slider.value = String(state.k)
+      slider.setAttribute('aria-valuetext', flux)
+      fixed.textContent = String(pair(state.pair).j)
+      count.textContent = pairLabel(state.pair)
+      announce(readout(state.pair, state.k))
+    })
+    slider.addEventListener('input', () => {
+      state.k = Number(slider.value)
+      schedule()
+    })
+    // A drag across the joint plot sets the fixed flux under the pointer.
+    function drag(event: PointerEvent) {
+      const box = joint.getBoundingClientRect()
+      state.k = kAt(state.pair, (event.clientX - box.left) / box.width)
+      schedule()
+    }
+    let dragging = false
+    joint.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return
+      dragging = true
+      joint.setPointerCapture(event.pointerId)
+      drag(event)
+    })
+    joint.addEventListener('pointermove', (event) => dragging && drag(event))
+    const release = () => (dragging = false)
+    joint.addEventListener('pointerup', release)
+    joint.addEventListener('pointercancel', release)
+    root.querySelector('[data-action="next"]')!.addEventListener('click', () => {
+      state.pair = (state.pair + 1) % pairs.pairs.length
+      schedule()
+    })
+  }
+</script>
+
+<style>
+  .gs-panes {
+    display: grid;
+    grid-template-columns: minmax(0, 19.25rem) 5rem;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+  .gs-explainer .gs-plot.gs-joint {
+    height: auto;
+    aspect-ratio: 1;
+    cursor: ew-resize;
+  }
+  /* The side plot is as high as the joint plot, and shares its vertical axis. */
+  .gs-explainer .gs-plot.gs-side {
+    height: auto;
+    margin-inline-start: 0;
+  }
+  @container (max-width: 22rem) {
+    .gs-panes {
+      grid-template-columns: minmax(0, 1fr) 3.5rem;
+    }
+  }
+</style>

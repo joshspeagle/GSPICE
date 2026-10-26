@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { unified } from '@astrojs/markdown-remark'
 import starlight from '@astrojs/starlight'
 import { defineConfig } from 'astro/config'
@@ -7,6 +8,7 @@ import remarkHeadingId from 'remark-heading-id'
 import remarkMath from 'remark-math'
 import linksValidator from 'starlight-links-validator'
 import { rehypeKnownCitations, rehypeReferencesPage } from './plugins/citations.mjs'
+import { rehypeTermCards } from './plugins/terms.mjs'
 
 const base = '/GSPICE'
 // The Sphinx site served each page at <page>.html. Each old page maps to its current
@@ -39,6 +41,17 @@ const redirects = Object.fromEntries(
   ]),
 )
 const bibliography = './references.bib'
+// The glossary page, the source of the term cards.
+const glossary = fileURLToPath(new URL('./src/content/docs/concepts/glossary.md', import.meta.url))
+// The remark and rehype plugins of every page, and of the term cards of the glossary.
+// remark-heading-id sets the ids of the API headings: {#gspice.fit}.
+const remarkPlugins = [remarkMath, remarkHeadingId]
+const rehypePlugins = [
+  rehypeKatex,
+  [rehypeCitation, { bibliography, linkCitations: true }],
+  rehypeKnownCitations,
+  [rehypeReferencesPage, { href: `${base}/references/` }],
+]
 
 export default defineConfig({
   site: 'https://joshspeagle.github.io',
@@ -47,14 +60,8 @@ export default defineConfig({
   redirects,
   markdown: {
     processor: unified({
-      // remark-heading-id sets the ids of the API headings: {#gspice.fit}.
-      remarkPlugins: [remarkMath, remarkHeadingId],
-      rehypePlugins: [
-        rehypeKatex,
-        [rehypeCitation, { bibliography, linkCitations: true }],
-        rehypeKnownCitations,
-        [rehypeReferencesPage, { href: `${base}/references/` }],
-      ],
+      remarkPlugins,
+      rehypePlugins: [...rehypePlugins, [rehypeTermCards, { glossary, remarkPlugins, rehypePlugins }]],
     }),
   },
   integrations: [

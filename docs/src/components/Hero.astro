@@ -2,7 +2,7 @@
 // The opening of a page with a hero: the headline and the tagline. The home page adds
 // the install line and the mask explainer; the 404 page shows only the first two.
 import { Code } from '@astrojs/starlight/components'
-import MaskExplainer from './MaskExplainer.astro'
+import MaskExplainer from './explainers/MaskExplainer.astro'
 
 const { id, entry } = Astro.locals.starlightRoute
 const { title = entry.data.title, tagline } = entry.data.hero ?? {}

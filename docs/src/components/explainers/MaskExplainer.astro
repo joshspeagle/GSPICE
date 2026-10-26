@@ -1,0 +1,127 @@
+---
+// V-1, the mask explainer: drag or resize a masked block over a spectrum, and see the
+// prediction of the hidden pixels from the others. The full version adds the covariance
+// square, with the rows and columns of the block marked. The build renders the first
+// frame, so the figure shows without JavaScript; src/lib/mask-explainer.ts redraws it on
+// each input. docs/scripts/explainers.py writes the data.
+import data from '../../data/explainer.json'
+import { countLabel } from '../../lib/explainer.ts'
+import { condition } from '../../lib/gauss.ts'
+import { heatLegend, heatmapMarkup } from '../../lib/heatmap.ts'
+import { squareStyle } from '../../lib/mask-explainer.ts'
+import { axesFor, legend, plotMarkup, readout } from '../../lib/spectrum-plot.ts'
+import '../../styles/explainer.css'
+
+interface Props {
+  full?: boolean
+}
+const { full = false } = Astro.props
+const hint = full ? 'gs-mask-hint-full' : 'gs-mask-hint'
+
+// The first frame, which the script starts from.
+const first = { example: 0, start: 50, width: 20 }
+const { flux, truth } = data.examples[first.example]
+const { mu, sd } = condition(data.mean, data.cov, flux, first.start, first.width)
+const axes = axesFor([...data.examples.flatMap((example) => [...example.flux, ...example.truth]), ...data.band], data.npix)
+const spectrum = { flux, start: first.start, width: first.width, mu, sd }
+---
+
+<figure
+  class:list={['gs-explainer', 'gs-mask', 'not-content', { 'gs-full': full }]}
+  data-axes={JSON.stringify(axes)}
+  data-first={JSON.stringify(first)}
+>
+  <p class="gs-hint" id={hint}>
+    Drag the grey block, or drag its edges to resize it. With the plot focused, the arrow
+    keys move the block, and Shift with an arrow key resizes it.
+  </p>
+  <div class="gs-panes">
+    <div
+      class="gs-plot"
+      data-npix={data.npix}
+      data-spectrum
+      tabindex="0"
+      role="group"
+      aria-label="Spectrum with a masked block"
+      aria-describedby={hint}
+      set:html={plotMarkup(spectrum, axes)}
+    />
+    {
+      full && (
+        <div
+          class="gs-plot gs-square"
+          style={squareStyle(first.start, first.width)}
+          role="img"
+          aria-label="Correlation map of the model, with the rows and columns of the masked pixels marked"
+          set:html={heatmapMarkup(data.cov)}
+        />
+      )
+    }
+  </div>
+  <div class="gs-controls">
+    <button type="button" data-action="truth" aria-pressed="false">Show flux without noise</button>
+    <button type="button" data-action="next">Next spectrum</button>
+    <span data-count>{countLabel('Spectrum', 0, data.examples.length)}</span>
+  </div>
+  <p class="gs-readout" aria-live="polite" data-readout>
+    {readout({ ...spectrum, truth })}
+  </p>
+  <noscript><p class="gs-hint">The block moves only with JavaScript on.</p></noscript>
+  <figcaption class="gs-caption">
+    <Fragment set:html={legend(['obs', 'pred', 'b1', 'b2', 'truth'])} />
+    {full && <Fragment set:html={heatLegend} />}
+    <p>
+      The prediction is that of <code>gspice.infill</code> with a model fitted to {data.ntrain} simulated
+      spectra of {data.npix} pixels. The ±1σ and ±2σ bands include the noise of the observed
+      flux.{' '}
+      {
+        full &&
+          'The square shows the correlation of each pair of pixels. The prediction reads the marked rows and columns of the masked pixels.'
+      }
+    </p>
+  </figcaption>
+</figure>
+
+<script>
+  import { mountMaskExplainer } from '../../lib/mask-explainer.ts'
+
+  document.querySelectorAll<HTMLElement>('.gs-mask').forEach(mountMaskExplainer)
+</script>
+
+<style>
+  /* The covariance square sits beside the plot where both fit, and below it otherwise. */
+  .gs-explainer .gs-plot.gs-square {
+    width: min(100% - 2.25rem, 16rem);
+    height: auto;
+    aspect-ratio: 1;
+    touch-action: auto;
+  }
+  @container (min-width: 34rem) {
+    .gs-full .gs-panes {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 13.5rem;
+      gap: 1.25rem;
+      align-items: start;
+    }
+  }
+  /* The rows and the columns of the masked pixels: flat tints with a solid edge. */
+  .gs-square::before,
+  .gs-square::after {
+    content: '';
+    position: absolute;
+    background: color-mix(in srgb, var(--gs-mask-fill) 65%, transparent);
+    outline: 1px solid var(--gs-mask-edge);
+    outline-offset: -1px;
+    pointer-events: none;
+  }
+  .gs-square::before {
+    inset-inline: 0;
+    top: var(--start);
+    height: var(--width);
+  }
+  .gs-square::after {
+    inset-block: 0;
+    left: var(--start);
+    width: var(--width);
+  }
+</style>

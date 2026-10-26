@@ -17,7 +17,7 @@ Dark mode is designed first, on a cool blue-black ground. Light mode keeps the n
 | `--gs-rule-2` | #3A4868 | #A9B4C4 | solid edges, inactive cells |
 | `--gs-ink` | #E8ECF2 | #111827 | text |
 | `--gs-ink-2` | #A7B1C2 | #4A5568 | secondary text |
-| `--gs-ink-3` | #7F8AA0 | #5F6B7F | tertiary text, interpolated flux, P_GO cells |
+| `--gs-ink-3` | #7F8AA0 | #5F6B7F | tertiary text, interpolated flux, P_GO cells, joint-plot points |
 | `--gs-accent` | #F0592A | #F0592A | predicted cells and marks; never text |
 | `--gs-accent-text` | #FF8A5C | #C2410C | links and orange text |
 | `--gs-pred` | #FF7A45 | #E2481A | prediction line |
@@ -123,13 +123,17 @@ The theme of #142 builds the header, the sidebar, "On this page", the page title
 | Page title | A breadcrumb of the page's group, then the title. API pages set the title in mono. |
 | Callout | A surface with a square label, "Note" or "Warning", and a 3 px left edge in ink-3 or orange. |
 | Code and output | The code sits on a surface with a header bar that names the language and holds the word "Copy". An output block has the flag `output` on its fence, as in `text output`: it joins the code block above it on the ground, with a square "Output" tag and no header bar. |
-| Term | A dotted underline. On hover or focus, a card shows the glossary entry and its link. |
+| Term | A dotted underline. On hover or focus, a card shows the glossary entry as plain text; the term itself links to the entry. |
 | Page card | A surface with a solid top edge, a cell glyph, the title, one line, and the name of the page it opens. |
 | Label | A small square tag in mono: function, class, the version. |
 | Previous and next | Two tiles with a solid top edge. |
 | Figure | A rule above, a hairline below, and the caption in secondary text. The legend uses cell swatches. |
 | Decision chart | Questions on surfaces with a 3 px top rule, model tiles with a 3 px ink left edge, and "no" connectors from each question down to the next (ModelChart). |
 | Step list | Numbered rows, each with a strip of cells (CalibrationSteps). |
+| Explainer | A surface with a solid top edge: a hint, the plots, the controls, a live readout and a caption (`src/components/explainers/`). Sliders are the browser's range inputs, coloured ink. The current step of a stepper has a 3 px ink left edge, as a pressed button. |
+| Covariance square | The heat map of the correlation of a model, one cell per pixel pair. A masked block marks its rows and columns as flat tints with a solid edge; a selected pair is a 2 px ink outline. |
+| Joint plot | Two pixels against each other on a square plot: training spectra as ink-3 square points, the 1σ and 2σ ellipses of the model in ink-2, a fixed value as an ink line, and the conditional mean and its ±1σ and ±2σ as orange cells. |
+| Mask strip | One row of cells per pixel set under a spectrum, in the cell states below: replaced pixels in `--gs-accent`, ignored pixels in the mask fill with its edge, and flagged blocks in `--gs-rule-2`. |
 
 ## Figures
 
@@ -138,6 +142,8 @@ The theme of #142 builds the header, the sidebar, "On this page", the page title
 - Pixel boundaries inside the masked block are hidden when a pixel is narrower than 4 px.
 - A draw is a thin orange step line, drawn under the prediction.
 - The reference curve of a histogram or a plot, class `ref`, and a threshold line, class `edge`, are thin ink-2 lines.
+- In the guard window explainer, a defect is marked by a thick ink-2 bar along the top of the plot.
+- z-scores are bars per pixel: ink-3, and ink beyond the threshold, whose lines are ink-2.
 
 The figures of the Concepts pages add these marks:
 
