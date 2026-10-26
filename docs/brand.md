@@ -137,7 +137,7 @@ The theme of #142 builds the header, the sidebar, "On this page", the page title
 
 ## Figures
 
-- Scripts draw every figure from data, as SVG in the theme tokens, so one file serves both themes. The figures of tutorials/fitting still come in light and dark pairs until they are redrawn.
+- Scripts draw every figure from data, as SVG in the theme tokens, so one file serves both themes.
 - All text in a figure is HTML at 12 px or more, placed over the plot, so it does not shrink on a phone.
 - Pixel boundaries inside the masked block are hidden when a pixel is narrower than 4 px.
 - A draw is a thin orange step line, drawn under the prediction.
@@ -145,7 +145,7 @@ The theme of #142 builds the header, the sidebar, "On this page", the page title
 - In the guard window explainer, a defect is marked by a thick ink-2 bar along the top of the plot.
 - z-scores are bars per pixel: ink-3, and ink beyond the threshold, whose lines are ink-2.
 
-The figures of the Concepts pages add these marks:
+The figures of the Concepts pages and of the worked example add these marks:
 
 | Mark | Class | Form |
 |---|---|---|
@@ -153,7 +153,8 @@ The figures of the Concepts pages add these marks:
 | Guard window | `guard` | A flat `--gs-rule` fill, without an edge |
 | Artifact | `span-mark` | A 4 px ink-2 bar along the top of the plot area |
 | Pixels a clipping pass flags | `newflag` | A flat `--gs-rule-2` fill |
-| Scatter point | `pt held`, `pt in` | An 8 px square, solid ink, or hollow with a 1.5 px ink-2 outline |
+| Scatter point | `pt solid`, `pt hollow` | An 8 px square, solid ink, or hollow with a 1.5 px ink-2 outline; the legend names what each one marks |
+| Error bar | `err` | A 1 px ink-2 vertical line |
 
 A strip of pixel cells, class `gs-cells`, gives each cell one of these states:
 

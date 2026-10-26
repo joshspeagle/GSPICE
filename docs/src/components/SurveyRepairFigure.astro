@@ -1,0 +1,62 @@
+---
+// The worked example: a window of one test spectrum with a cosmic ray, after repair,
+// with its spectrum without artifacts. docs/scripts/survey.py writes the data.
+import data from '../data/survey-repair.json'
+import { axesFor, bandCell, blockMarkup, gridPath, legend, line, plotSvg, spanMark, steps, tickLabels, waveTicks, yLabels, yScale } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { flux, clean, cosmic, replaced, mu, sd, wave } = data
+const npix = flux.length
+// The replaced pixels are one run.
+const start = replaced[0]
+const width = replaced.length
+const axes = axesFor([...flux, ...clean, ...mu.flatMap((m, k) => [m - 2 * sd[k], m + 2 * sd[k]])], npix)
+const y = yScale(axes)
+const cells = replaced.map((i, k) => bandCell(i, mu[k], sd[k], 2, y) + bandCell(i, mu[k], sd[k], 1, y)).join('')
+const mean = new Float64Array(npix)
+mean.set(mu, start)
+const block = blockMarkup(start, width, npix)
+// The pixel boundaries inside the block; plot.css hides them by data-npix where a pixel
+// is narrower than 4 px.
+const gaps = replaced.slice(1).map((i) => `M${i},0V100`).join('')
+const svg = plotSvg(
+  gridPath(axes.yticks, y, npix) +
+    block.fill +
+    cells +
+    line('cellgap', gaps) +
+    block.edge +
+    line('truth', steps(clean, 0, npix, y)) +
+    line('obs', steps(flux, 0, npix, y)) +
+    line('pred', steps(mean, start, start + width, y)),
+  npix,
+)
+const labels = tickLabels(yLabels(axes, y), waveTicks(wave[0], wave[1], npix, 25))
+const error = Math.max(...replaced.map((i, k) => Math.abs(mu[k] - clean[i])))
+---
+
+<figure class="gs-fig not-content">
+  <div
+    class="gs-plot"
+    data-npix={npix}
+    role="img"
+    aria-label={`Test spectrum ${data.spectrum} from ${wave[0]} to ${wave[1]} Å: a cosmic ray at ${cosmic.length} pixels, replaced by repair at ${width} pixels`}
+    set:html={svg + spanMark(cosmic[0], cosmic.length, npix) + block.grips + labels}
+  />
+  <p class="axis">rest-frame wavelength (Å)</p>
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        'obs',
+        ['blk', 'replaced by repair'],
+        'pred',
+        'b1',
+        'b2',
+        ['truth', 'flux without artifacts'],
+        ['span-key', 'cosmic ray'],
+      ])}
+    />
+    <p>
+      {npix} pixels of the test spectrum <code>flux[test][{data.spectrum}]</code>, at S/N {data.snr}. A cosmic ray reaches {cosmic.length} pixels, and <code>repair</code> replaced {width}. The prediction differs from the flux without artifacts by at most {error.toFixed(3)}, against a mean standard deviation of {(sd.reduce((a, b) => a + b) / width).toFixed(3)}.
+    </p>
+  </figcaption>
+</figure>

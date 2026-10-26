@@ -385,7 +385,7 @@ def runs(mask: NDArray[np.bool_]) -> list[list[int]]:
 
 
 def repair_guide() -> None:
-    page = run("guides/repair.mdx")
+    page, _ = run("guides/repair.mdx")
     model, test, result = page["model"], page["test"], page["result"]
     steps = replay(model, test, result)
     # Step 4 only adds ignored pixels, and the pixels of a flagged block are replaced.
@@ -461,8 +461,10 @@ def repair_guide() -> None:
     write("repair-steps.json", data)
 
 
-def run(page: str) -> dict[str, Any]:
-    # The Python blocks of the page, run as one script, as tests/test_docs.py does.
+def run(page: str, data: Path | None = None) -> tuple[dict[str, Any], str]:
+    # The Python blocks of the page, run as one script, as tests/test_docs.py does, in a
+    # directory that holds data, if given, as spectra.npz. Returns the namespace of the
+    # script and what it printed.
     code = "".join(
         re.findall(
             r"```python\n(.*?)```",
@@ -472,14 +474,18 @@ def run(page: str) -> dict[str, Any]:
     )
     # ruff forbids exec (S102), so the code runs from a file.
     with tempfile.TemporaryDirectory() as tmp:
+        if data is not None:
+            (Path(tmp) / "spectra.npz").symlink_to(data.resolve())
         script = Path(tmp) / "page.py"
         script.write_text(code, encoding="utf-8")
-        with contextlib.redirect_stdout(io.StringIO()):
-            return runpy.run_path(str(script))
+        out = io.StringIO()
+        with contextlib.chdir(tmp), contextlib.redirect_stdout(out):
+            namespace = runpy.run_path(str(script))
+    return namespace, out.getvalue()
 
 
 def quickstart() -> None:
-    page = run("start/quickstart.mdx")
+    page, _ = run("start/quickstart.mdx")
     test, result, mask = page["test"], page["result"], page["mask"][SHOWN]
     data = {
         "spectrum": SHOWN,
@@ -497,7 +503,7 @@ def quickstart() -> None:
 def infill_guide() -> None:
     # `result` is the last infill of the page, of the gap; the draws are those of its
     # multiple imputation, of spectrum 0.
-    page = run("guides/infill.mdx")
+    page, _ = run("guides/infill.mdx")
     test, gap = page["test"], page["gap"]
     data = {
         "snr": round(float(test.snr[0])),
@@ -512,7 +518,7 @@ def infill_guide() -> None:
 
 
 def outliers_guide() -> None:
-    page = run("guides/outliers.mdx")
+    page, _ = run("guides/outliers.mdx")
     z = page["z"][page["clean"]].ravel()
     counts, _ = np.histogram(np.clip(z, Z_EDGES[0], Z_EDGES[-1]), Z_EDGES)
     # The expected count of each bin for z ~ N(0, 1), with the tails in the end bins.
@@ -528,13 +534,13 @@ def outliers_guide() -> None:
 
 
 def write(name: str, data: dict[str, Any]) -> None:
+    OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / name
     path.write_text(json.dumps(data, separators=(",", ":")) + "\n")
     print(f"{path.relative_to(DOCS)}: {path.stat().st_size / 1000:.0f} kB")
 
 
 def main() -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
     stored, train, ivar, a = explainer(np.random.default_rng(11))
     covariance_explorer(stored, train)
     two_pixel(stored, ivar, a)

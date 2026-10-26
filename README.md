@@ -50,8 +50,8 @@ The documentation is at [joshspeagle.github.io/GSPICE](https://joshspeagle.githu
 
 ## The 2022 package
 
-`gspice.legacy` keeps the 2022 functions, with their signatures and results: see [Legacy interface](https://joshspeagle.github.io/GSPICE/reference/legacy/). The 2022 names at the top level of `gspice`, such as `gspice.gp_interp`, are deprecated. [Migrating from the 2022 interface](https://joshspeagle.github.io/GSPICE/tutorials/migration/) lists their replacements, and `CHANGELOG.md` lists the behaviour changes of `gspice.legacy`.
+`gspice.legacy` keeps the 2022 functions, with their signatures and results: see [Legacy interface](https://joshspeagle.github.io/GSPICE/reference/legacy/). The 2022 names at the top level of `gspice`, such as `gspice.gp_interp`, are deprecated. [Migrate from the 2022 package](https://joshspeagle.github.io/GSPICE/legacy/migrate/) gives their replacements and the units of their outputs, and `CHANGELOG.md` lists the behaviour changes of `gspice.legacy`.
 
 ## Citation
 
-The method is in Finkbeiner, Speagle & Karim, [arXiv:2511.16754](https://arxiv.org/abs/2511.16754). The IDL and Julia implementations, notebooks and notes of 2021 and 2022 are in the upstream repository [dfink/gspice](https://github.com/dfink/gspice/tree/1fbab9f).
+The method is in Finkbeiner, Speagle & Karim, [arXiv:2511.16754](https://arxiv.org/abs/2511.16754). [Cite GSPICE](https://joshspeagle.github.io/GSPICE/reference/cite/) gives the BibTeX entry and the data to cite for the worked example. The IDL and Julia implementations, notebooks and notes of 2021 and 2022 are in the upstream repository [dfink/gspice](https://github.com/dfink/gspice/tree/1fbab9f).

@@ -10,7 +10,7 @@ state each setup.
 from typing import Any
 
 import numpy as np
-from explainers import OUT, write
+from explainers import write
 from numpy.typing import ArrayLike, NDArray
 from scipy.ndimage import binary_dilation
 
@@ -377,7 +377,6 @@ def shifted() -> None:
 
 
 def main() -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
     units()
     clipping()
     snr()

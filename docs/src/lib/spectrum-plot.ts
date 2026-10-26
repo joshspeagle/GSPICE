@@ -107,12 +107,23 @@ export function signed(v: number, digits: number) {
   return v.toFixed(digits).replace('-', '−')
 }
 
+// The y ticks of axes, with their labels.
+export function yLabels(axes: Pick<Axes, 'yticks' | 'digits'>, y: (v: number) => number): Tick[] {
+  return axes.yticks.map((v) => [y(v), signed(v, axes.digits)])
+}
+
 // The tick labels of axes, with the pixel ticks along npix pixels.
 export function axisLabels(axes: Axes, npix: number, y: (v: number) => number) {
   return tickLabels(
-    axes.yticks.map((v) => [y(v), signed(v, axes.digits)]),
+    yLabels(axes, y),
     axes.xticks.map((i) => [(100 * i) / npix, String(i)]),
   )
+}
+
+// The bar along the top of the plot area over pixels start to start + width - 1, in a
+// plot of npix pixels from pixel x0.
+export function spanMark(start: number, width: number, npix: number, x0 = 0) {
+  return `<span class="span-mark" style="left:${(100 * (start - x0)) / npix}%;width:${(100 * width) / npix}%"></span>`
 }
 
 // The ±k sd cell of a prediction mu at x, width units wide.
@@ -167,18 +178,22 @@ export function plotMarkup(spectrum: Spectrum, axes: Axes): string {
 
 type Tick = readonly [position: number, text: string]
 
+// The x ticks at the multiples of step Å, for npix pixels on a grid uniform in log
+// wavelength, with the centre of the first pixel at w0 and that of the last at w1.
+export function waveTicks(w0: number, w1: number, npix: number, step: number): Tick[] {
+  const pixel = (w: number) => ((npix - 1) * Math.log(w / w0)) / Math.log(w1 / w0)
+  const ticks: Tick[] = []
+  for (let w = Math.ceil(w0 / step) * step; w <= w1; w += step) ticks.push([(100 * (pixel(w) + 0.5)) / npix, String(w)])
+  return ticks
+}
+
 // The HTML labels of the y ticks, at a percentage from the top of the plot area, and of
-// the x ticks, at a percentage from its left; the first and last x labels stay inside.
+// the x ticks, at a percentage from its left; an x label within 5% of an end stays inside.
 export function tickLabels(yticks: readonly Tick[], xticks: readonly Tick[]): string {
-  const last = xticks.length - 1
+  const side = (left: number) => (left < 5 ? ' first' : left > 95 ? ' last' : '')
   return (
     yticks.map(([top, text]) => `<span class="ytick" style="top:${top.toFixed(2)}%">${text}</span>`).join('') +
-    xticks
-      .map(([left, text], k) => {
-        const cls = k === 0 ? 'xtick first' : k === last ? 'xtick last' : 'xtick'
-        return `<span class="${cls}" style="left:${left.toFixed(3)}%">${text}</span>`
-      })
-      .join('')
+    xticks.map(([left, text]) => `<span class="xtick${side(left)}" style="left:${left.toFixed(3)}%">${text}</span>`).join('')
   )
 }
 

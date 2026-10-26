@@ -4,7 +4,7 @@
 // from beyond its guard window does not follow it. docs/scripts/concepts.py writes the
 // data.
 import data from '../data/concepts-blockscan.json'
-import { axesFor, axisLabels, bandCell, blockMarkup, gridPath, legend, line, plotSvg, steps, yScale } from '../lib/spectrum-plot.ts'
+import { axesFor, axisLabels, bandCell, blockMarkup, gridPath, legend, line, plotSvg, spanMark, steps, yScale } from '../lib/spectrum-plot.ts'
 import '../styles/plot.css'
 
 const { npix, flux, truth, block } = data
@@ -15,10 +15,9 @@ const guardEnd = Math.min(npix, end + block.nguard)
 const bands = block.mu.flatMap((m, k) => [m - 2 * block.sd[k], m + 2 * block.sd[k]])
 const axes = axesFor([...flux, ...truth, ...data.pixelwise, ...bands], npix)
 const y = yScale(axes)
-const left = (i: number) => (100 * i) / npix
 const grid = gridPath(axes.yticks, y, npix)
 const spectrum = line('obs', steps(flux, 0, npix, y)) + line('truth', steps(truth, 0, npix, y))
-const marks = `<span class="span-mark" style="left:${left(first)}%;width:${left(length)}%"></span>` + axisLabels(axes, npix, y)
+const marks = spanMark(first, length, npix) + axisLabels(axes, npix, y)
 
 const pixelwise = plotSvg(grid + spectrum + line('pred', steps(data.pixelwise, 0, npix, y)), npix) + marks
 

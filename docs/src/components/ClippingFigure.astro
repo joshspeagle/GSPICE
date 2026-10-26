@@ -3,7 +3,7 @@
 // in-sample |z| in each pass, the threshold of the pass, the pixels that earlier passes
 // masked and the pixels that the pass flags. docs/scripts/concepts.py writes the data.
 import data from '../data/concepts-clipping.json'
-import { axesFor, gridPath, legend, line, plotSvg, signed, steps, tickLabels, xScale, yScale } from '../lib/spectrum-plot.ts'
+import { axesFor, gridPath, legend, line, plotSvg, spanMark, steps, tickLabels, xScale, yLabels, yScale } from '../lib/spectrum-plot.ts'
 import '../styles/plot.css'
 
 const { npix, start, width, passes } = data
@@ -35,9 +35,9 @@ const axes = axesFor(data.flux.slice(lo, lo + shown), shown)
 const yf = yScale(axes)
 const spectrum =
   plotSvg(gridPath(axes.yticks, yf, npix) + line('obs', steps(data.flux, 0, npix, yf)), shown, lo) +
-  `<span class="span-mark" style="left:${left(start)}%;width:${left(start + width) - left(start)}%"></span>` +
+  spanMark(start, width, shown, lo) +
   tickLabels(
-    axes.yticks.map((v) => [yf(v), signed(v, axes.digits)]),
+    yLabels(axes, yf),
     xticks.map((i) => [left(i), String(i)]),
   )
 
