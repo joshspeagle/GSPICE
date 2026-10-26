@@ -1,0 +1,66 @@
+---
+// V-16: why S/N bins. In scaled units, the variance between spectra of the noise-free
+// flux at one pixel grows with the S/N, while the noise variance stays the same. Each
+// step is a tenth of the spectra by S/N. docs/scripts/concepts.py writes the data.
+import data from '../data/concepts-snr.json'
+import { gridPath, legend, line, plotSvg, tickLabels, xScale, yScale } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { bins, edges } = data
+// Log axes: S/N from 20 to 400, so that the end ticks sit at the ends, and variance
+// from 0.3 to 10^4.
+const logx = xScale({ low: Math.log10(20), high: Math.log10(400) })
+const logy = yScale({ low: Math.log10(0.3), high: 4 })
+// x in the units of the SVG, 1000 wide, and y.
+const x = (snr: number) => 10 * logx(Math.log10(snr))
+const y = (v: number) => logy(Math.log10(v))
+const path = (key: 'signal' | 'noise') =>
+  bins.map((b, k) => `${k === 0 ? 'M' : 'L'}${x(b.low).toFixed(1)},${y(b[key]).toFixed(2)}H${x(b.high).toFixed(1)}`).join('')
+const decades = [0, 1, 2, 3, 4]
+const svg = plotSvg(
+  gridPath(
+    decades.map((k) => 10 ** k),
+    y,
+    1000,
+  ) +
+    line('edge', edges.map((e) => `M${x(e).toFixed(1)},0V100`).join('')) +
+    line('ref', path('noise')) +
+    line('obs', path('signal')),
+  1000,
+)
+const power = (k: number) => (k < 4 ? String(10 ** k) : '10⁴')
+const labels = tickLabels(
+  decades.map((k) => [y(10 ** k), power(k)]),
+  [20, 50, 100, 200, 400].map((s) => [x(s) / 10, String(s)]),
+)
+const first = bins[0]
+const top = bins.at(-1)!
+---
+
+<figure class="gs-fig not-content">
+  <div
+    class="gs-plot"
+    role="img"
+    aria-label={`Variance at pixel ${data.pixel} against S/N: the signal part rises from ${first.signal} to ${top.signal}, the noise part stays near ${first.noise}`}
+    set:html={svg + labels}
+  />
+  <p class="axis">signal-to-noise ratio of the spectrum (log scale)</p>
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        ['obs', 'variance of the noise-free flux'],
+        ['ref', 'variance of the noise'],
+        ['edge', 'edges of snr_bins=3'],
+      ])}
+    />
+    <p>
+      The variance between spectra at pixel {data.pixel}, the core of a line, in scaled units squared, for {data.nspec} simulated spectra of {data.npix} pixels. Each step holds a tenth of the spectra by S/N. The noise variance stays near {first.noise}, while the variance of the noise-free flux grows from {first.signal} to {top.signal}. One covariance of all spectra mixes these. The vertical lines are the edges at S/N {edges[0]} and {edges[1]} that <code>fit(..., snr_bins=3)</code> puts between three bins of equal count.
+    </p>
+  </figcaption>
+</figure>
+
+<style>
+  .gs-plot {
+    --gs-plot-height: 14rem;
+  }
+</style>

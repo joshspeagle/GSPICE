@@ -1,0 +1,134 @@
+---
+// The pixel sets of a prediction on a strip of 24 pixels: pixelwise, infill or the block
+// scan. Without kind, V-20: for each of the three, the rows of the precision matrix P
+// that the prediction reads, P_GG and P_GO, beside the vector x, whose values in G it
+// does not read.
+import { legend } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+interface Props {
+  kind?: Kind
+}
+type Kind = 'pixelwise' | 'infill' | 'block'
+
+const { kind } = Astro.props
+const npix = 24
+const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, k) => a + k)
+const pixels = range(0, npix - 1)
+// The pixels of each set, by the class of their cell; the other pixels are the
+// conditioning pixels, and G holds all the listed ones.
+const sets: Record<Kind, Partial<Record<'replaced' | 'guard' | 'ignored' | 'bad', number[]>>> = {
+  pixelwise: { replaced: [12], guard: range(9, 15).filter((i) => i !== 12) },
+  infill: { replaced: [5, 6, 7, 16], ignored: [8], bad: [19] },
+  block: { replaced: range(10, 15), guard: [8, 9, 16, 17] },
+}
+const words: Record<Kind, Record<string, string>> = {
+  pixelwise: { replaced: 'pixel i, predicted', guard: 'its guard window: not conditioned on' },
+  infill: {
+    replaced: 'replaced pixels M',
+    ignored: 'ignored pixel: not conditioned on, keeps its value',
+    bad: 'bad pixel: never conditioned on',
+  },
+  block: { replaced: 'block A, predicted', guard: 'its guard window: not conditioned on' },
+}
+const titles: Record<Kind, string> = {
+  pixelwise: 'Pixelwise: G is the guard window of pixel i',
+  infill: 'Infill: G holds the replaced, ignored and bad pixels',
+  block: 'Block scan: G is the block and its guard window',
+}
+// For each kind, the class of each pixel's cell and the set G, built once.
+const kinds = (['pixelwise', 'infill', 'block'] as Kind[]).map((k) => {
+  const cells = pixels.map(() => 'kept')
+  for (const [cls, members] of Object.entries(sets[k])) for (const i of members) cells[i] = cls
+  const G = new Set(pixels.filter((i) => cells[i] !== 'kept'))
+  return { kind: k, cells, G, listed: [...G].join(', ') }
+})
+const shown = kinds.find((k) => k.kind === kind)
+---
+
+{
+  shown ? (
+    <figure class="gs-fig not-content">
+      <span class="gs-cells strip" style={`--n: ${npix}`} role="img" aria-label={`${shown.kind} prediction on ${npix} pixels: G holds pixels ${shown.listed}`}>
+        {shown.cells.map((cls) => (
+          <i class={cls} />
+        ))}
+      </span>
+      <figcaption class="gs-caption">
+        <Fragment set:html={legend([...Object.entries(words[shown.kind]), ['kept', 'conditioning pixels O']])} />
+      </figcaption>
+    </figure>
+  ) : (
+    <figure class="gs-fig not-content">
+      <div class="matrices">
+        {kinds.map(({ kind: k, G, listed }) => (
+          <div class="matrix" role="img" aria-label={`${titles[k]}: pixels ${listed}; the prediction reads the rows G of P and the values of x outside G`}>
+            <p class="title">{titles[k]}</p>
+            <span class="gs-cells p" style={`--n: ${npix}`} aria-hidden="true">
+              {pixels.flatMap((r) => pixels.map((c) => <i class={G.has(r) ? (G.has(c) ? 'gg' : 'go') : 'oo'} />))}
+            </span>
+            <span class="x" style={`--n: ${npix}`} aria-hidden="true">
+              {pixels.map((r) => (
+                <i class={G.has(r) ? 'unread' : 'kept'} />
+              ))}
+            </span>
+            <span class="name" aria-hidden="true">P</span>
+            <span class="name" aria-hidden="true">x</span>
+          </div>
+        ))}
+      </div>
+      <figcaption class="gs-caption">
+        <Fragment
+          set:html={legend([
+            ['gg', 'P<sub>GG</sub>, factored'],
+            ['go', 'P<sub>GO</sub>, multiplied by x<sub>O</sub>'],
+            ['oo', 'not read'],
+            ['unread', 'x<sub>G</sub>, not read'],
+            ['kept', 'x<sub>O</sub>'],
+          ])}
+        />
+        <p>
+          Three predictions on {npix} pixels. Each row and column of P is one pixel. A prediction reads the rows G of P and the values of x outside G.
+        </p>
+      </figcaption>
+    </figure>
+  )
+}
+
+<style>
+  .strip {
+    max-width: 30rem;
+  }
+  .strip i {
+    aspect-ratio: 1;
+  }
+  .matrices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+  .matrix {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 0.5rem;
+    gap: 0.25rem 0.5rem;
+    max-width: 16rem;
+    align-content: start;
+  }
+  .title {
+    grid-column: 1 / -1;
+  }
+  .p i {
+    aspect-ratio: 1;
+  }
+  .x {
+    display: grid;
+    grid-template-rows: repeat(var(--n), minmax(0, 1fr));
+    gap: 1px;
+  }
+  .name {
+    color: var(--gs-ink-2);
+    font-size: 0.875rem;
+    text-align: center;
+  }
+</style>

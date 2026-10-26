@@ -1,0 +1,164 @@
+---
+title: Numerics
+description: How GSPICE computes its predictions, what they cost, how it checks a covariance, and how fast it runs.
+---
+
+import PixelSets from '../../../components/PixelSets.astro'
+
+How is a prediction computed, how fast, and how accurately? This page states the linear
+algebra behind [Prediction](/GSPICE/concepts/prediction/) and
+[Detection](/GSPICE/concepts/detection/), its cost, its checks and measured times.
+
+## The precision form
+
+The conditional distribution of [The model](/GSPICE/concepts/model/) needs the inverse of
+$C_{OO}$, the covariance of the conditioning pixels. That set changes with every
+prediction and is nearly all of the pixels, so each factorization would cost about
+npix³/3 flops. GSPICE uses the
+[precision matrix](/GSPICE/concepts/glossary/#term-precision-matrix) $P = C^{-1}$ instead.
+The density of $x$ is proportional to $\exp(-\tfrac12 x^\mathsf{T} P x)$. As a function
+of $x_G$, it is proportional to
+
+$$
+\exp\!\left(-\tfrac12 x_G^\mathsf{T} P_{GG}\, x_G - x_G^\mathsf{T} P_{GO}\, x_O\right) ,
+$$
+
+so
+
+$$
+x_G \mid x_O \sim \mathcal{N}\!\left(-P_{GG}^{-1} P_{GO}\, x_O,\; P_{GG}^{-1}\right) .
+$$
+
+The two forms are equal in exact arithmetic. The precision form reads only the rows $G$
+of $P$: it factors $P_{GG}$ and multiplies $P_{GO}$ by $x_O$. Each prediction has its
+own $G$:
+
+<PixelSets />
+
+The precision form has three advantages:
+
+- **Cost.** The model computes $P$ once for each S/N bin, in npix³ flops, and keeps it.
+  Each pixel set then needs a Cholesky factor of $P_{GG}$, in $|G|^3/3$ flops. $G$ is
+  usually small, a guard window or a few bad pixels.
+- **No values from G.** In [`gspice.infill()`](/GSPICE/reference/api/#gspice.infill), the
+  mean $-P_{GG}^{-1} (P_{GO} x_O)$ reads no value in $G$, so an outlier in $G$ cannot
+  change it.
+- **Accuracy.** A Cholesky solve with a matrix of condition number $\kappa$ has a
+  relative error of order $\kappa \epsilon$, with $\epsilon = 2.2 \times 10^{-16}$
+  [@higham2002accuracy]. The 2022 code instead updates a precomputed inverse (paper
+  Appendix A). Where the guard window is coupled to the conditioning pixels, that
+  update subtracts nearly equal terms, and its error has no such bound. The
+  [legacy interface](/GSPICE/reference/legacy/) keeps the 2022 arithmetic.
+
+The tests compare each fast path with a direct solve, at condition numbers up to 10⁸.
+
+## Cost
+
+A call pays for $P$ once per model and bin, then a cost per pixel set and a cost per
+spectrum. Spectra of one S/N bin with equal pixel sets $G$, $M$ and $T$
+form a [pattern](/GSPICE/concepts/glossary/#term-pattern). The spectra of a pattern
+in one chunk of `max(1, 2**24 // npix)` rows share one factorization. An infill is
+therefore fast where many spectra share their masks. With $|g| = \min(2\,\mathrm{nguard} + 1,
+\mathrm{npix})$ the width of a guard window, the main costs in flops are:
+
+| Work | Once per model and bin | Per pixel set | Per spectrum |
+|---|---|---|---|
+| $P$ of a dense covariance | npix³ | | |
+| `pixelwise` | npix ($\lvert g\rvert^3/3$ + 2 npix $\lvert g\rvert$) for the guard weights | | 2 npix² |
+| `infill` | | $\lvert G\rvert^3/3 + \lvert M\rvert^3/3$ per pattern and chunk | 2 $\lvert G\rvert$ (npix + $\lvert G\rvert$) |
+| block scan of `fit_blocks` and `repair` | $\lvert G\rvert^3/3$ per block | | 2 npix² + $\sum_A \lvert G\rvert^2$ |
+| `fit`, per clipping pass | npix³, and the guard weights | | npix² for the covariance, 2 npix² for z |
+
+The model keeps $P$ and the guard weights of the latest `nguard` of each bin, so the
+"once" column is paid at the first use. `pixelwise` predicts every pixel by one
+fixed linear function of $x$. It therefore applies the weights to all the spectra of a
+bin as one matrix product. The docstring of each function states its full cost,
+and [Memory](/GSPICE/guides/troubleshooting/#memory) lists the large arrays.
+
+A noise-aware model has its own covariance $C_s$ for each spectrum. Its `pixelwise`
+therefore pays the "once" column for every spectrum: about npix³ flops with a dense
+covariance, or npix² $K$ with `rank=K`. Its `infill` forms no $P_s$
+([Other routes](#other-routes)), but pays a factorization per spectrum.
+
+## Condition checks
+
+A covariance can be positive definite and still too close to singular for a reliable
+$P$. Every covariance therefore passes a check before its first use, and
+`numpy.linalg.LinAlgError` reports a failure:
+
+- A dense covariance fails where its Cholesky factorization fails, or where its
+  reciprocal condition number is below 10⁻¹³ after scaling the covariance to unit
+  diagonal. LAPACK estimates that number in the 1-norm from the factor.
+- A [`gspice.LowRank`](/GSPICE/reference/api/#gspice.LowRank) covariance fails where the
+  bound $\kappa_W$ of its docstring exceeds 10¹³. $\kappa_W$ bounds the condition number
+  of the covariance scaled to unit diagonal.
+
+A default model near the minimum of training spectra, $N_s - 1$ close to npix, can fail
+the check. [Troubleshooting](/GSPICE/guides/troubleshooting/#numerically-singular) gives
+the remedies.
+
+## Other routes
+
+Four computations do not factor $P_{GG}$ of a dense $P$:
+
+- A [low-rank model](/GSPICE/concepts/glossary/#term-low-rank-model),
+  $C = V \Lambda V^\mathsf{T} + D$, computes $P$ by the Woodbury identity
+  [@woodbury1950], in npix² $K$ flops, without forming $C$:
+
+  $$
+  P = D^{-1} - D^{-1} V \left(\Lambda^{-1} + V^\mathsf{T} D^{-1} V\right)^{-1}
+  V^\mathsf{T} D^{-1} .
+  $$
+
+- A dense noise-aware model has its own covariance $C_s$ for each spectrum.
+  `infill` solves with the Cholesky factor of $C_s$ and forms no $P_s$.
+- A low-rank noise-aware model forms no $P$ either. Its `infill` solves a system of size
+  $K$ for each spectrum.
+- In a dense model without noise, some infills compute the conditional mean alone:
+  those inside [`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) and
+  [`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks). They factor
+  $C_{OO}$ where $G$ holds more than half the pixels. That factor is then the smaller
+  one.
+
+## Benchmarks
+
+The times below come from one run of `benchmarks/run.py`, which reports the minimum
+and the median of 5 timed repeats after a warm-up run. The table gives the minimum. The
+covariance of every case is a squared-exponential kernel of length 15 pixels, plus a
+rank-30 term, plus the identity, at npix 2400, with `nguard=20`.
+
+| Case | Spectra | Minimum | Per spectrum, computed |
+|---|---|---|---|
+| $P$ of the covariance | | 0.314 s | |
+| Guard weights | | 0.075 s | |
+| `pixelwise`, after $P$ and the weights | 100,000 | 36.3 s | 36.3 s / 100,000 = 0.36 ms |
+| `infill`, 30 pixels, each spectrum its own pattern | 1000 | 0.218 s | 0.218 s / 1000 = 0.22 ms |
+| `infill`, 30 pixels, one pattern | 6990 | 0.465 s | 0.465 s / 6990 = 0.067 ms |
+| `infill`, 1200 pixels, each spectrum its own pattern | 20 | 1.18 s | 1.18 s / 20 = 59 ms |
+| Block scan, 31 blocks | 4000 | 1.27 s | 1.27 s / 4000 = 0.32 ms |
+| `fit_blocks` | 4000 | 1.87 s | 1.87 s / 4000 = 0.47 ms |
+| `repair`, Gaussian spectra | 2000 | 1.93 s | 1.93 s / 2000 = 0.96 ms |
+| `repair`, `gspice.simulate` with `artifacts=0.4` | 500 | 2.86 s | 2.86 s / 500 = 5.7 ms |
+| `fit`, three clipping passes | 20,000 | 26.9 s | |
+| Noise-aware `pixelwise`, dense | 8 | 3.56 s | 3.56 s / 8 = 0.45 s |
+| Noise-aware `infill`, dense, 30 pixels | 8 | 1.50 s | 1.50 s / 8 = 0.19 s |
+| Noise-aware `pixelwise`, `rank=50` | 8 | 0.484 s | 0.484 s / 8 = 61 ms |
+| Noise-aware `infill`, `rank=50`, 30 pixels | 8 | 0.0151 s | 0.0151 s / 8 = 1.9 ms |
+
+Two cases compare with the 2022 arithmetic:
+
+- The 2022 `gp_interp` took 18.5 s for 4000 spectra. `pixelwise` took 1.31 s for the
+  same work, $P$ and the guard weights included.
+- The 2022 update of a precomputed inverse took 1.45 s for 20 pixel sets of 190 pixels,
+  one spectrum each, with the covariance. The precision form took 0.039 s.
+
+The setup of the run:
+
+- Commit `10350fa` of `main`, with no local changes to `src/gspice` or `benchmarks/run.py`.
+- Intel Xeon Processor @ 2.10 GHz, 4 cores, 16 GB, in a cloud machine. The load average
+  over one minute was 0.49 before the run and 1.00 after it, as `benchmarks/run.py` records.
+- `OPENBLAS_NUM_THREADS=1`.
+- Python 3.13.17, numpy 2.5.4 on OpenBLAS 0.3.34, scipy 1.18.1 on OpenBLAS 0.3.31.dev,
+  gspice 2.0.0.
+
+Times from another machine or another thread setting are not comparable with these.

@@ -120,7 +120,7 @@
   height: 2px;
   background: var(--gs-ink);
 }
-.gs-legend :is(.truth, .ref) {
+.gs-legend :is(.truth, .ref, .edge) {
   height: 1px;
   background: var(--gs-ink-2);
 }
@@ -158,4 +158,106 @@
   background: var(--gs-bg-3);
   outline: 1px solid var(--gs-ink-2);
   outline-offset: -1px;
+}
+
+/* The figures of the Concepts pages: their spacing, panel titles and axis titles. */
+.gs-fig {
+  margin-block: 1.5rem;
+}
+.gs-fig .title {
+  margin: 0 0 0.375rem;
+  font-size: 0.875rem;
+}
+.gs-fig .axis {
+  margin: -0.25rem 0 0.75rem 2.25rem;
+  color: var(--gs-ink-2);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+/* An interpolated segment is a step line in ink-3. */
+.gs-plot .interp {
+  stroke: var(--gs-ink-3);
+  stroke-width: 1.5;
+}
+.gs-legend .interp {
+  height: 2px;
+  background: var(--gs-ink-3);
+}
+/* A guard window: the hairline colour as a flat fill, apart from the masked block. */
+.gs-plot .guard {
+  fill: var(--gs-rule);
+}
+/* The pixels of an artifact: a bar along the top of the plot area. */
+.gs-plot .span-mark {
+  position: absolute;
+  top: 0;
+  height: 4px;
+  background: var(--gs-ink-2);
+}
+.gs-legend .span-key {
+  height: 4px;
+  background: var(--gs-ink-2);
+}
+.gs-legend .ray-key {
+  height: 3px;
+  background: var(--gs-ink);
+}
+/* The pixels that a clipping pass flags. */
+.gs-plot .newflag {
+  fill: var(--gs-rule-2);
+}
+.gs-legend .newflag {
+  background: var(--gs-rule-2);
+}
+/* Points: squares in HTML, centred on their value; a filled one in ink and a hollow one
+   in ink-2. */
+.gs-plot .pt {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+:is(.gs-plot, .gs-legend) .pt {
+  width: 8px;
+  height: 8px;
+}
+.pt.held {
+  background: var(--gs-ink);
+}
+.pt.in {
+  outline: 1.5px solid var(--gs-ink-2);
+  outline-offset: -1.5px;
+}
+
+/* A strip of pixel cells, --n of them, and the states of a cell: predicted (orange),
+   guard window, hidden from the prediction (the masked tint), bad, and conditioned on. */
+.gs-cells {
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  gap: 1px;
+}
+:is(.gs-cells, .gs-legend) .replaced {
+  background: var(--gs-accent);
+}
+:is(.gs-cells, .gs-legend) .guard {
+  background: var(--gs-rule);
+}
+:is(.gs-cells, .x, .gs-legend) :is(.ignored, .unread) {
+  background: var(--gs-mask-fill);
+  outline: 1px solid var(--gs-mask-edge);
+  outline-offset: -1px;
+}
+:is(.gs-cells, .gs-legend) .bad {
+  background: var(--gs-mask-edge);
+}
+:is(.gs-cells, .x, .gs-legend) .kept {
+  background: var(--gs-strip-lo);
+}
+/* The cells of the precision matrix that a prediction reads: P_GG, P_GO, and the rest. */
+:is(.gs-cells, .gs-legend) .gg {
+  background: var(--gs-ink);
+}
+:is(.gs-cells, .gs-legend) .go {
+  background: var(--gs-ink-3);
+}
+:is(.gs-cells, .gs-legend) .oo {
+  background: var(--gs-bg-3);
 }

@@ -61,5 +61,5 @@ print(np.load("model.npz").files)
 ```
 
 The docstring of `save` describes each array. The file holds no precision matrices. A
-model computes the precision matrix of a bin at its first use, in npix³ flops, and keeps
-it. So the first prediction of a loaded model takes longer than the next ones.
+model computes the precision matrix of a bin at its first use, and keeps it
+([Cost](/GSPICE/concepts/numerics/#cost)). So the first prediction of a loaded model takes longer than the next ones.

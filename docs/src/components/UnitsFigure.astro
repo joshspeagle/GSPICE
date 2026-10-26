@@ -1,0 +1,75 @@
+---
+// V-14: from flux to working units, in three steps, on one simulated spectrum with a
+// run of bad pixels. docs/scripts/concepts.py writes the data.
+import data from '../data/concepts-units.json'
+import { axesFor, axisLabels, blockMarkup, gridPath, legend, line, plotSvg, steps, yScale } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { npix, start, width, a } = data
+const end = start + width
+const last = end - 1
+const block = blockMarkup(start, width, npix)
+
+// One panel: the values outside the bad run as the observed flux, the values inside it
+// as interpolated, and an optional reference line, over the masked block.
+function panel(values: number[], reference?: number[]) {
+  const axes = axesFor([...values, ...(reference ?? [])], npix)
+  const y = yScale(axes)
+  const svg = plotSvg(
+    gridPath(axes.yticks, y, npix) +
+      block.fill +
+      block.edge +
+      (reference ? line('ref', steps(reference, 0, npix, y)) : '') +
+      line('obs', steps(values, 0, start, y)) +
+      line('obs', steps(values, end, npix, y)) +
+      line('interp', steps(values, start, end, y)),
+    npix,
+  )
+  return svg + block.grips + axisLabels(axes, npix, y)
+}
+
+// The input flux is not read at the bad pixels, so step 1 shows its interpolation there.
+const panels = [
+  { title: '1. Interpolate over the bad pixels: f̃<sub>s</sub>', unit: 'flux', markup: panel(data.interpolated) },
+  { title: `2. Multiply by a<sub>s</sub> = ${a}: a<sub>s</sub> f̃<sub>s</sub>`, unit: 'scaled units', markup: panel(data.scaled, data.mean) },
+  { title: '3. Subtract the mean of the training spectra: x<sub>s</sub> = a<sub>s</sub> f̃<sub>s</sub> − m<sub>b</sub>', unit: 'scaled units', markup: panel(data.x) },
+]
+---
+
+<figure class="gs-fig not-content">
+  {
+    panels.map(({ title, unit, markup }) => (
+      <div class="panel">
+        <p class="title">
+          <Fragment set:html={title} /> <span class="unit">({unit})</span>
+        </p>
+        <div class="gs-plot" data-npix={npix} role="img" aria-label={`Step ${title.slice(0, 1)}, in ${unit}`} set:html={markup} />
+      </div>
+    ))
+  }
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        'obs',
+        ['interp', 'interpolated flux'],
+        ['ref', 'mean of the training spectra'],
+        ['blk', 'bad pixels'],
+      ])}
+    />
+    <p>
+      A simulated spectrum of {npix} pixels at a signal-to-noise ratio of {data.snr}, with pixels {start} to {last} marked bad. The model is fitted to {data.ntrain} simulated spectra. Step 1 replaces the bad pixels by a straight line. Step 2 brings the noise to a variance near 1. Step 3 leaves the variation about the mean.
+    </p>
+  </figcaption>
+</figure>
+
+<style>
+  .panel + .panel {
+    margin-top: 0.5rem;
+  }
+  .unit {
+    color: var(--gs-ink-2);
+  }
+  .gs-plot {
+    --gs-plot-height: 7.5rem;
+  }
+</style>

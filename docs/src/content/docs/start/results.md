@@ -22,9 +22,9 @@ out of its final estimate. It is also True at every pixel of a spectrum that `fi
 not use.
 
 A model has one mean and one covariance for each
-[S/N bin](/GSPICE/background/glossary/#term-S-N-bin). There is one bin unless you call
+[S/N bin](/GSPICE/concepts/glossary/#term-S-N-bin). There is one bin unless you call
 `fit(..., snr_bins=n)`. The mean and the covariance are in
-[scaled units](/GSPICE/background/glossary/#term-scaled-units), not flux units.
+[scaled units](/GSPICE/concepts/glossary/#term-scaled-units), not flux units.
 [Continuum normalization](/GSPICE/start/spectra/#continuum-normalization) explains the
 scaling.
 
@@ -39,7 +39,7 @@ scaling.
 | `weighted` | bool | True if `fit` had unequal weights |
 | `blocks` | `Blocks` or None | The block thresholds of `fit_blocks`, or None without them |
 
-A [noise-aware model](/GSPICE/background/glossary/#term-noise-aware-model), from
+A [noise-aware model](/GSPICE/concepts/glossary/#term-noise-aware-model), from
 `fit(..., noise=True)`, has one bin. Its `mean` is in flux units, and its `cov` is the
 covariance of the flux without noise, in flux².
 
@@ -59,7 +59,7 @@ model whose `blocks` is a [`gspice.Blocks`](/GSPICE/reference/api/#gspice.Blocks
 ## Prediction
 
 [`gspice.pixelwise()`](/GSPICE/reference/api/#gspice.pixelwise) predicts each pixel from
-the pixels outside a [guard window](/GSPICE/background/glossary/#term-guard-window)
+the pixels outside a [guard window](/GSPICE/concepts/glossary/#term-guard-window)
 around it. It returns a [`gspice.Prediction`](/GSPICE/reference/api/#gspice.Prediction).
 
 | Field | Shape | Holds |
@@ -73,8 +73,8 @@ around it. It returns a [`gspice.Prediction`](/GSPICE/reference/api/#gspice.Pred
 [`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) and
 [`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) return a
 [`gspice.Repaired`](/GSPICE/reference/api/#gspice.Repaired). The
-[replaced pixels](/GSPICE/background/glossary/#term-replaced-pixel) hold their
-prediction. The [ignored pixels](/GSPICE/background/glossary/#term-ignored-pixel) are
+[replaced pixels](/GSPICE/concepts/glossary/#term-replaced-pixel) hold their
+prediction. The [ignored pixels](/GSPICE/concepts/glossary/#term-ignored-pixel) are
 neither replaced nor used to predict the others.
 
 | Field | Shape | Holds |
@@ -85,7 +85,7 @@ neither replaced nor used to predict the others.
 | `ignored` | (nspec, npix), bool | The ignored pixels |
 | `chi2` | (nspec,) | The χ² of the input values at the replaced pixels that are good in the input; 0 if there are none |
 | `dof` | (nspec,), int64 | The number of those pixels |
-| `fs` | (nspec,) | The [finite-sample factor](/GSPICE/background/glossary/#term-finite-sample-factor) of `chi2` |
+| `fs` | (nspec,) | The [finite-sample factor](/GSPICE/concepts/glossary/#term-finite-sample-factor) of `chi2` |
 | `draws` | (nspec, npix), or None | One random draw at the replaced pixels, and the input flux elsewhere, in flux units |
 | `blocks` | (nspec, nblock), bool, or None | The blocks that `repair` flagged in each spectrum |
 

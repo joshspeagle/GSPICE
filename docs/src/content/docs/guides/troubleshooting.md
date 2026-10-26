@@ -38,7 +38,7 @@ a spectrum of typical leverage cannot reach the threshold of pass `<n>`. So the 
 flags few pixels, or none.
 
 Fix: use more training spectra, or lower `nsigma`. A pass whose threshold is below the
-ceiling still clips. [Outlier clipping](/GSPICE/background/fitting/#outlier-clipping)
+ceiling still clips. [The clipping ceiling](/GSPICE/concepts/fitting/#the-clipping-ceiling)
 gives the ceiling.
 
 `fit` logs its warning on the `gspice` logger, so you see it only if your program shows
@@ -81,7 +81,7 @@ Fix: use more clean spectra, or a lower `percentile`.
 ### A slow noise-aware model
 
 Cause: a noise-aware model predicts much more slowly than a scaled model. Each spectrum
-has its own covariance, so each needs its own factorization, of order npix³ flops.
+has its own covariance, so each needs its own factorization ([Cost](/GSPICE/concepts/numerics/#cost)).
 
 Fix: fit with `rank=K` too, or use a scaled model with `snr_bins` if the noise keeps its
 shape ([Choose a model](/GSPICE/guides/models/#noise-aware)).

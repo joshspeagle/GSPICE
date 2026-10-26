@@ -6,13 +6,13 @@ description: Check the predicted uncertainties with calibration, and the reporte
 import CalibrationSteps from '../../../components/CalibrationSteps.astro'
 
 Are the uncertainties right, and is my `ivar` right? Two functions answer on
-[held-out spectra](/GSPICE/background/glossary/#term-held-out-spectrum), which the model
-was not fitted to. [Diagnostics](/GSPICE/background/diagnostics/) gives their equations.
+[held-out spectra](/GSPICE/concepts/glossary/#term-held-out-spectrum), which the model
+was not fitted to. [Diagnostics](/GSPICE/concepts/diagnostics/) gives their equations.
 
 ## Set up
 
 The model is fitted to 4000 simulated spectra of 100 pixels. The checks use 1000 other
-[clean spectra](/GSPICE/background/glossary/#term-clean-spectrum), without artifacts.
+[clean spectra](/GSPICE/concepts/glossary/#term-clean-spectrum), without artifacts.
 
 ```python
 import numpy as np
@@ -54,7 +54,7 @@ tail: [0.012 0.005 0.01 ]
 Each column is one number $n$ of hidden pixels, a run of consecutive good pixels.
 
 - **mean** is the mean of $z^2 / (n f_s)$ over the spectra, with $f_s$ the
-  [finite-sample factor](/GSPICE/background/glossary/#term-finite-sample-factor). It is
+  [finite-sample factor](/GSPICE/concepts/glossary/#term-finite-sample-factor). It is
   1 for a correct model. Read it with its **standard error**: a mean within about two
   standard errors of 1 agrees with 1.
 - **tail** is the fraction of spectra with $z^2 / f_s$ above the 99% quantile of the χ²
@@ -63,7 +63,7 @@ Each column is one number $n$ of hidden pixels, a run of consecutive good pixels
 Here the means for $n = 4$ and $n = 16$ are 0.92 and 0.97, four and three standard
 errors below 1: the predicted variances of these runs are 3% to 8% too large. The
 simulated spectra are not Gaussian, and
-[Calibration](/GSPICE/background/diagnostics/#calibration) explains how that can move
+[Calibration](/GSPICE/concepts/diagnostics/#calibration) explains how that can move
 the mean.
 
 ### When the mean is off

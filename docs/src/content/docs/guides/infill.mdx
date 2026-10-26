@@ -25,13 +25,13 @@ test = gspice.simulate(500, 100, rng=rng)
 model, _ = gspice.fit(train.flux, train.ivar)
 ```
 
-The 500 test spectra are [held-out spectra](/GSPICE/background/glossary/#term-held-out-spectrum):
+The 500 test spectra are [held-out spectra](/GSPICE/concepts/glossary/#term-held-out-spectrum):
 the model was not fitted to them.
 
 ## Replace the bad pixels
 
 Suppose that your pipeline marks some pixels of each spectrum as bad. A
-[bad pixel](/GSPICE/background/glossary/#term-bad-pixel) has a nonzero `mask` or
+[bad pixel](/GSPICE/concepts/glossary/#term-bad-pixel) has a nonzero `mask` or
 `ivar == 0`. Here a random 2% of the pixels are bad:
 
 ```python
@@ -70,7 +70,7 @@ A `replace` mask of shape (npix,) applies to every spectrum. Here it holds pixel
 to 71, around the absorption line at pixel 62. With a wavelength array `wave`, the mask
 `(wave > 4840) & (wave < 4890)` selects a range in Å.
 
-The prediction uses only the [conditioning pixels](/GSPICE/background/glossary/#term-conditioning-pixels),
+The prediction uses only the [conditioning pixels](/GSPICE/concepts/glossary/#term-conditioning-pixels),
 the pixels outside `replace` that are good. A bad pixel outside `replace` keeps its
 input value, and the prediction does not use it.
 
@@ -95,7 +95,7 @@ A pull is the observed flux minus the prediction, divided by the square root of 
 variance. A standard deviation above 1 means that the variances are too small.
 
 The option `inflate=True` multiplies the variances by the
-[finite-sample factor](/GSPICE/background/glossary/#term-finite-sample-factor), by which
+[finite-sample factor](/GSPICE/concepts/glossary/#term-finite-sample-factor), by which
 the errors of the model widen the residuals of held-out spectra:
 
 ```python
@@ -108,7 +108,7 @@ print(f"standard deviation of the pulls: {np.std(pull):.2f}")
 standard deviation of the pulls: 0.98
 ```
 
-[The finite-sample factor](/GSPICE/background/prediction/#the-finite-sample-factor)
+[The finite-sample factor](/GSPICE/concepts/held-out/#the-finite-sample-factor)
 explains the factor, and which models support `inflate`.
 
 ### The covariance of the pixels
@@ -160,7 +160,7 @@ units of its predicted uncertainty.
 
 `result.flux` holds the conditional mean: the average of all spectra that agree with the
 conditioning pixels. An average is smoother than any one spectrum. A
-[draw](/GSPICE/background/glossary/#term-draw) is one plausible spectrum instead. Pass a
+[draw](/GSPICE/concepts/glossary/#term-draw) is one plausible spectrum instead. Pass a
 `numpy.random.Generator` as `rng` to get one in `result.draws`:
 
 ```python

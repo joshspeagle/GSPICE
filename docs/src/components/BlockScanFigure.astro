@@ -1,0 +1,81 @@
+---
+// V-18: why a block scan. A broad weak artifact moves the pixelwise prediction of its
+// own pixels, which are predicted from other pixels of the artifact. A block predicted
+// from beyond its guard window does not follow it. docs/scripts/concepts.py writes the
+// data.
+import data from '../data/concepts-blockscan.json'
+import { axesFor, axisLabels, bandCell, blockMarkup, gridPath, legend, line, plotSvg, steps, yScale } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { npix, flux, truth, block } = data
+const [first, length] = data.artifact
+const end = block.start + block.width
+const guardStart = Math.max(0, block.start - block.nguard)
+const guardEnd = Math.min(npix, end + block.nguard)
+const bands = block.mu.flatMap((m, k) => [m - 2 * block.sd[k], m + 2 * block.sd[k]])
+const axes = axesFor([...flux, ...truth, ...data.pixelwise, ...bands], npix)
+const y = yScale(axes)
+const left = (i: number) => (100 * i) / npix
+const grid = gridPath(axes.yticks, y, npix)
+const spectrum = line('obs', steps(flux, 0, npix, y)) + line('truth', steps(truth, 0, npix, y))
+const marks = `<span class="span-mark" style="left:${left(first)}%;width:${left(length)}%"></span>` + axisLabels(axes, npix, y)
+
+const pixelwise = plotSvg(grid + spectrum + line('pred', steps(data.pixelwise, 0, npix, y)), npix) + marks
+
+// The block A as a masked block, its guard pixels as a lighter tint, and the prediction
+// of A with its ±1σ and ±2σ cells.
+const mu = new Float64Array(npix)
+mu.set(block.mu, block.start)
+const cells = block.mu.flatMap((m, k) => [2, 1].map((n) => bandCell(block.start + k, m, block.sd[k], n, y))).join('')
+const masked = blockMarkup(block.start, block.width, npix)
+const blockwise =
+  plotSvg(
+    grid +
+      `<rect class="guard" x="${guardStart}" y="0" width="${block.start - guardStart}" height="100"/>` +
+      `<rect class="guard" x="${end}" y="0" width="${guardEnd - end}" height="100"/>` +
+      masked.fill +
+      cells +
+      masked.edge +
+      spectrum +
+      line('pred', steps(mu, block.start, end, y)),
+    npix,
+  ) +
+  masked.grips +
+  marks
+const flagged = data.flagged.map((k) => data.starts[k])
+---
+
+<figure class="gs-fig not-content">
+  <p class="title">Pixelwise: each pixel predicted from the pixels beyond its guard window</p>
+  <div class="gs-plot" data-npix={npix} role="img" aria-label={`The pixelwise prediction follows the artifact at pixels ${first} to ${first + length - 1}`} set:html={pixelwise} />
+  <p class="title">
+    Block scan: pixels {block.start} to {end - 1} predicted from the pixels beyond {block.nguard} more on each side
+  </p>
+  <div class="gs-plot" data-npix={npix} role="img" aria-label={`The prediction of block ${block.start} to ${end - 1} stays below the artifact`} set:html={blockwise} />
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        'obs',
+        'truth',
+        'pred',
+        'b1',
+        'b2',
+        ['blk', 'block'],
+        ['guard', 'guard window'],
+        ['span-key', 'artifact'],
+      ])}
+    />
+    <p>
+      A simulated spectrum of {npix} pixels at a signal-to-noise ratio of {data.snr}, with {data.offset}σ added to each of pixels {first} to {first + length - 1}. The model is fitted to {data.ntrain} spectra and its block thresholds to {data.nclean} clean spectra. Only {data.above} of the {length} artifact pixels have |z| above 5. Step 1 of <code>repair</code> first replaces the {data.step1} pixels at or next to a |z| above 5. On the result, the χ²<sub>A</sub> of the block shown is {block.ratio} times its threshold. The prediction shown is that of the block on the same result. <code>repair</code> flags {flagged.length === 1 ? `the block that starts at pixel ${flagged[0]}` : `the blocks that start at pixels ${flagged.join(' and ')}`}, and replaces or ignores {Math.round(100 * data.found)}% of the artifact pixels. With <code>blockwise=False</code>, it replaces or ignores {Math.round(100 * data.found_plain)}%.
+    </p>
+  </figcaption>
+</figure>
+
+<style>
+  .gs-plot + .title {
+    margin-top: 0.5rem;
+  }
+  .gs-plot {
+    --gs-plot-height: 11rem;
+  }
+</style>

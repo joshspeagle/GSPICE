@@ -8,7 +8,7 @@ I don't know where the artifacts are. How do I find and replace them? This guide
 
 ## Set up
 
-An [artifact](/GSPICE/background/glossary/#term-artifact) is a corruption of the data,
+An [artifact](/GSPICE/concepts/glossary/#term-artifact) is a corruption of the data,
 such as a cosmic ray. The examples use three sets of simulated spectra of 400 pixels.
 [Prepare your spectra](/GSPICE/start/spectra/#training-threshold-and-held-out-spectra)
 explains why each set is separate.
@@ -26,17 +26,17 @@ model, _ = gspice.fit(train.flux, train.ivar)
 ```
 
 - `train` holds the training spectra of the model.
-- `clean` holds [clean spectra](/GSPICE/background/glossary/#term-clean-spectrum), which
+- `clean` holds [clean spectra](/GSPICE/concepts/glossary/#term-clean-spectrum), which
   have no artifacts.
 - `test` holds the spectra to repair. Half of them have one artifact each: a cosmic ray,
-  a bad column or a [shifted segment](/GSPICE/background/glossary/#term-shifted-segment).
+  a bad column or a [shifted segment](/GSPICE/concepts/glossary/#term-shifted-segment).
 
 ## Block thresholds from clean spectra
 
 An artifact that covers many pixels also corrupts the pixels that predict it, so a test
 of each pixel can miss it. `repair` therefore also runs a
-[block scan](/GSPICE/background/glossary/#term-block-scan). It compares each
-[block](/GSPICE/background/glossary/#term-block) of consecutive pixels with its
+[block scan](/GSPICE/concepts/glossary/#term-block-scan). It compares each
+[block](/GSPICE/concepts/glossary/#term-block) of consecutive pixels with its
 prediction from the pixels beyond a guard window. Here
 [`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks) sets a threshold for
 each of five blocks of 150 pixels from the clean spectra:
@@ -80,12 +80,12 @@ replaced: 0.62% of the other pixels
 `amplitude` is the change that the artifact made to a pixel, in units of its noise.
 `result` is a [`gspice.Repaired`](/GSPICE/reference/api/#gspice.Repaired), as from
 `infill`. Each pixel that `repair` detects is a
-[flagged pixel](/GSPICE/background/glossary/#term-flagged-pixel), and it has one of two
+[flagged pixel](/GSPICE/concepts/glossary/#term-flagged-pixel), and it has one of two
 fates:
 
-- A [replaced pixel](/GSPICE/background/glossary/#term-replaced-pixel), in
+- A [replaced pixel](/GSPICE/concepts/glossary/#term-replaced-pixel), in
   `result.replaced`, holds its prediction in `result.flux`.
-- An [ignored pixel](/GSPICE/background/glossary/#term-ignored-pixel), in
+- An [ignored pixel](/GSPICE/concepts/glossary/#term-ignored-pixel), in
   `result.ignored`, keeps its input value, and no prediction uses it.
 
 `result.replaced` also holds every bad pixel of the input. `result.blocks` marks the
@@ -164,7 +164,7 @@ you know. The other options are:
 | `runlength`, `halfwidth` | 5, 150 | A run of at least `runlength` flagged pixels also ignores the `halfwidth` pixels on each side |
 | `minfrac` | 0.5 | The run rule applies only where it leaves this fraction of the pixels to predict from |
 
-[The procedure](/GSPICE/background/repair/#the-procedure) states each step of `repair`.
+[The procedure](/GSPICE/concepts/detection/#the-procedure) states each step of `repair`.
 
 ## What it misses
 
@@ -194,6 +194,6 @@ to 399. Three kinds of artifact stay in the output:
 - **Long shifted segments.** Inside a segment, the pixels that predict each pixel are
   shifted too. `repair` replaced 76% of their pixels over 5σ above, but 25% of all their
   pixels in [Without clean spectra](#without-clean-spectra).
-  [Long defects](/GSPICE/background/repair/#long-defects) measures this limit.
+  [Long shifted segments](/GSPICE/concepts/detection/#long-shifted-segments) measures this limit.
 - **Artifacts at the same pixels in every training spectrum.** The model learns them as
   part of the spectra.

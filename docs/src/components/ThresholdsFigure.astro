@@ -1,0 +1,81 @@
+---
+// V-19: the two z thresholds of repair and the dilation, on the pixels near one cosmic
+// ray: step 1 replaces the pixels above nsigma_replace and ignores those above
+// nsigma_ignore, each with its neighbours. docs/scripts/concepts.py writes the data.
+import data from '../data/concepts-thresholds.json'
+import { gridPath, legend, line, plotSvg, steps, tickLabels, yScale } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { pixels, z } = data
+const n = pixels.length
+// |z| on a linear axis from 0 to the next multiple of 5 above the largest.
+const high = 5 * Math.ceil(Math.max(...z) / 5)
+const y = yScale({ low: 0, high })
+const yticks = Array.from({ length: high / 5 + 1 }, (_, k) => 5 * k)
+const svg = plotSvg(
+  gridPath(yticks, y, n) + line('edge', `M0,${y(5)}H${n}M0,${y(10)}H${n}`) + line('obs', steps(z, 0, n, y)),
+  n,
+)
+const labels = tickLabels(
+  yticks.map((v) => [y(v), String(v)]),
+  [0, Math.floor(n / 2), n - 1].map((k) => [(100 * (k + 0.5)) / n, String(pixels[k])]),
+)
+const kind = (k: number, replaced: number[], ignored: number[]) =>
+  replaced.includes(k) ? 'replaced' : ignored.includes(k) ? 'ignored' : 'kept'
+const rows = [
+  { title: 'Above a threshold', replaced: data.replace, ignored: data.ignore },
+  { title: 'After dilation by 1 pixel: M₁ and I₁ of step 1', replaced: data.M1, ignored: data.I1 },
+]
+const ray = data.artifact.map((k) => pixels[k])
+---
+
+<figure class="gs-fig not-content">
+  <p class="title">|z| of the pixelwise prediction, with the thresholds 5 and 10</p>
+  <div class="gs-plot" role="img" aria-label={`|z| of pixels ${pixels[0]} to ${pixels[n - 1]}`} set:html={svg + labels} />
+  {
+    rows.map(({ title, replaced, ignored }) => (
+      <div class="row">
+        <p class="title">{title}</p>
+        <span class="gs-cells" style={`--n: ${n}`} role="img" aria-label={`${title}: replaced pixels ${replaced.map((k) => pixels[k]).join(', ')}; ignored pixels ${ignored.map((k) => pixels[k]).join(', ') || 'none'}`}>
+          {pixels.map((_, k) => <i class={kind(k, replaced, ignored)} />)}
+        </span>
+      </div>
+    ))
+  }
+  <div class="row">
+    <span class="gs-cells ray" style={`--n: ${n}`} aria-hidden="true">
+      {pixels.map((_, k) => <b class:list={{ on: data.artifact.includes(k) }} />)}
+    </span>
+  </div>
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        ['replaced', 'replaced'],
+        ['ignored', 'ignored'],
+        ['kept', 'kept'],
+        ['ray-key', 'cosmic ray'],
+      ])}
+    />
+    <p>
+      Pixels {pixels[0]} to {pixels[n - 1]} of a simulated spectrum of {data.npix} pixels, with a cosmic ray at pixels {ray[0]} to {ray.at(-1)}. The model is fitted to {data.ntrain} spectra. A pixel above 10 is replaced, and a pixel above 5 that is not replaced is ignored. Dilation adds the pixel on each side of each flagged pixel, so pixel {pixels[data.ignore[0]]}, above 5 only, becomes a replaced pixel next to pixel {pixels[data.replace[0]]}.
+    </p>
+  </figcaption>
+</figure>
+
+<style>
+  .gs-plot {
+    --gs-plot-height: 8rem;
+  }
+  .row {
+    margin: 0 0 0.5rem 2.25rem;
+  }
+  .gs-cells i {
+    height: 14px;
+  }
+  .ray b {
+    height: 3px;
+  }
+  .ray b.on {
+    background: var(--gs-ink);
+  }
+</style>

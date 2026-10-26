@@ -1,0 +1,153 @@
+---
+title: The model
+description: Why a mean and a covariance of your own spectra can predict any pixels from the others.
+---
+
+import UnitsFigure from '../../../components/UnitsFigure.astro'
+
+Why can a covariance predict pixels? This page builds the answer from one spectrum to the
+units that the code works in [@finkbeiner2025gspice].
+
+## A spectrum as one draw from a Gaussian
+
+A model must say which spectra are likely and which are not. Take many stars observed on
+one wavelength grid. At pixel $i$, the flux differs from star to star, so pixel $i$ is
+one variable, measured once in every spectrum. A spectrum of npix pixels is then one
+point in npix dimensions.
+
+GSPICE describes where these points lie with a
+[multivariate Gaussian](/GSPICE/concepts/glossary/#term-multivariate-gaussian)
+distribution. It has two parameters: a mean spectrum, and a
+[covariance](/GSPICE/concepts/glossary/#term-covariance) $C$ between every pair of
+pixels. [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit) estimates both from the
+[training spectra](/GSPICE/concepts/glossary/#term-training-spectra), and
+[Fitting](/GSPICE/concepts/fitting/) explains how.
+[What GSPICE needs](/GSPICE/start/fit/#what-gspice-needs) lists what this asks of your
+spectra.
+
+The spectra need not be Gaussian. A population of stars is far from a Gaussian
+distribution. The conditional estimates of a Gaussian fitted to it still predict its
+pixels well [@finkbeiner2025gspice].
+
+## Covariance: lines vary together
+
+One pixel can tell you about another only if the two vary together. Take two lines of
+one element. A star with a deep line at pixel $i$ also tends to have a deep line at pixel
+$i'$. Across the spectra, the fluxes at $i$ and $i'$ then rise and fall together.
+
+The covariance $C_{ii'}$ measures this. It is positive where the two fluxes tend to lie
+above their means together. It is negative where one tends to lie above its mean while
+the other lies below, and 0 where they are unrelated. $C_{ii}$ is the variance at pixel $i$. The
+[correlation](/GSPICE/concepts/glossary/#term-correlation)
+$C_{ii'} / \sqrt{C_{ii} C_{i'i'}}$ puts this on a scale from −1 to 1.
+
+## Conditioning on two pixels, then on many
+
+A prediction answers this question: given the flux that you observed at some pixels, what
+is the flux at the others? Start with two pixels, $i$ and $i'$, and measure each flux
+from its mean, so that both means are 0. If you observe $x_{i'}$ at pixel $i'$, the flux
+at pixel $i$ has a Gaussian distribution again [@rasmussen2006gpml]:
+
+$$
+x_i \mid x_{i'} \sim \mathcal{N}\!\left(\frac{C_{ii'}}{C_{i'i'}}\, x_{i'},\;
+C_{ii} - \frac{C_{ii'}^2}{C_{i'i'}}\right) .
+$$
+
+Its mean moves away from 0 in proportion to $x_{i'}$. Its variance is smaller than
+$C_{ii}$, the more so the stronger the correlation.
+
+The same holds for any number of pixels. Split the pixels into two sets. $G$ holds the
+pixels to predict or to leave out, and $O$ holds the
+[conditioning pixels](/GSPICE/concepts/glossary/#term-conditioning-pixels), whose values
+the prediction uses. With $x$ measured from the mean again, the
+[conditional distribution](/GSPICE/concepts/glossary/#term-conditional-distribution)
+of $x_G$ is
+
+$$
+x_G \mid x_O \sim \mathcal{N}\!\left(C_{GO} C_{OO}^{-1} x_O,\;
+C_{GG} - C_{GO} C_{OO}^{-1} C_{OG}\right) .
+$$
+
+$C_{GO}$ is the block of $C$ with the rows $G$ and the columns $O$, and the other blocks
+follow the same rule. The [conditional mean](/GSPICE/concepts/glossary/#term-conditional-mean)
+is the prediction. It is the average of all spectra in the model that agree with the
+conditioning pixels, and a linear function of $x_O$. Where $G$ holds all pixels, the
+result is the [prior](/GSPICE/concepts/glossary/#term-prior) $\mathcal{N}(0, C)$.
+
+A prediction can report only some pixels of $G$. The others are
+[marginalized](/GSPICE/concepts/glossary/#term-marginalize): their values do not enter,
+and the conditional covariance of the reported pixels includes the uncertainty of the
+others. [Prediction](/GSPICE/concepts/prediction/) shows how each function chooses $G$.
+The code computes the same distribution from the inverse of $C$, as
+[The precision form](/GSPICE/concepts/numerics/#the-precision-form) explains.
+
+## The uncertainty of a prediction
+
+A prediction needs an uncertainty. The conditional covariance
+$C_{GG} - C_{GO} C_{OO}^{-1} C_{OG}$ provides it. It depends on which pixels you
+observed, but not on their values. Its diagonal holds the
+[conditional variance](/GSPICE/concepts/glossary/#term-conditional-variance) of each
+predicted pixel.
+
+The training spectra carry their noise, so $C$ holds the noise as well as the variation
+between the spectra. Every predicted variance therefore includes the noise of the
+predicted pixel. The prediction describes the observed flux at the pixel, not its
+noise-free flux.
+
+Two checks compare the predicted uncertainty with the data:
+
+- The [z-score](/GSPICE/concepts/glossary/#term-z-score) of one pixel is its flux minus
+  the prediction, divided by the square root of the conditional variance.
+- The [χ²](/GSPICE/concepts/glossary/#term-chi2) of several pixels uses their full
+  conditional covariance ([χ² and its degrees of freedom](/GSPICE/concepts/prediction/#χ-and-its-degrees-of-freedom)).
+
+Both have a known distribution only if the model is right. A model estimated from a
+finite number of spectra predicts new spectra less well than it says
+([Held-out uncertainty](/GSPICE/concepts/held-out/)).
+[Diagnostics](/GSPICE/concepts/diagnostics/) measures both effects on your spectra.
+
+## Working units
+
+Spectra differ in brightness and in signal-to-noise ratio, and some pixels are bad. One
+covariance of the raw flux would mix these differences with the variation that predicts
+pixels. The model therefore describes the
+[working vector](/GSPICE/concepts/glossary/#term-working-vector) $x_s$ of spectrum $s$,
+not its flux. It computes $x_s$ in three steps:
+
+<UnitsFigure />
+
+1. Interpolate the flux linearly over the
+   [bad pixels](/GSPICE/concepts/glossary/#term-bad-pixel), and hold it constant beyond
+   the first and the last good pixel. This gives $\tilde f_s$. A bad pixel is never
+   read, so its flux may be NaN.
+2. Multiply by $a_s$, the square root of the mean of `ivar` over the good pixels of the
+   spectrum, in flux⁻¹. This gives [scaled units](/GSPICE/concepts/glossary/#term-scaled-units).
+3. Subtract the mean $m_b$ of the training spectra in the
+   [S/N bin](/GSPICE/concepts/glossary/#term-S-N-bin) $b$ of the spectrum. There is one
+   bin by default.
+
+So
+
+$$
+x_s = a_s \tilde f_s - m_b .
+$$
+
+In scaled units, the noise at pixel $i$ has the variance $a_s^2 / \mathrm{ivar}_{si}$.
+That variance is 1 where `ivar` is equal at every pixel of the spectrum, whatever its
+S/N. A variance in scaled units divided by $a_s^2$ is a variance in flux units.
+[Continuum normalization](/GSPICE/start/spectra/#continuum-normalization) says what the
+scaling means for your spectra.
+
+Two kinds of model use other working vectors:
+
+| Model | Working vector | Units |
+|---|---|---|
+| Default, or with S/N bins | $x_s = a_s \tilde f_s - m_b$ | scaled |
+| [Constant centre](/GSPICE/concepts/glossary/#term-constant-centre) $c$ | $x_s = a_s (\tilde f_s - c)$ | scaled |
+| [Noise-aware](/GSPICE/concepts/glossary/#term-noise-aware-model) | $x_s = \tilde f_s - \mu$ | flux |
+
+[Fitting](/GSPICE/concepts/fitting/) describes both. The public functions take flux and
+return flux, flux² or unit-free values. The working units appear only in
+[`gspice.scale()`](/GSPICE/reference/api/#gspice.scale),
+[`gspice.unscale()`](/GSPICE/reference/api/#gspice.unscale) and the fields of
+[`gspice.Model`](/GSPICE/reference/api/#gspice.Model).
