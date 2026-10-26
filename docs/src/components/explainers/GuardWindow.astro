@@ -1,0 +1,96 @@
+---
+// V-8, the guard window explainer: sliders set nguard and the width of a defect, and the
+// plots show the pixelwise prediction of every pixel, the guard window of the pixel next
+// to the defect, and the z of each pixel. The build renders the first frame;
+// src/lib/guard-window.ts draws each frame.
+import data from '../../data/explainer.json'
+import guard from '../../data/guard.json'
+import { frame, readout, spectrumMarkup, zMarkup } from '../../lib/guard-window.ts'
+import { legend } from '../../lib/spectrum-plot.ts'
+import '../../styles/explainer.css'
+
+const first = { nguard: 3, width: 10 }
+const state = frame(first.nguard, first.width)
+---
+
+<figure class="gs-explainer gs-guard not-content" data-first={JSON.stringify(first)}>
+  <p class="gs-hint" id="gs-guard-hint">
+    Move the sliders. The shaded band is the guard window of the pixel next to the defect: its pixels do not
+    enter the prediction of that pixel.
+  </p>
+  <div class="gs-plot" data-npix={data.npix} data-spectrum set:html={spectrumMarkup(state)} />
+  <div class="gs-plot gs-z" data-npix={data.npix} data-z set:html={zMarkup(state)} />
+  <div class="gs-sliders">
+    <label class="gs-slider">
+      <span>Guard half-width <code>nguard</code>: <output data-for="nguard">{first.nguard}</output></span>
+      <input type="range" name="nguard" min="0" max={guard.widest_nguard} value={first.nguard} aria-describedby="gs-guard-hint" />
+    </label>
+    <label class="gs-slider">
+      <span>Defect width: <output data-for="width">{first.width}</output> pixels</span>
+      <input type="range" name="width" min="1" max={guard.widest_defect} value={first.width} aria-describedby="gs-guard-hint" />
+    </label>
+  </div>
+  <p class="gs-readout" aria-live="polite" data-readout>{readout(state)}</p>
+  <noscript><p class="gs-hint">The sliders work only with JavaScript on.</p></noscript>
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        'obs',
+        'truth',
+        ['pred', 'prediction of each pixel'],
+        'b1',
+        'b2',
+        ['guard', 'guard window'],
+        ['zbar', '|z| ≤ ' + guard.threshold],
+        ['zbar flag', '|z| &gt; ' + guard.threshold],
+      ])}
+    />
+    <p>
+      The prediction is that of <code>gspice.pixelwise</code> with a model fitted to {data.ntrain} simulated
+      spectra of {data.npix} pixels, seed 11. The defect adds {guard.height} to the flux of held-out spectrum {guard.spectrum + 1}{' '}
+      from pixel {guard.start}. The ±1σ and ±2σ cells belong to the pixel next to the defect.
+      Bars of z stop at ±12.
+    </p>
+  </figcaption>
+</figure>
+
+<script>
+  import { announcer, redrawer } from '../../lib/explainer.ts'
+  import { frame, readout, spectrumMarkup, zMarkup } from '../../lib/guard-window.ts'
+
+  for (const root of document.querySelectorAll<HTMLElement>('.gs-guard')) {
+    const spectrum = root.querySelector<HTMLElement>('[data-spectrum]')!
+    const zplot = root.querySelector<HTMLElement>('[data-z]')!
+    const announce = announcer(root.querySelector<HTMLElement>('[data-readout]')!)
+    const state = JSON.parse(root.dataset.first!)
+    const schedule = redrawer(() => {
+      const now = frame(state.nguard, state.width)
+      spectrum.innerHTML = spectrumMarkup(now)
+      zplot.innerHTML = zMarkup(now)
+      announce(readout(now))
+    })
+    for (const input of root.querySelectorAll<HTMLInputElement>('input')) {
+      input.addEventListener('input', () => {
+        state[input.name] = Number(input.value)
+        root.querySelector(`output[data-for="${input.name}"]`)!.textContent = input.value
+        schedule()
+      })
+    }
+  }
+</script>
+
+<style>
+  .gs-explainer .gs-plot.gs-z {
+    --gs-plot-height: 6rem;
+    margin-top: 2.5rem;
+  }
+  .gs-sliders {
+    display: grid;
+    gap: 0 1.5rem;
+  }
+  @container (min-width: 32rem) {
+    .gs-sliders {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>

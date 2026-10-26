@@ -1,0 +1,146 @@
+---
+// V-12, the covariance explorer: point at a cell of the correlation map of the model to
+// plot the training spectra at its two pixels against each other, with the pixels marked
+// on the mean spectrum. The build renders the first pair; src/lib/covariance-explorer.ts
+// draws each pair.
+import scatter from '../../data/covariance.json'
+import data from '../../data/explainer.json'
+import { meanMarkup, readout, scatterMarkup } from '../../lib/covariance-explorer.ts'
+import { heatLegend, heatmapMarkup } from '../../lib/heatmap.ts'
+import { legend } from '../../lib/spectrum-plot.ts'
+import '../../styles/explainer.css'
+
+const [x, y] = scatter.pair
+const cell = `${100 / data.npix}%`
+const cursor = (x: number, y: number) =>
+  `left:${(100 * x) / data.npix}%;top:${(100 * y) / data.npix}%;width:${cell};height:${cell}`
+---
+
+<figure class="gs-explainer gs-covx not-content" data-pair={JSON.stringify(scatter.pair)}>
+  <p class="gs-hint" id="gs-covx-hint">
+    Point at a cell of the map, or tap it, to choose two pixels. With the map focused, the
+    arrow keys move the cell, and Shift with an arrow key moves it 10 pixels.
+  </p>
+  <div class="gs-panes">
+    <div
+      class="gs-plot gs-map"
+      data-npix={data.npix}
+      tabindex="0"
+      role="group"
+      aria-label="Correlation map of the model: pixel across, pixel down"
+      aria-describedby="gs-covx-hint"
+    >
+      <Fragment set:html={heatmapMarkup(data.cov)} />
+      <span class="gs-cursor" style={cursor(x, y)}></span>
+    </div>
+    <div class="gs-plot gs-scatter" set:html={scatterMarkup(x, y)} />
+  </div>
+  <div class="gs-plot gs-mean" data-npix={data.npix} set:html={meanMarkup(x, y)} />
+  <p class="gs-readout" aria-live="polite" data-readout>{readout(x, y)}</p>
+  <noscript><p class="gs-hint">The pixel pair changes only with JavaScript on.</p></noscript>
+  <figcaption class="gs-caption">
+    <Fragment set:html={heatLegend} />
+    <Fragment
+      set:html={legend([
+        ['sample', 'training spectrum'],
+        ['ref', '1σ and 2σ ellipses of the model'],
+        ['obs', 'mean spectrum'],
+      ])}
+    />
+    <p>
+      The map shows the correlation of each pair of pixels in a model fitted to {data.ntrain} simulated spectra
+      of {data.npix} pixels, seed 11. The scatter shows {scatter.spectra.length} of those training spectra at the
+      two pixels.
+    </p>
+  </figcaption>
+</figure>
+
+<script>
+  import data from '../../data/explainer.json'
+  import { meanMarkup, readout, scatterMarkup } from '../../lib/covariance-explorer.ts'
+  import { announcer, clamp, redrawer } from '../../lib/explainer.ts'
+
+  const npix = data.npix
+  for (const root of document.querySelectorAll<HTMLElement>('.gs-covx')) {
+    const map = root.querySelector<HTMLElement>('.gs-map')!
+    const cursor = root.querySelector<HTMLElement>('.gs-cursor')!
+    const plot = root.querySelector<HTMLElement>('.gs-scatter')!
+    const spectrum = root.querySelector<HTMLElement>('.gs-mean')!
+    const announce = announcer(root.querySelector<HTMLElement>('[data-readout]')!)
+    let [x, y]: number[] = JSON.parse(root.dataset.pair!)
+    const schedule = redrawer(() => {
+      cursor.style.left = `${(100 * x) / npix}%`
+      cursor.style.top = `${(100 * y) / npix}%`
+      plot.innerHTML = scatterMarkup(x, y)
+      spectrum.innerHTML = meanMarkup(x, y)
+      announce(readout(x, y))
+    })
+    function choose(across: number, down: number) {
+      ;[x, y] = [clamp(across, 0, npix - 1), clamp(down, 0, npix - 1)]
+      schedule()
+    }
+    // The cell under the pointer, if it is on the map.
+    function pick(event: PointerEvent) {
+      const box = map.getBoundingClientRect()
+      const across = Math.floor(((event.clientX - box.left) / box.width) * npix)
+      const down = Math.floor(((event.clientY - box.top) / box.height) * npix)
+      if (across >= 0 && across < npix && down >= 0 && down < npix) choose(across, down)
+    }
+    // A mouse or a pen chooses by hovering; a touch chooses where it taps, and a drag
+    // scrolls the page.
+    map.addEventListener('pointermove', (event) => event.pointerType !== 'touch' && pick(event))
+    map.addEventListener('pointerdown', pick)
+    const moves: Record<string, [number, number]> = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    }
+    map.addEventListener('keydown', (event) => {
+      const move = moves[event.key]
+      if (!move) return
+      event.preventDefault()
+      const step = event.shiftKey ? 10 : 1
+      choose(x + step * move[0], y + step * move[1])
+    })
+  }
+</script>
+
+<style>
+  .gs-explainer .gs-plot.gs-map,
+  .gs-explainer .gs-plot.gs-scatter {
+    width: min(100% - 2.25rem, 17rem);
+    height: auto;
+    aspect-ratio: 1;
+  }
+  .gs-explainer .gs-plot.gs-map {
+    touch-action: auto;
+    cursor: crosshair;
+  }
+  .gs-explainer .gs-plot.gs-scatter {
+    margin-top: 2.5rem;
+  }
+  .gs-explainer .gs-plot.gs-mean {
+    --gs-plot-height: 8rem;
+    margin-top: 3.25rem;
+  }
+  @container (min-width: 34rem) {
+    .gs-panes {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.5rem;
+    }
+    .gs-explainer .gs-plot.gs-scatter {
+      margin-top: 1.5rem;
+    }
+    .gs-explainer .gs-plot.gs-map {
+      margin-top: 1.5rem;
+    }
+  }
+  .gs-cursor {
+    position: absolute;
+    outline: 2px solid var(--gs-ink);
+    outline-offset: 1px;
+    pointer-events: none;
+  }
+</style>

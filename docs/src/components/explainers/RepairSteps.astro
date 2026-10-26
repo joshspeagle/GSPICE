@@ -1,0 +1,117 @@
+---
+// V-9, the repair stepper: step through gspice.repair on one spectrum, with its replaced
+// and ignored pixels and flagged blocks after each step. The build renders the input;
+// src/lib/repair-steps.ts draws each step.
+import data from '../../data/repair-steps.json'
+import { legend } from '../../lib/spectrum-plot.ts'
+import { STEPS, exampleLabel, masksMarkup, plotMarkup, readout } from '../../lib/repair-steps.ts'
+import '../../styles/explainer.css'
+---
+
+<figure class="gs-explainer gs-repair not-content">
+  <p class="gs-hint" id="gs-repair-hint">
+    Choose a step, or use Previous and Next. With a step button focused, the arrow keys, Home and End move between the steps.
+  </p>
+  <div class="gs-controls gs-steps" role="group" aria-label="Steps of repair">
+    {
+      STEPS.map((name, step) => (
+        <button type="button" data-step={step} aria-current={step === 0 ? 'step' : undefined} aria-describedby="gs-repair-hint">
+          {name}
+        </button>
+      ))
+    }
+  </div>
+  <div class="gs-plot" data-npix={data.npix} data-spectrum set:html={plotMarkup(0, 0)} />
+  <div class="gs-masks" data-masks set:html={masksMarkup(0, 0)} />
+  <div class="gs-controls">
+    <button type="button" data-action="previous" disabled>Previous</button>
+    <button type="button" data-action="next">Next</button>
+    <button type="button" data-action="spectrum">Next spectrum</button>
+    <span data-count>{exampleLabel(0)}</span>
+  </div>
+  <p class="gs-readout" aria-live="polite" data-readout>{readout(0, 0)}</p>
+  <noscript><p class="gs-hint">The steps change only with JavaScript on.</p></noscript>
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        'obs',
+        'truth',
+        'pred',
+        'b1',
+        'b2',
+        ['replaced', 'replaced pixel'],
+        ['ignored', 'ignored pixel'],
+        ['newflag', 'flagged block'],
+      ])}
+    />
+    <p>
+      Rows {data.examples[0].spectrum} and {data.examples[1].spectrum} of <code>test</code> above, with its model and block thresholds: a bad column and a shifted
+      segment, on {data.npix} pixels. The masks of step 1 come from <code>gspice.pixelwise</code>, and those of steps 2 to 4
+      from <code>gspice.repair</code>.
+    </p>
+  </figcaption>
+</figure>
+
+<script>
+  import data from '../../data/repair-steps.json'
+  import { announcer, clamp, redrawer } from '../../lib/explainer.ts'
+  import { STEPS, exampleLabel, masksMarkup, plotMarkup, readout } from '../../lib/repair-steps.ts'
+
+  const last = STEPS.length - 1
+  for (const root of document.querySelectorAll<HTMLElement>('.gs-repair')) {
+    const plot = root.querySelector<HTMLElement>('[data-spectrum]')!
+    const masks = root.querySelector<HTMLElement>('[data-masks]')!
+    const buttons = [...root.querySelectorAll<HTMLButtonElement>('[data-step]')]
+    const previous = root.querySelector<HTMLButtonElement>('[data-action="previous"]')!
+    const next = root.querySelector<HTMLButtonElement>('[data-action="next"]')!
+    const count = root.querySelector<HTMLElement>('[data-count]')!
+    const announce = announcer(root.querySelector<HTMLElement>('[data-readout]')!)
+    const state = { example: 0, step: 0 }
+    const schedule = redrawer(() => {
+      plot.innerHTML = plotMarkup(state.example, state.step)
+      masks.innerHTML = masksMarkup(state.example, state.step)
+      buttons.forEach((button, step) =>
+        step === state.step ? button.setAttribute('aria-current', 'step') : button.removeAttribute('aria-current'),
+      )
+      // A button that becomes disabled loses its focus to the body, so focus moves to
+      // the other one.
+      if (state.step === 0 && document.activeElement === previous) next.focus()
+      if (state.step === last && document.activeElement === next) previous.focus()
+      previous.disabled = state.step === 0
+      next.disabled = state.step === last
+      count.textContent = exampleLabel(state.example)
+      announce(readout(state.example, state.step))
+    })
+    const go = (step: number) => {
+      state.step = clamp(step, 0, last)
+      schedule()
+    }
+    buttons.forEach((button, step) => button.addEventListener('click', () => go(step)))
+    previous.addEventListener('click', () => go(state.step - 1))
+    next.addEventListener('click', () => go(state.step + 1))
+    root.querySelector('[data-action="spectrum"]')!.addEventListener('click', () => {
+      state.example = (state.example + 1) % data.examples.length
+      schedule()
+    })
+    const keys: Record<string, (step: number) => number> = {
+      ArrowLeft: (step) => step - 1,
+      ArrowRight: (step) => step + 1,
+      Home: () => 0,
+      End: () => last,
+    }
+    root.querySelector('.gs-steps')!.addEventListener('keydown', (event) => {
+      const key = keys[(event as KeyboardEvent).key]
+      if (!key) return
+      event.preventDefault()
+      // The keys move from the focused step button.
+      go(key(buttons.indexOf(event.target as HTMLButtonElement)))
+      buttons[state.step].focus()
+    })
+  }
+</script>
+
+<style>
+  .gs-steps {
+    margin-bottom: 1rem;
+  }
+</style>

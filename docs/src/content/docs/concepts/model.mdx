@@ -4,6 +4,9 @@ description: Why a mean and a covariance of your own spectra can predict any pix
 ---
 
 import UnitsFigure from '../../../components/UnitsFigure.astro'
+import CovarianceExplorer from '../../../components/explainers/CovarianceExplorer.astro'
+import MaskExplainer from '../../../components/explainers/MaskExplainer.astro'
+import TwoPixel from '../../../components/explainers/TwoPixel.astro'
 
 Why can a covariance predict pixels? This page builds the answer from one spectrum to the
 units that the code works in [@finkbeiner2025gspice].
@@ -41,6 +44,11 @@ the other lies below, and 0 where they are unrelated. $C_{ii}$ is the variance a
 [correlation](/GSPICE/concepts/glossary/#term-correlation)
 $C_{ii'} / \sqrt{C_{ii} C_{i'i'}}$ puts this on a scale from −1 to 1.
 
+The explainer below maps the correlation of a fitted model, and plots the training
+spectra at any two of its pixels against each other.
+
+<CovarianceExplorer />
+
 ## Conditioning on two pixels, then on many
 
 A prediction answers this question: given the flux that you observed at some pixels, what
@@ -54,7 +62,10 @@ C_{ii} - \frac{C_{ii'}^2}{C_{i'i'}}\right) .
 $$
 
 Its mean moves away from 0 in proportion to $x_{i'}$. Its variance is smaller than
-$C_{ii}$, the more so the stronger the correlation.
+$C_{ii}$, the more so the stronger the correlation. In the explainer below, you fix the
+flux of one pixel and see the distribution of the other.
+
+<TwoPixel />
 
 The same holds for any number of pixels. Split the pixels into two sets. $G$ holds the
 pixels to predict or to leave out, and $O$ holds the
@@ -73,6 +84,11 @@ follow the same rule. The [conditional mean](/GSPICE/concepts/glossary/#term-con
 is the prediction. It is the average of all spectra in the model that agree with the
 conditioning pixels, and a linear function of $x_O$. Where $G$ holds all pixels, the
 result is the [prior](/GSPICE/concepts/glossary/#term-prior) $\mathcal{N}(0, C)$.
+
+In the explainer below, the masked block is $G$, and the square beside the spectrum
+marks the rows and columns of $G$ in the correlation of $C$.
+
+<MaskExplainer full />
 
 A prediction can report only some pixels of $G$. The others are
 [marginalized](/GSPICE/concepts/glossary/#term-marginalize): their values do not enter,

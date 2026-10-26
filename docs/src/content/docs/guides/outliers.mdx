@@ -3,6 +3,7 @@ title: Find outliers
 description: Predict each pixel from the rest of its spectrum, and flag the pixels far from their prediction.
 ---
 
+import GuardWindow from '../../../components/explainers/GuardWindow.astro'
 import ZHistogram from '../../../components/ZHistogram.astro'
 
 Which pixels disagree with the rest of their spectrum? This guide finds them with
@@ -117,6 +118,11 @@ and many of them are flagged. The default, `nguard=20`, suits artifacts up to ab
 pixels long. A wider window leaves fewer pixels to predict from.
 [Pixelwise prediction](/GSPICE/concepts/prediction/#pixelwise-prediction) gives the
 equations.
+
+The explainer below adds a defect to one spectrum and shows the z of each pixel for any
+`nguard` and defect width.
+
+<GuardWindow />
 
 ## Held-out spectra and inflate
 

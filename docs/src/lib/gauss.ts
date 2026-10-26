@@ -2,8 +2,9 @@
 // from its other pixels O, given the mean m and the covariance C of the spectra:
 //   mu_M = m_M + C_MO C_OO^-1 (x_O - m_O),
 //   sd_M = sqrt(diag(C_MM - C_MO C_OO^-1 C_OM)).
-// It factors C_OO by Cholesky on each call. tests/gauss.test.mjs compares it with numpy
-// and with gspice.infill.
+// condition factors C_OO by Cholesky on each call. pixelwise predicts each pixel from
+// the pixels beyond its guard window, as gspice.pixelwise does. tests/gauss.test.mjs and
+// tests/explainers.test.mjs compare them with numpy, gspice.infill and gspice.pixelwise.
 
 // The lower Cholesky factor of the n x n matrix A, both row-major.
 function cholesky(A: Float64Array, n: number): Float64Array {
@@ -77,4 +78,96 @@ export function condition(
     sd[i] = Math.sqrt(Math.max(cov[i][i] - q, 0))
   }
   return { mu, sd }
+}
+
+// The precision matrix P = C^-1 of the npix x npix covariance cov, row-major.
+export function precision(cov: readonly (readonly number[])[]): Float64Array {
+  const n = cov.length
+  const L = cholesky(Float64Array.from(cov.flat()), n)
+  const P = new Float64Array(n * n)
+  for (let k = 0; k < n; k++) {
+    const e = new Float64Array(n)
+    e[k] = 1
+    // P is symmetric, so its column k is its row k.
+    P.set(backward(L, n, forward(L, n, e)), k * n)
+  }
+  return P
+}
+
+// The guard window g = {j : |j - i| <= nguard} of each pixel i, clipped at the ends:
+// its first pixel, the Cholesky factor of P_gg, and sd_i = sqrt((P_gg^-1)_ii), which
+// depends only on the window.
+export interface Window {
+  first: number
+  size: number
+  L: Float64Array
+  sd: number
+}
+
+export function guardWindows(P: Float64Array, nguard: number): Window[] {
+  const npix = Math.sqrt(P.length)
+  return Array.from({ length: npix }, (_, i) => {
+    const first = Math.max(0, i - nguard)
+    const size = Math.min(npix, i + nguard + 1) - first
+    const A = new Float64Array(size * size)
+    for (let a = 0; a < size; a++) for (let b = 0; b < size; b++) A[a * size + b] = P[(first + a) * npix + first + b]
+    const L = cholesky(A, size)
+    // (P_gg^-1)_kk = |L^-1 e_k|^2.
+    const e = new Float64Array(size)
+    e[i - first] = 1
+    return { first, size, L, sd: Math.sqrt(forward(L, size, e).reduce((sum, v) => sum + v * v, 0)) }
+  })
+}
+
+// The prediction of each pixel i of x from the pixels O outside its guard window g,
+// with the windows of guardWindows (paper Alg. 3):
+//   mu_g = x_g - P_gg^-1 (P (x - m))_g,  sd_i^2 = (P_gg^-1)_ii,
+// equal to the conditional mean and variance of x_g given x_O, and z_i = (x_i - mu_i) /
+// sd_i. Returns mu, sd and z of length npix. Every window must leave O not empty.
+export function pixelwise(mean: readonly number[], P: Float64Array, windows: readonly Window[], x: readonly number[]) {
+  const npix = mean.length
+  const r = new Float64Array(npix)
+  for (let i = 0; i < npix; i++) {
+    let s = 0
+    for (let j = 0; j < npix; j++) s += P[i * npix + j] * (x[j] - mean[j])
+    r[i] = s
+  }
+  const mu = Float64Array.from(windows, ({ first, size, L }, i) => {
+    const y = backward(L, size, forward(L, size, r.slice(first, first + size)))
+    return x[i] - y[i - first]
+  })
+  const sd = Float64Array.from(windows, (window) => window.sd)
+  return { mu, sd, z: Float64Array.from(x, (v, i) => (v - mu[i]) / sd[i]) }
+}
+
+// The conditional mean and standard deviation of pixel i given pixel j at value, from
+// the 2 x 2 model of the two pixels.
+export function conditionPair(
+  mean: readonly number[],
+  cov: readonly (readonly number[])[],
+  i: number,
+  j: number,
+  value: number,
+) {
+  const pair = [
+    [cov[i][i], cov[i][j]],
+    [cov[j][i], cov[j][j]],
+  ]
+  const { mu, sd } = condition([mean[i], mean[j]], pair, [NaN, value], 0, 1)
+  return { mu: mu[0], sd: sd[0] }
+}
+
+// n + 1 points of the ellipse at k standard deviations of a Gaussian with the mean
+// (mx, my) and the covariance [[cxx, cxy], [cxy, cyy]]: m + k L (cos t, sin t), with L
+// its Cholesky factor. The last point repeats the first. For a correlation of ±1, as
+// of a pixel with itself, the ellipse is a line.
+export function ellipse(mx: number, my: number, cxx: number, cxy: number, cyy: number, k: number, n = 72) {
+  const l11 = Math.sqrt(cxx)
+  const l21 = cxy / l11
+  // Rounding can make l22^2 slightly negative where it is near 0.
+  const l22 = Math.sqrt(Math.max(cyy - l21 * l21, 0))
+  return Array.from({ length: n + 1 }, (_, m) => {
+    const t = (2 * Math.PI * m) / n
+    return [mx + k * l11 * Math.cos(t), my + k * (l21 * Math.cos(t) + l22 * Math.sin(t))] as const
+  })
 }

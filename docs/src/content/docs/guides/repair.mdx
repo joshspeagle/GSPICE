@@ -3,6 +3,8 @@ title: Find and repair artifacts
 description: Set block thresholds from clean spectra, then find the artifacts of each spectrum and replace them with repair.
 ---
 
+import RepairSteps from '../../../components/explainers/RepairSteps.astro'
+
 I don't know where the artifacts are. How do I find and replace them? This guide uses
 [`gspice.repair()`](/GSPICE/reference/api/#gspice.repair), on simulated spectra.
 
@@ -104,6 +106,11 @@ print(f"{flagged.mean():.1%} of the clean test spectra")
 ```
 
 This is the fraction of the test spectra without an artifact that got a replaced pixel.
+
+The explainer below steps through `repair` on two of the test spectra, and shows their
+masks after each step.
+
+<RepairSteps />
 
 ## Without clean spectra
 

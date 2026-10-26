@@ -1,11 +1,14 @@
 ---
 // Starlight's footer, then the cell strip of the mean spectrum: one cell per pixel,
-// lighter where the flux is higher. docs/scripts/logo.py writes strip.json.
+// lighter where the flux is higher. docs/scripts/logo.py writes strip.json. The footer
+// also carries the script of the term cards, which every page needs.
 import Default from '@astrojs/starlight/components/Footer.astro'
 import strip from '../assets/strip.json'
+import TermCards from './TermCards.astro'
 ---
 
 <Default />
+<TermCards />
 <div class="gs-strip" aria-hidden="true">
   {strip.map((level) => <i style={`--level: ${Math.round(level * 1000) / 10}%`}></i>)}
 </div>
