@@ -75,28 +75,29 @@ def rebuild(instance: "DataclassInstance") -> tuple[Callable[[], object], tuple[
 
 @dataclass(frozen=True, eq=False)
 class Blocks:
-    """Block-scan geometry and per-block thresholds, from `fit_blocks`.
+    r"""Geometry of the block scan and threshold of each block, from `fit_blocks`.
 
-    Block k holds the pixels starts[k] to starts[k] + width - 1. Its statistic chi2_A
-    of `fit_blocks` compares the block with its prediction from the pixels farther
-    than nguard from it, and thresholds[b, k] is the threshold of chi2_A for the
-    spectra of S/N bin b. The constructor takes array_like values, of an integer dtype
-    for starts, and numpy scalars, and stores them as the types given here, with
-    read-only copies of the arrays. Two Blocks are equal only if they are the same
-    object.
+    Block :math:`j` holds the pixels ``starts[j]`` to ``starts[j] + width - 1``.
+    Its statistic :math:`\chi^2_A` of `fit_blocks` compares the block with its
+    prediction from the pixels farther than ``nguard`` from it. ``thresholds[b, j]`` is
+    the threshold of :math:`\chi^2_A` for the spectra of S/N bin :math:`b`.
+    The constructor takes array_like values, of an integer dtype for ``starts``, and
+    numpy scalars. It stores them as the types given here, with read-only copies of the
+    arrays. Two Blocks are equal only if they are the same object.
 
     Attributes
     ----------
     starts : ndarray of int64, shape (nblock,)
-        The first pixel of each of the nblock >= 1 blocks: >= 0 and strictly
+        The first pixel of each of the nblock ≥ 1 blocks: 0 or more, and strictly
         increasing.
     width : int
-        The pixels per block, |A|; >= 1.
+        The number of pixels per block, :math:`|A|`; 1 or more.
     nguard : int
         The half-width of the guard window around each block (pixels); from 0 to
-        2^63 - 1, so that `save` can write it.
+        :math:`2^{63} - 1`, so that `save` can write it.
     thresholds : ndarray, shape (nbin, nblock)
-        The threshold of chi2_A of each bin and block (unit-free): finite and > 0.
+        The threshold of :math:`\chi^2_A` of each bin and block (unit-free): finite and
+        positive.
 
     Raises
     ------
@@ -104,8 +105,8 @@ class Blocks:
         If a field has a type or dtype that is not allowed above. The message starts
         with the name of the field.
     ValueError
-        If a field has a shape or a value that is not allowed above. The message
-        starts with the name of the field.
+        If a field has a shape or a value that is not allowed above. The message starts
+        with the name of the field.
     """
 
     starts: NDArray[np.int64]
@@ -159,40 +160,50 @@ class Blocks:
 
 @dataclass(frozen=True, eq=False)
 class LowRank:
-    """Low-rank plus diagonal covariance C = V diag(values) V^T + diag(diag).
+    r"""Low-rank plus diagonal covariance.
 
-    `fit` with rank=K returns a `Model` with a LowRank covariance. A model computes its
-    precision matrix by the Woodbury identity, without forming C, and
-    rejects it where kappa_W > 1e13, with c_i = diag_i + sum_k values_k V_ik^2 the
-    variances of C, dtilde = diag / c, Vtilde = diag(c)^-1/2 V and::
+    .. math::
 
-        kappa_W = (max dtilde + lambda_max(diag(values)^1/2 Vtilde^T Vtilde
-                   diag(values)^1/2)) / min dtilde,
+        C = V \mathrm{diag}(\mathrm{values}) V^\mathsf{T} + \mathrm{diag}(\mathrm{diag})
 
-    a bound on the condition number of C scaled to unit diagonal and on max c_i/diag_i.
-    The constructor takes array_like values and stores read-only float64 copies. Two
-    LowRank are equal only if they are the same object.
+    `fit` with ``rank=K`` returns a `Model` with a LowRank covariance. A model computes
+    its precision matrix by the Woodbury identity, without forming :math:`C`. It rejects
+    the covariance where :math:`\kappa_W > 10^{13}`, with
+
+    .. math::
+
+        \kappa_W = \frac{\max \tilde d + \lambda_{\max}\bigl(
+        \mathrm{diag}(\mathrm{values})^{1/2} \tilde V^\mathsf{T} \tilde V \,
+        \mathrm{diag}(\mathrm{values})^{1/2}\bigr)}{\min \tilde d}.
+
+    Here :math:`c_i = \mathrm{diag}_i + \sum_\ell \mathrm{values}_\ell V_{i\ell}^2` are
+    the variances of :math:`C`, :math:`\tilde d = \mathrm{diag} / c` and
+    :math:`\tilde V = \mathrm{diag}(c)^{-1/2} V`. :math:`\kappa_W` bounds both the
+    condition number of :math:`C` scaled to unit diagonal and
+    :math:`\max_i c_i / \mathrm{diag}_i`. The constructor takes array_like values and
+    stores read-only float64 copies. Two LowRank are equal only if they are the same
+    object.
 
     Attributes
     ----------
     vectors : ndarray, shape (npix, K)
-        The K >= 1 columns of V, for npix >= 1 pixels: finite. `fit` returns
-        orthonormal columns (unit-free), in decreasing order of values.
+        The :math:`K \ge 1` columns of :math:`V`, for npix ≥ 1 pixels: finite. `fit`
+        returns orthonormal columns (unit-free), in decreasing order of ``values``.
     values : ndarray, shape (K,)
-        The variance of each column (scaled^2; flux^2 for a noise model): finite and
-        > 0.
+        The variance of each column (scaled²; flux² for a noise-aware model): finite
+        and positive.
     diag : ndarray, shape (npix,)
-        The diagonal term (scaled^2; flux^2 for a noise model): finite and >= 0;
-        `Model` requires > 0, except for a noise model.
+        The diagonal term (scaled²; flux² for a noise-aware model): finite and 0 or
+        more. `Model` requires positive values, except for a noise-aware model.
 
     Raises
     ------
     TypeError
-        If a field has a dtype that is not integer or floating. The message starts
-        with the name of the field.
+        If a field has a dtype that is not integer or floating. The message starts with
+        the name of the field.
     ValueError
-        If a field has a shape or a value that is not allowed above. The message
-        starts with the name of the field.
+        If a field has a shape or a value that is not allowed above. The message starts
+        with the name of the field.
     """
 
     vectors: NDArray[np.float64]
@@ -222,63 +233,73 @@ class LowRank:
 
 @dataclass(frozen=True, eq=False)
 class Model:
-    """Fitted Gaussian model of spectra on a common pixel grid.
+    r"""Fitted Gaussian model of spectra on a common pixel grid.
 
-    A spectrum in S/N bin b has the working vector x ~ N(0, cov[b]) in scaled units.
-    Let ftilde be the flux of the spectrum with its bad pixels interpolated, and a the
-    square root of the mean inverse variance of its good pixels (see `scale`). Then
-    x = a (ftilde - center) - mean[b] for a constant centre, and
-    x = a ftilde - mean[b] otherwise.
+    A spectrum in S/N bin :math:`b` has the working vector
+    :math:`x \sim N(0, \mathrm{cov}[b])` in scaled units. Let :math:`\tilde f` be the
+    flux of the spectrum with its bad pixels interpolated. Let :math:`a` be the square
+    root of the mean inverse variance of its good pixels (see `scale`).
+    Then :math:`x = a (\tilde f - \mathrm{center}) - \mathrm{mean}[b]` for a constant
+    centre, and :math:`x = a \tilde f - \mathrm{mean}[b]` otherwise.
 
-    A noise model (noise=True) has one bin and works in flux units: spectrum s has::
+    A noise-aware model (``noise=True``) has one bin and works in flux units.
+    Spectrum :math:`s` has
 
-        x = ftilde - mean[0] ~ N(0, C_s),  C_s = cov[0] + diag(nu_s),
+    .. math::
 
-    where cov[0] is the covariance of the noise-free flux, and nu_si = 1/ivar_si at the
-    good pixels and 1/a^2 at the bad pixels of the spectrum. The constructor checks only
-    the diagonal of cov[0]; prediction rejects a C_s that is not positive definite
-    where it factors C_s, and the prior factors only C_s at the target pixels.
+        x = \tilde f - \mathrm{mean}[0] \sim N(0, C_s), \qquad
+        C_s = \mathrm{cov}[0] + \mathrm{diag}(\nu_s),
 
-    The constructor takes the attributes below as array_like values, iterables and
-    numpy scalars, and stores them as the types given here, with read-only float64
-    copies of the arrays and new `LowRank` covariances. The attributes after n_train
-    are keyword-only. The constructor does not check that a covariance is positive
-    definite, which costs npix^3. Two models are equal only if they are the same
+    where ``cov[0]`` is the covariance of the noise-free flux. :math:`\nu_{si}` is
+    :math:`1/\mathrm{ivar}_{si}` at the good pixels and :math:`1/a^2` at the bad pixels
+    of the spectrum. The constructor checks only the diagonal of ``cov[0]``.
+    Prediction rejects a :math:`C_s` that is not positive definite where it factors
+    :math:`C_s`. The prior factors only :math:`C_s` at the target pixels.
+
+    The constructor takes the attributes below as array_like values, iterables and numpy
+    scalars. It stores them as the types given here, with read-only float64 copies of
+    the arrays and new `LowRank` covariances. The attributes after ``n_train`` are
+    keyword-only. The constructor does not check that a covariance is positive definite,
+    which costs :math:`\mathrm{npix}^3`. Two models are equal only if they are the same
     object.
 
-    A model computes the precision matrix of a bin at its first use and keeps it, with
-    the guard weights of the latest nguard of each bin (see `pixelwise`). Each matrix
-    takes npix^2 x 8 bytes, 46 MB at npix 2400, also for a `LowRank` covariance.
-    Pickle, copy and deepcopy start without them.
+    A model computes the precision matrix of a bin at its first use and keeps it.
+    It also keeps the guard weights of the latest ``nguard`` of each bin (see
+    `pixelwise`). Each matrix takes :math:`\mathrm{npix}^2 \times 8` bytes, 46 MB at
+    npix 2400, also for a `LowRank` covariance. Pickle, copy and deepcopy start without
+    them.
 
     Attributes
     ----------
     mean : ndarray, shape (nbin, npix)
-        The vector mean[b] of each of the nbin >= 1 S/N bins (scaled; flux for a noise
-        model), subtracted to give x. npix >= 1 is the number of pixels. Finite.
+        The vector ``mean[b]`` of each of the nbin S/N bins (scaled; flux for a
+        noise-aware model), subtracted to give :math:`x`, over the npix pixels. Finite;
+        nbin and npix are 1 or more.
     cov : tuple of ndarray, each shape (npix, npix), or LowRank
-        The covariance of x in each bin (scaled^2), or of the noise-free flux of a
-        noise model (flux^2): nbin finite, exactly symmetric matrices with a positive
-        diagonal, or nbin `LowRank` covariances of npix pixels with diag > 0. All bins
-        hold one kind. For a noise model, a diagonal >= 0, or a `LowRank` with
-        diag >= 0; a positive semi-definite cov[0] makes every C_s positive definite.
+        The covariance of :math:`x` in each bin (scaled²), or of the noise-free flux of
+        a noise-aware model (flux²). Either nbin finite, exactly symmetric matrices
+        with a positive diagonal, or nbin `LowRank` covariances of npix pixels with
+        positive ``diag``. All bins hold one kind. A noise-aware model allows a diagonal
+        ≥ 0, or a `LowRank` with ``diag`` ≥ 0. A positive semi-definite ``cov[0]``
+        makes every :math:`C_s` positive definite.
     n_train : tuple of int
-        The number N_s >= 1 of training spectra in each bin (nbin integers).
+        The number :math:`N_s` of training spectra in each bin (nbin integers ≥ 1).
     edges : tuple of float
-        The nbin - 1 interior S/N edges between the bins: finite and strictly
-        increasing. Spectrum s with signal-to-noise ratio snr_s (see `snr`) is in the
-        bin np.searchsorted(edges, snr_s, side="right").
+        The nbin − 1 interior S/N edges between the bins: finite and strictly
+        increasing. Spectrum :math:`s` with the signal-to-noise ratio
+        :math:`\mathrm{snr}_s` (see `snr`) is in the bin
+        ``np.searchsorted(edges, snr_s, side="right")``.
     center : float or None
-        None for a mean-centred model, or the constant centre c (flux); None for a
-        noise model.
+        None for a mean-centred model, or the constant centre :math:`c` (flux). None for
+        a noise-aware model.
     noise : bool
-        True for a noise model, which has one bin and center None.
+        True for a noise-aware model, which has one bin and ``center`` None.
     weighted : bool
-        True if the model was fitted with positive weights that are not all equal in
-        a bin.
+        True if the model was fitted with positive weights that are not all equal in a
+        bin.
     blocks : Blocks or None
-        The blocks and thresholds of `fit_blocks`, with a row of thresholds for each
-        bin and every block within the npix pixels; None for a model without them.
+        The blocks and thresholds of `fit_blocks`, with a row of thresholds for each bin
+        and every block within the npix pixels. None for a model without them.
 
     Raises
     ------
@@ -286,8 +307,8 @@ class Model:
         If a field has a type or dtype that is not allowed above. The message starts
         with the name of the field.
     ValueError
-        If a field has a shape or a value that is not allowed above. The message
-        starts with the name of the field.
+        If a field has a shape or a value that is not allowed above. The message starts
+        with the name of the field.
     """
 
     mean: NDArray[np.float64]
@@ -590,156 +611,214 @@ def fit(
     snr_bins: Integer | Iterable[Real] | None = None,
     progress: Progress | None = None,
 ) -> tuple[Model, NDArray[np.bool_]]:
-    """Fit a model to training spectra with iterative outlier clipping (paper Alg. 4).
+    r"""Fit a model to training spectra with iterative outlier clipping (paper Alg. 4).
 
-    The bad pixels are (mask != 0) | (ivar == 0), and fit never reads flux or ivar
-    there. A spectrum is used unless it has more than maxbadpix bad pixels, has weight
-    0, or a pass mask or the final mask covers it completely; N_s counts the spectra
-    of a fit. A fit on a mask interpolates the pixels in it, scales each spectrum by
-    a_s over the pixels outside it (see `scale`), and estimates::
+    The bad pixels are ``(mask != 0) | (ivar == 0)``, and fit never reads ``flux`` or
+    ``ivar`` there. fit uses a spectrum unless it has more than ``maxbadpix`` bad
+    pixels, has the weight 0, or a pass mask or the final mask covers it completely.
+    :math:`N_s` counts the spectra of a fit. A fit on a mask interpolates the pixels in
+    it, and scales each spectrum by :math:`a_s` over the pixels outside it (see
+    `scale`). It then estimates
 
-        m = sum_s w_s x_s / V1,  S = sum_s w_s (x_s - m)(x_s - m)^T / (V1 - V2 / V1),
+    .. math::
 
-    where x_s = a_s ftilde_s, V1 = sum_s w_s and V2 = sum_s w_s^2; with unit weights,
-    m is the column mean and the divisor is N_s - 1. With a constant centre c, m = 0,
-    x_s = a_s (ftilde_s - c) and S = sum_s w_s x_s x_s^T / V1. With rank=K, the
-    covariance is the `LowRank` C = V diag(lambda) V^T + diag(d), with (V, lambda) the
-    K leading eigenpairs of S and d = diag(S) - sum_k lambda_k V_k^2, so that C and S
-    have the same diagonal.
+        m = \frac{1}{V_1} \sum_s w_s x_s, \qquad
+        S = \frac{\sum_s w_s (x_s - m)(x_s - m)^\mathsf{T}}{V_1 - V_2 / V_1},
 
-    Pass n of N = len(nsigma) fits on its mask M_n with unit weights and the rank,
-    computes the in-sample z of `pixelwise` with nguard at every pixel, interpolated
-    ones included, and flags F_n: each pixel with |z| > nsigma[n - 1] and its two
-    neighbours. M_1 = bad. With cumulative=True (paper Alg. 4), M_{n+1} = M_n | F_n
-    and the final mask is M_{N+1}; with cumulative=False (2022), M_{n+1} = bad | F_n
-    and the final mask is bad | F_{N-1} | F_N. nsigma=() fits on the mask bad, without
-    clipping.
-    The final fit uses the final mask and the weights w_s. Without rank, fit logs a
-    warning on the "gspice" logger for each pass whose threshold exceeds the in-sample
-    ceiling of |z| of an outlier in a spectrum of typical leverage.
+    where :math:`x_s = a_s \tilde f_s`, :math:`V_1 = \sum_s w_s` and
+    :math:`V_2 = \sum_s w_s^2`. With unit weights, :math:`m` is the column mean and the
+    divisor is :math:`N_s - 1`. With a constant centre :math:`c`, :math:`m = 0`,
+    :math:`x_s = a_s (\tilde f_s - c)` and
+    :math:`S = \sum_s w_s x_s x_s^\mathsf{T} / V_1`. With ``rank=K``, the covariance is
+    the `LowRank` :math:`C = V \mathrm{diag}(\lambda) V^\mathsf{T} + \mathrm{diag}(d)`.
+    Here :math:`(V, \lambda)` are the :math:`K` leading eigenpairs of :math:`S`, and
+    :math:`d = \mathrm{diag}(S) - \sum_\ell \lambda_\ell V_\ell^2`, so that :math:`C`
+    and :math:`S` have the same diagonal.
 
-    With noise=True, the passes clip as above, and the final fit estimates the
-    covariance of the noise-free flux in flux units (design section 4.1). Let u_si be
-    1 at the pixels outside the final mask and 0 elsewhere, and v_s = a_s^2 w_s. Then::
+    Pass :math:`n` of the :math:`N` = ``len(nsigma)`` passes fits on its mask
+    :math:`B_n` with unit weights and the rank, and flags :math:`F_n`: each pixel,
+    interpolated ones included, whose in-sample :math:`|z|` of `pixelwise` with
+    ``nguard`` exceeds ``nsigma[n - 1]``, and its two neighbours. :math:`B_1` holds the
+    bad pixels.
 
-        W_i = sum_s v_s u_si,  mu_i = sum_s v_s u_si f_si / W_i,
-        A_si = v_s^1/2 u_si (f_si - mu_i),  D1_ij = sum_s v_s u_si u_sj,
-        D2_ij = sum_s v_s^2 u_si u_sj,  N_i = sum_s v_s u_si (1 - v_s / W_i) / ivar_si,
-        Sigma_ij = ((A^T A)_ij - delta_ij N_i)
-                   / (D1_ij - D2_ij (1/W_i + 1/W_j - D1_ij / (W_i W_j))).
+    - With ``cumulative=True`` (paper Alg. 4), :math:`B_{n+1} = B_n \cup F_n`, and the
+      final mask is :math:`B_{N+1}`.
+    - With ``cumulative=False`` (2022), :math:`B_{n+1} = B_1 \cup F_n`, and the final
+      mask is :math:`B_1 \cup F_{N-1} \cup F_N`.
+    - ``nsigma=()`` fits on the mask of the bad pixels, without clipping.
 
-    Sigma is unbiased element by element if the spectra are independent with a common
-    mean and signal covariance, the noise has zero mean and variance 1/ivar and is
-    uncorrelated between pixels and with the signal, and the masks, weights and ivar
-    do not depend on the flux; the outlier flags of the final mask break the last
-    condition. The model holds mean[0] = mu and cov[0] = Q max(Lambda, 0) Q^T, with
-    Sigma = Q Lambda Q^T its eigendecomposition, which is biased upward. With rank=K,
-    cov[0] is the `LowRank` C = V diag(lambda) V^T + diag(d), with (V, lambda) the K
-    leading eigenpairs of Sigma and d_i = sum_{k>K} max(lambda_k, 0) Q_ik^2, so that C
-    and Q max(Lambda, 0) Q^T have the same diagonal.
+    The final fit uses the final mask and the weights :math:`w_s`. Without ``rank``, fit
+    logs a warning on the ``"gspice"`` logger for each pass whose threshold exceeds the
+    in-sample ceiling of :math:`|z|` of an outlier in a spectrum of typical leverage.
 
-    With snr_bins, spectrum s goes to the S/N bin np.searchsorted(edges, snr_s,
-    side="right"), with snr_s from `snr` on flux, ivar and mask. Each bin runs the
-    passes and the final fit above on its own spectra, so bin b of the model equals
-    the model of fit on the spectra of bin b alone, with their own clipping, m, S and
-    N_s. Each bin clips with its own N_s, so the in-sample ceiling of |z| falls in
-    small bins, and they flag fewer outliers (design decision A6).
+    With ``noise=True``, the passes clip as above. The final fit then estimates the
+    covariance of the noise-free flux, in flux units. Let :math:`u_{si}` be 1 at the
+    pixels outside the final mask and 0 elsewhere, and :math:`v_s = a_s^2 w_s`. Then
 
-    With cumulative=False, fit equals legacy covar_iter_mask, the covariance to
-    rounding and the mask exactly, if nguard is 20, center, weights, rank and snr_bins
-    are None, noise is False, flux is float64, ivar == 0 only at pixels in mask,
-    nsigma is not empty, no |z| lies within the error of the 2022 Schur updates of a
-    threshold, no pass mask or final mask covers completely a spectrum with at most
-    maxbadpix bad pixels, and fit raises no error.
+    .. math::
+
+        \begin{aligned}
+        W_i &= \sum_s v_s u_{si}, \qquad
+        \mu_i = \frac{1}{W_i} \sum_s v_s u_{si} f_{si}, \qquad
+        A_{si} = v_s^{1/2} u_{si} (f_{si} - \mu_i), \\
+        D^{(1)}_{ij} &= \sum_s v_s u_{si} u_{sj}, \qquad
+        D^{(2)}_{ij} = \sum_s v_s^2 u_{si} u_{sj}, \qquad
+        N_i = \sum_s \frac{v_s u_{si} (1 - v_s / W_i)}{\mathrm{ivar}_{si}}, \\
+        \Sigma_{ij} &= \frac{(A^\mathsf{T} A)_{ij} - \delta_{ij} N_i}
+        {D^{(1)}_{ij} - D^{(2)}_{ij} \bigl(1/W_i + 1/W_j
+        - D^{(1)}_{ij} / (W_i W_j)\bigr)}.
+        \end{aligned}
+
+    :math:`\Sigma` is unbiased element by element under these conditions:
+
+    - The spectra are independent, with a common mean and signal covariance.
+    - The noise has zero mean and the variance :math:`1/\mathrm{ivar}`. It is
+      uncorrelated between pixels and with the signal.
+    - The masks, weights and ivar do not depend on the flux. The outlier flags of the
+      final mask break this condition.
+
+    The model holds :math:`\mathrm{mean}[0] = \mu` and
+    :math:`\mathrm{cov}[0] = Q \max(\Lambda, 0) Q^\mathsf{T}`, with
+    :math:`\Sigma = Q \Lambda Q^\mathsf{T}` its eigendecomposition. This ``cov[0]`` is
+    biased upward. With ``rank=K``, ``cov[0]`` is the `LowRank`
+    :math:`C = V \mathrm{diag}(\lambda) V^\mathsf{T} + \mathrm{diag}(d)`.
+    Here :math:`(V, \lambda)` are the :math:`K` leading eigenpairs of :math:`\Sigma`,
+    and :math:`d_i = \sum_{\ell > K} \max(\lambda_\ell, 0) Q_{i\ell}^2`. So :math:`C`
+    and :math:`Q \max(\Lambda, 0) Q^\mathsf{T}` have the same diagonal.
+
+    With ``snr_bins``, spectrum :math:`s` goes to the S/N bin
+    ``np.searchsorted(edges, snr_s, side="right")``, with :math:`\mathrm{snr}_s` from
+    `snr` on ``flux``, ``ivar`` and ``mask``. Each bin runs the passes and the final fit
+    above on its own spectra. Bin :math:`b` of the model thus equals a fit on the
+    spectra of bin :math:`b` alone, with their own clipping, :math:`m`, :math:`S` and
+    :math:`N_s`. Each bin clips with its own :math:`N_s`. So the in-sample ceiling of
+    :math:`|z|` falls in small bins, and they flag fewer outliers.
+
+    With ``cumulative=False``, fit equals `gspice.legacy.covar_iter_mask`: the
+    covariance to rounding, and the mask exactly. This holds under these conditions:
+
+    - ``nguard`` is 20, ``center``, ``weights``, ``rank`` and ``snr_bins`` are None, and
+      ``noise`` is False.
+    - ``flux`` is float64, and ``ivar == 0`` only at pixels in ``mask``.
+    - ``nsigma`` is not empty.
+    - No :math:`|z|` lies within the error of the 2022 Schur updates of a threshold.
+    - No pass mask or final mask covers completely a spectrum with at most ``maxbadpix``
+      bad pixels.
+    - fit raises no error.
 
     Parameters
     ----------
     flux, ivar, mask : array_like, shape (nspec, npix)
-        As in `scale`, except that a spectrum without a good pixel is dropped.
+        As in `scale`, except that fit drops a spectrum without a good pixel.
     nsigma : sequence of float or ndarray, shape (N,), optional
-        The threshold on |z| of each clipping pass, in order; finite and > 0.
+        The threshold on :math:`|z|` of each clipping pass, in order; finite and
+        positive.
     maxbadpix : int, optional
-        The largest number of bad pixels of a used spectrum; >= 0.
+        The largest number of bad pixels of a used spectrum; 0 or more.
     nguard : int, optional
-        The half-width of the guard window of z (pixels); >= 0.
+        The half-width of the guard window of z (pixels); 0 or more.
     cumulative : bool, optional
-        Whether each pass keeps the flags of every earlier pass (paper Alg. 4), or
-        only those of the pass before it (2022).
+        Whether each pass keeps the flags of every earlier pass (paper Alg. 4), or only
+        those of the pass before it (2022).
     center : float, optional
-        The constant centre c (flux); finite. None: a mean-centred model.
+        The constant centre :math:`c` (flux); finite. None: a mean-centred model.
     weights : array_like, shape (nspec,), optional
-        The weights w_s of the final fit, of an integer or floating dtype; finite and
-        >= 0. None: equal weights.
+        The weights :math:`w_s` of the final fit, of an integer or floating dtype;
+        finite and 0 or more. None: equal weights.
     rank : int, optional
-        The rank K of a low-rank model, used by every pass; from 1 to npix - 1. None:
-        a dense model.
+        The rank :math:`K` of a low-rank model, used by every pass; from 1 to npix −
+        1. None: a dense model.
     noise : bool, optional
-        If True, fit a noise model (see `Model`), with center and snr_bins None.
+        If True, fit a noise-aware model (see `Model`). It needs ``center`` and
+        ``snr_bins`` None.
     snr_bins : int or sequence of float, optional
-        The S/N bins: their number n >= 1, with the interior edges at the 1/n, ...,
-        (n - 1)/n quantiles (np.quantile, linear) of snr_s of the spectra that fit uses
-        (at most maxbadpix bad pixels, a weight > 0 and a good pixel); or the interior
+        The S/N bins. Either their number :math:`n`, 1 or more, with the interior edges
+        at the :math:`1/n, \dots, (n - 1)/n` quantiles (``np.quantile``, linear) of
+        :math:`\mathrm{snr}_s` of the spectra that fit uses. These spectra have at most
+        ``maxbadpix`` bad pixels, a positive weight and a good pixel. Or the interior
         edges, finite and strictly increasing. None: one bin.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra of each pass
-        and of the final fit, with the stage "fit", the number of spectra of that fit
-        done, and their total N_s; with S/N bins, each fit of a bin counts the
-        spectra of that bin.
+        ``progress(stage, done, total)``, called after each chunk of spectra of each
+        pass and of the final fit. Its arguments are the stage ``"fit"``, the number of
+        spectra of that fit done, and their total :math:`N_s`. With S/N bins, each fit
+        of a bin counts the spectra of that bin.
 
     Returns
     -------
     model : Model
-        The model, with the edges, N_s of each bin in n_train, the centre, weighted
-        True if the weights of the spectra of a bin in the final fit are not all equal,
-        and `LowRank` covariances with rank=K. It holds its precision matrices (see
-        `Model`), except a noise model, whose prediction forms one per spectrum. For a
-        noise model, weighted is True if the weights w_s are not all equal, whatever
-        a_s.
+        The model, with the edges, the :math:`N_s` of each bin in ``n_train``, and the
+        centre. ``weighted`` is True if the weights of the spectra of a bin in the final
+        fit are not all equal. The covariances are `LowRank` with ``rank=K``. The model
+        holds its precision matrices (see `Model`), except a noise-aware model, whose
+        prediction forms one per spectrum. For a noise-aware model, ``weighted`` is True
+        if the weights :math:`w_s` are not all equal, whatever :math:`a_s`.
     mask : ndarray of bool, shape (nspec, npix)
-        The final mask, and True at every pixel of a spectrum that is not used.
+        The final mask, and True at every pixel of a spectrum that fit does not use.
 
     Raises
     ------
     TypeError
         If an argument has a type or a dtype that is not allowed above.
     ValueError
-        If an argument has a shape or a value that is not allowed above, or if a fit
-        (of a bin, with snr_bins) lacks the spectra it needs: for a dense model,
-        N_s - 1 >= npix if it is mean-centred, N_s >= npix for a constant centre, and
-        a good pixel in one of them at every pixel; with rank=K, N_s - 1 >= K + 1 if
-        it is mean-centred and N_s >= K + 1 for a constant centre, for S of rank
-        K + 1 or more. With rank=K, also if lambda_K <= 0 or a d_i <= 0. If noise is
-        True with a centre or snr_bins. With noise=True, the passes need the spectra
-        above, and the final fit raises instead if fewer than two spectra are good at
-        a pixel, if a denominator of Sigma is <= 0, or with rank=K if lambda_K <= 0
-        for Sigma. With two spectra at each pixel, a denominator is <= 0 where no
-        spectrum is good at both pixels of a pair, or by rounding near 0. The message
-        names the pass or the final fit, the bin and its edges, the counts, the first
-        such pixels or pairs of pixels, or lambda_K. fit checks the counts of every
-        bin before any bin clips.
+        If an argument has a shape or a value that is not allowed above. If a fit, of a
+        bin with ``snr_bins``, lacks the spectra that it needs:
+
+        - For a dense model, :math:`N_s - 1 \ge \mathrm{npix}` if it is mean-centred,
+          and :math:`N_s \ge \mathrm{npix}` for a constant centre. Also a good pixel in
+          one of them at every pixel.
+        - With ``rank=K``, :math:`N_s - 1 \ge K + 1` if it is mean-centred, and
+          :math:`N_s \ge K + 1` for a constant centre, for :math:`S` of rank
+          :math:`K + 1` or more.
+
+        With ``rank=K``, also if :math:`\lambda_K \le 0` or a :math:`d_i \le 0`.
+        If ``noise`` is True with a centre or ``snr_bins``. With ``noise=True``, the
+        passes need the spectra above. The final fit raises instead if fewer than two
+        spectra are good at a pixel, or if a denominator of :math:`\Sigma` is 0 or
+        negative. With ``rank=K``, it also raises if :math:`\lambda_K \le 0` for
+        :math:`\Sigma`. With two spectra at each pixel, a denominator is 0 or negative
+        where no spectrum is good at both pixels of a pair. Rounding near 0 can also
+        make it 0 or negative. The message names the pass or the final fit, the bin and
+        its edges, and the counts. It also names the first such pixels or pairs of
+        pixels, or :math:`\lambda_K`. fit checks the counts of every bin before any bin
+        clips.
     numpy.linalg.LinAlgError
-        If a covariance has a variance of 0, or fails the check of its precision
-        matrix: it is not positive definite, or the reciprocal condition number of the
-        covariance scaled to unit diagonal is below 1e-13, which can happen for N_s - 1
-        close to npix; with rank=K, kappa_W of `LowRank` is above 1e13. Clipping checks
-        P only if nguard < npix - 1. The message names the pass or the final fit, the
-        bin and N_s, and the pixel of variance 0, the reciprocal condition number below
-        1e-13 or kappa_W. With noise=True, only for the clipping covariances.
+        If a covariance has a variance of 0, or fails the check of its precision matrix.
+        The check fails if the matrix is not positive definite. It also fails if the
+        reciprocal condition number of the covariance, scaled to unit diagonal, is below
+        :math:`10^{-13}`. This can happen for :math:`N_s - 1` close to npix.
+        With ``rank=K``, the check fails if :math:`\kappa_W` of `LowRank` is above
+        :math:`10^{13}`. Clipping checks :math:`P` only if ``nguard < npix - 1``.
+        The message names the pass or the final fit, the bin and :math:`N_s`. It also
+        names the pixel of variance 0, the reciprocal condition number below
+        :math:`10^{-13}`, or :math:`\kappa_W`. With ``noise=True``, only for the
+        clipping covariances.
 
     Notes
     -----
-    Cost per pass and bin: about N_s npix^2 flops for the covariance, npix^3 for its
-    precision matrix, npix (w^3/3 + 2 npix w) for the guard weights,
-    w = min(2 nguard + 1, npix), and 2 N_s npix^2 for z, with N_s of the bin. The
-    final fit costs about N_s npix^2 + npix^3 flops per bin. With nbin > 1, the S/N
-    sorts the npix values of each spectrum once. With rank=K, each fit adds the K
-    leading eigenpairs of S: where K <= npix/80, Lanczos at about 2 npix^2 flops per
-    product with S, and otherwise about (4/3) npix^3 flops, more than the npix^3 of a
-    dense P; P then costs about npix^2 K flops. Each fit holds the working vectors
-    of its spectra, N_s npix x 8 bytes. With noise=True, the final fit costs about
-    3 N_s npix^2 flops for A^T A, D1 and D2 and a full eigendecomposition of an
-    npix x npix matrix, also with rank=K, and holds a few arrays of one chunk of
-    max(1, 2**24 // npix) spectra instead of the working vectors.
+    Cost:
+
+    - Per pass and bin, with the :math:`N_s` of the bin: about
+      :math:`N_s \, \mathrm{npix}^2` flops for the covariance, and
+      :math:`\mathrm{npix}^3` for its precision matrix. The guard weights cost
+      :math:`\mathrm{npix} (w^3/3 + 2 \, \mathrm{npix} \, w)`, and z costs
+      :math:`2 N_s \, \mathrm{npix}^2`.
+      Here :math:`w = \min(2 \, \mathrm{nguard} + 1, \mathrm{npix})`.
+    - The final fit: about :math:`N_s \, \mathrm{npix}^2 + \mathrm{npix}^3` flops per
+      bin.
+    - With nbin above 1, the S/N sorts the npix values of each spectrum once.
+    - With ``rank=K``, each fit adds the :math:`K` leading eigenpairs of :math:`S`.
+      Where :math:`K \le \mathrm{npix}/80`, Lanczos costs about
+      :math:`2 \, \mathrm{npix}^2` flops per product with :math:`S`. Otherwise they cost
+      about :math:`(4/3) \, \mathrm{npix}^3` flops, more than the
+      :math:`\mathrm{npix}^3` of a dense :math:`P`. :math:`P` then costs about
+      :math:`\mathrm{npix}^2 K` flops.
+    - Each fit holds the working vectors of its spectra,
+      :math:`N_s \, \mathrm{npix} \times 8` bytes.
+    - With ``noise=True``, the final fit costs about :math:`3 N_s \, \mathrm{npix}^2`
+      flops for :math:`A^\mathsf{T} A`, :math:`D^{(1)}` and :math:`D^{(2)}`. It also
+      costs a full eigendecomposition of an npix × npix matrix, also with ``rank=K``.
+      It holds a few arrays of one chunk of ``max(1, 2**24 // npix)`` spectra instead of
+      the working vectors.
     """
     start = time.perf_counter()
     thresholds = _thresholds(nsigma)
@@ -883,7 +962,7 @@ def _clip(
         flagged = dilate(np.abs(z, out=z) > threshold, 1)
         # Free z before the next fit allocates its working vectors.
         del z
-        # The final mask is M_N | F_N in both modes.
+        # The final mask is B_N | F_N in both modes; M holds the mask B_n of the pass.
         if cumulative or n == len(thresholds):
             M = M | flagged
         else:
@@ -1337,14 +1416,19 @@ def _require_lambda_k(values: NDArray[np.float64], rank: int, subject: str) -> N
 
 
 def save(model: Model, path: FilePath) -> None:
-    """Write model to the .npz file path.
+    """Write ``model`` to the .npz file ``path``.
 
-    The archive is not compressed. It holds the arrays schema (the integer 1),
-    gspice_version, mean, n_train, edges, center (NaN if None), weighted and, for a
-    noise model, noise (True); for the
-    covariance of each bin b, cov{b}, or vectors{b}, values{b} and diag{b} for the
-    fields of a `LowRank`; and, if model.blocks is not None, block_starts,
-    block_width, block_nguard and block_thresholds for its fields. `load` reads it.
+    The archive is not compressed. It holds these arrays:
+
+    - ``schema`` (the integer 1), ``gspice_version``, ``mean``, ``n_train``, ``edges``,
+      ``center`` (NaN if None) and ``weighted``. For a noise-aware model, also ``noise``
+      (True).
+    - For the covariance of each bin :math:`b`, ``cov{b}``, or ``vectors{b}``,
+      ``values{b}`` and ``diag{b}`` for the fields of a `LowRank`.
+    - If ``model.blocks`` is not None, ``block_starts``, ``block_width``,
+      ``block_nguard`` and ``block_thresholds`` for its fields.
+
+    `load` reads it.
 
     Parameters
     ----------
@@ -1357,7 +1441,7 @@ def save(model: Model, path: FilePath) -> None:
     Raises
     ------
     TypeError
-        If model is not a Model, or path is not a str or path-like.
+        If ``model`` is not a Model, or ``path`` is not a str or path-like.
     OSError
         If the file cannot be written.
     """
@@ -1385,15 +1469,16 @@ def load(path: FilePath) -> Model:
     Raises
     ------
     ValueError
-        If the file is not a zip archive, is a damaged one, has no schema or a schema
-        other than the 0-d integer 1, lacks one of the arrays schema, mean, n_train,
-        edges, center and weighted, holds some but not all of the four block arrays,
-        holds vectors{b} without values{b} or diag{b}, or holds an array that `save`
-        does not write; the message names path. Also if `Model`, `LowRank` or
-        `Blocks` rejects a field, for example a count of covariances other than the
-        number of bins; the message names the field.
+        If the file is not a zip archive, or is a damaged one. If it has no ``schema``,
+        or a schema other than the 0-d integer 1. If it lacks one of the arrays
+        ``schema``, ``mean``, ``n_train``, ``edges``, ``center`` and ``weighted``. If it
+        holds some but not all of the four block arrays, or ``vectors{b}`` without
+        ``values{b}`` or ``diag{b}``. If it holds an array that `save` does not write.
+        The message names ``path``. Also if `Model`, `LowRank` or `Blocks` rejects a
+        field, for example a count of covariances other than the number of bins.
+        The message then names the field.
     TypeError
-        If path is not a str or path-like, or if `Model`, `LowRank` or `Blocks`
+        If ``path`` is not a str or path-like, or if `Model`, `LowRank` or `Blocks`
         rejects a field.
     OSError
         If the file cannot be read, and for some damaged archives.

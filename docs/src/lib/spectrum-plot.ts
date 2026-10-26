@@ -135,7 +135,7 @@ export function readout(spectrum: Spectrum & Required<Pick<Spectrum, 'truth' | '
   return `${range}. Mean σ ${(sd / width).toFixed(3)}. RMS error ${Math.sqrt(squares / width).toFixed(3)}.`
 }
 
-const labels = {
+export const labels = {
   obs: 'observed flux',
   blk: 'masked',
   pred: 'prediction',
@@ -144,6 +144,34 @@ const labels = {
   b2: '±2σ',
   truth: 'flux without noise',
 }
+
+// The data of the quickstart figure, which docs/scripts/explainers.py writes: a spectrum
+// with its noise-free flux, the masked pixels start to start + width - 1, and the
+// prediction and its standard deviation at each of them.
+export interface QuickstartData {
+  flux: readonly number[]
+  truth: readonly number[]
+  start: number
+  width: number
+  mu: readonly number[]
+  sd: readonly number[]
+}
+
+// The spectrum of the quickstart figure, with the prediction placed at its pixel
+// numbers, and axes that hold the flux and the ±2σ bands.
+export function quickstartPlot(data: QuickstartData) {
+  const npix = data.flux.length
+  const mu = new Float64Array(npix)
+  const sd = new Float64Array(npix)
+  mu.set(data.mu, data.start)
+  sd.set(data.sd, data.start)
+  const spectrum = { flux: data.flux, truth: data.truth, start: data.start, width: data.width, mu, sd }
+  const bands = data.mu.flatMap((m, k) => [m - 2 * data.sd[k], m + 2 * data.sd[k]])
+  return { spectrum, axes: axesFor([...data.flux, ...data.truth, ...bands], npix) }
+}
+
+// The legend items of the quickstart figure, in order.
+export const quickstartLegend = ['obs', 'blk', 'pred', 'b1', 'b2', 'truth'] as const
 
 // The legend of a plot, as cell swatches, with the items in this order. An item is a
 // key of labels, or a class and its HTML text.

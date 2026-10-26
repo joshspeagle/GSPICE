@@ -55,37 +55,40 @@ def finite_sample_factor(
 def finite_sample_factor(
     n_train: ArrayLike, n_cond: ArrayLike, n_pred: ArrayLike = 1
 ) -> float | NDArray[np.float64]:
-    """Held-out calibration factor E[Z^2] / N_* for Gaussian data.
+    r"""Held-out calibration factor :math:`E[Z^2] / N_*` for Gaussian data.
 
-    A spectrum that the training spectra do not include is predicted at N_* pixels from
-    N_k conditioning pixels, with the mean and the covariance (divisor N_s - 1) of N_s
-    unweighted training spectra. With r the residual of the N_* pixels from their
-    conditional mean and C their full conditional covariance, Z^2 = r^T C^-1 r has the
-    mean::
+    Take a held-out spectrum, predicted at :math:`N_*` pixels from :math:`N_k`
+    conditioning pixels. The prediction uses the mean and the covariance (divisor
+    :math:`N_s - 1`) of :math:`N_s` unweighted training spectra. Let :math:`r` be the
+    residual of the :math:`N_*` pixels from their conditional mean, and :math:`C` their
+    full conditional covariance. Then :math:`Z^2 = r^\mathsf{T} C^{-1} r` has the mean
 
-        E[Z^2] / N_* = f_s = (1 + 1/N_s) (N_s - 2)/(N_s - N_k - 2)
-                             (N_s - 1)/(N_s - N_k - N_* - 2).
+    .. math::
 
-    It is exact for independent Gaussian working vectors and pixel sets that do not
-    depend on the data. Pixels that are neither conditioned on nor predicted, such as
-    a guard window or ignored pixels, do not count in N_k. f_s does not hold for data
-    that are not Gaussian, such as scaled spectra with a spread of S/N. The arguments
-    broadcast, and the arithmetic is float64, which holds each count exactly.
+        \frac{E[Z^2]}{N_*} = f_s = \left(1 + \frac{1}{N_s}\right)
+        \frac{N_s - 2}{N_s - N_k - 2} \, \frac{N_s - 1}{N_s - N_k - N_* - 2}.
+
+    The factor is exact for independent Gaussian working vectors and pixel sets that do
+    not depend on the data. Pixels that are neither conditioned on nor predicted, such
+    as a guard window or ignored pixels, do not count in :math:`N_k`. :math:`f_s` does
+    not hold for data that are not Gaussian, such as scaled spectra with a spread of
+    S/N. The arguments broadcast. The arithmetic is float64, which holds each count
+    exactly.
 
     Parameters
     ----------
     n_train : array_like of int
-        N_s, the number of training spectra; from 1 to 2^53 - 1.
+        :math:`N_s`, the number of training spectra; from 1 to :math:`2^{53} - 1`.
     n_cond : array_like of int
-        N_k, the number of conditioning pixels; from 0 to 2^53 - 1.
+        :math:`N_k`, the number of conditioning pixels; from 0 to :math:`2^{53} - 1`.
     n_pred : array_like of int, optional
-        N_*, the number of predicted pixels; from 1 to 2^53 - 1.
+        :math:`N_*`, the number of predicted pixels; from 1 to :math:`2^{53} - 1`.
 
     Returns
     -------
     float or ndarray
-        f_s (unit-free): a float if the arguments are scalars, and otherwise a float64
-        array of their broadcast shape.
+        :math:`f_s` (unit-free): a float if the arguments are scalars, and otherwise a
+        float64 array of their broadcast shape.
 
     Raises
     ------
@@ -93,7 +96,7 @@ def finite_sample_factor(
         If an argument does not have an integer dtype; bool is not one.
     ValueError
         If an argument is outside its range, the arguments do not broadcast, or
-        N_s - N_k - N_* - 2 <= 0. The message names the arguments and the first
+        :math:`N_s - N_k - N_* - 2 \le 0`. The message names the arguments and the first
         such entry.
     """
     counts = (
@@ -124,44 +127,46 @@ def finite_sample_factor(
 
 @dataclass(frozen=True, eq=False)
 class Calibration:
-    """Held-out whitened residuals, from `calibration` or another held-out result.
+    r"""Held-out whitened residuals, from `calibration` or another held-out result.
 
-    Row s is a spectrum, and column j one prediction of n[s, j] of its pixels:
-    z2[s, j] = r^T C^-1 r, with r the residuals of these pixels from their conditional
-    mean and C their full conditional covariance, and fs[s, j] is its finite-sample
-    factor, such as f_s of `finite_sample_factor`. For held-out Gaussian spectra and
-    pixel sets that do not depend on the data, z2 / (n fs) then has the mean 1. The
-    methods use only the entries with n > 0 and finite z2 and fs.
+    Row :math:`s` is a spectrum, and column :math:`j` is one prediction of ``n[s, j]``
+    of its pixels. ``z2[s, j]`` is :math:`r^\mathsf{T} C^{-1} r`, with :math:`r` the
+    residuals of these pixels from their conditional mean and :math:`C` their full
+    conditional covariance. ``fs[s, j]`` is its finite-sample factor, such as
+    :math:`f_s` of `finite_sample_factor`. For held-out Gaussian spectra and pixel sets
+    that do not depend on the data, ``z2 / (n * fs)`` then has the mean 1. The methods
+    use only the entries with ``n > 0`` and finite ``z2`` and ``fs``.
 
-    Calibration(z2=r.chi2[:, None], n=r.dof[:, None], fs=r.fs[:, None]) holds the
-    result r of `infill` on held-out spectra with replace and ignore masks that do not
-    depend on the data, and Calibration(z2=p.z**2, n=1, fs=1) the result p of
-    `pixelwise` with inflate=True.
+    ``Calibration(z2=r.chi2[:, None], n=r.dof[:, None], fs=r.fs[:, None])`` holds the
+    result ``r`` of `infill` on held-out spectra, with replace and ignore masks that do
+    not depend on the data. ``Calibration(z2=p.z**2, n=1, fs=1)`` holds the result ``p``
+    of `pixelwise` with ``inflate=True``.
 
-    The constructor takes array_like values, broadcasts n and fs to the shape of z2,
-    and stores read-only copies: z2 and fs as float64, n as int64. Two calibrations
-    are equal only if they are the same object. Pickle, copy and deepcopy check the
-    fields again.
+    The constructor takes array_like values, and broadcasts ``n`` and ``fs`` to the
+    shape of ``z2``. It stores read-only copies: ``z2`` and ``fs`` as float64, and ``n``
+    as int64. Two calibrations are equal only if they are the same object. Pickle, copy
+    and deepcopy check the fields again.
 
     Attributes
     ----------
-    z2 : ndarray, shape (nspec, k)
-        Z^2 of each prediction (unit-free): finite and >= 0, or NaN.
-    n : ndarray of int64, shape (nspec, k)
-        The number of predicted pixels: from 0 to 2^53 - 1.
-    fs : ndarray, shape (nspec, k)
-        The finite-sample factor of each prediction (unit-free): finite and > 0, or
+    z2 : ndarray, shape (nspec, ncol)
+        :math:`Z^2` of each prediction (unit-free): finite and 0 or more, or NaN.
+    n : ndarray of int64, shape (nspec, ncol)
+        The number of predicted pixels: from 0 to :math:`2^{53} - 1`.
+    fs : ndarray, shape (nspec, ncol)
+        The finite-sample factor of each prediction (unit-free): finite and positive, or
         NaN.
 
     Raises
     ------
     TypeError
-        If z2 or fs does not have an integer or floating dtype, or n does not have an
-        integer dtype; bool is neither. The message starts with the name of the field.
+        If ``z2`` or ``fs`` does not have an integer or floating dtype, or ``n`` does
+        not have an integer dtype; bool is neither. The message starts with the name of
+        the field.
     ValueError
-        If z2 is not 2-D, n or fs does not broadcast to the shape of z2, or a field has
-        a value that is not allowed above. The message starts with the name of the
-        field.
+        If ``z2`` is not 2-D, or ``n`` or ``fs`` does not broadcast to the shape of
+        ``z2``. If a field has a value that is not allowed above. The message starts
+        with the name of the field.
     """
 
     z2: NDArray[np.float64]
@@ -197,13 +202,14 @@ class Calibration:
     def ratio(
         self, where: ArrayLike | None = None
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        """Mean of z2 / (n fs) in each column, and its standard error.
+        r"""Mean of ``z2 / (n * fs)`` in each column, and its standard error.
 
-        Over the m entries of column j that the methods use, in the spectra of where,
-        mean[j] is the mean of z2 / (n fs), and sem[j] = std / sqrt(m), with std their
-        standard deviation with the divisor m - 1. For held-out spectra, sem is
-        conditional on the fitted model: it falls with the number of held-out spectra,
-        and the spread across training sets does not.
+        Take the :math:`m` entries of column :math:`j` that the methods use, in the
+        spectra of ``where``. ``mean[j]`` is the mean of their ``z2 / (n * fs)``, and
+        :math:`\mathrm{sem}[j] = \mathrm{std} / \sqrt{m}`, with std their standard
+        deviation with the divisor :math:`m - 1`. For held-out spectra, sem is
+        conditional on the fitted model. It falls with the number of held-out spectra,
+        but the spread across training sets does not.
 
         Parameters
         ----------
@@ -212,17 +218,17 @@ class Calibration:
 
         Returns
         -------
-        mean : ndarray, shape (k,)
-            The mean (unit-free); NaN where m = 0.
-        sem : ndarray, shape (k,)
-            Its standard error (unit-free); NaN where m < 2.
+        mean : ndarray, shape (ncol,)
+            The mean (unit-free); NaN where :math:`m = 0`.
+        sem : ndarray, shape (ncol,)
+            Its standard error (unit-free); NaN where :math:`m < 2`.
 
         Raises
         ------
         TypeError
-            If where does not have a bool dtype.
+            If ``where`` does not have a bool dtype.
         ValueError
-            If where has another shape than (nspec,).
+            If ``where`` has another shape than (nspec,).
         """
         used = self._used(where)
         m = np.count_nonzero(used, axis=0)
@@ -240,33 +246,34 @@ class Calibration:
     def tail(
         self, q: Real = 0.99, where: ArrayLike | None = None
     ) -> NDArray[np.float64]:
-        """Fraction of each column with z2 / fs above the chi^2_n quantile q.
+        r"""Fraction of each column with ``z2 / fs`` above a :math:`\chi^2_n` quantile.
 
-        Over the m entries of column j that the methods use, in the spectra of where,
-        the fraction of those with z2 / fs > F_n^-1(q), F_n the chi^2 distribution
-        function with the n of the entry as its degrees of freedom. For held-out
-        Gaussian spectra, the fraction approaches 1 - q only for N_s - N_k >> n
-        (1.37% at (N_s, N_k, n) = (200, 40, 10) for q = 0.99).
+        Take the :math:`m` entries of column :math:`j` that the methods use, in the
+        spectra of ``where``. The result is the fraction of them with ``z2 / fs`` above
+        :math:`F_n^{-1}(q)`. :math:`F_n` is the :math:`\chi^2` distribution function
+        with the ``n`` of the entry as its degrees of freedom. For held-out Gaussian
+        spectra, the fraction approaches :math:`1 - q` only for :math:`N_s - N_k \gg n`.
+        It is 1.37% at :math:`(N_s, N_k, n) = (200, 40, 10)` for :math:`q = 0.99`.
 
         Parameters
         ----------
         q : float, optional
-            The quantile; 0 < q < 1.
+            The quantile; :math:`0 < q < 1`.
         where : array_like of bool, shape (nspec,), optional
             The spectra to use. None: all.
 
         Returns
         -------
-        ndarray, shape (k,)
-            The fraction (unit-free); NaN where m = 0.
+        ndarray, shape (ncol,)
+            The fraction (unit-free); NaN where :math:`m = 0`.
 
         Raises
         ------
         TypeError
-            If q is not a real number, or where does not have a bool dtype.
+            If ``q`` is not a real number, or ``where`` does not have a bool dtype.
         ValueError
-            If q is not strictly between 0 and 1, or where has another shape than
-            (nspec,).
+            If ``q`` is not strictly between 0 and 1, or ``where`` has another shape
+            than (nspec,).
         """
         q = real(q, "q")
         if not 0 < q < 1:
@@ -292,22 +299,25 @@ class Calibration:
     def qq(
         self, i: Integer = 0, where: ArrayLike | None = None
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        """Normal scores of column i against chi^2_n, for a QQ plot.
+        r"""Normal scores of column ``i`` against :math:`\chi^2_n`, for a QQ plot.
 
-        Over the m entries of column i that the methods use, in the spectra of where,
-        expected holds Phi^-1((j - 1/2) / m) for j = 1, ..., m, with Phi the standard
-        normal distribution function, and observed the sorted scores
-        Phi^-1(F_n(z2 / fs)), F_n the chi^2 distribution function with the n of the
-        entry as its degrees of freedom. A score is computed as Phi^-1(F_n) where
-        F_n < 1/2, and as -Phi^-1(1 - F_n), from the survival function, elsewhere, so
-        that both tails keep their precision. A score is -inf where z2 = 0, and +inf
-        where the survival function underflows to 0. For held-out Gaussian spectra,
-        observed approaches expected under the condition of `tail`.
+        Take the :math:`m` entries of column ``i`` that the methods use, in the spectra
+        of ``where``. ``expected`` holds :math:`\Phi^{-1}((j - 1/2) / m)` for
+        :math:`j = 1, \dots, m`, with :math:`\Phi` the standard normal distribution
+        function. ``observed`` holds the sorted scores
+        :math:`\Phi^{-1}(F_n(\mathrm{z2} / \mathrm{fs}))`. :math:`F_n` is the
+        :math:`\chi^2` distribution function with the ``n`` of the entry as its degrees
+        of freedom. A score is :math:`\Phi^{-1}(F_n)` where :math:`F_n < 1/2`. It is
+        :math:`-\Phi^{-1}(1 - F_n)` elsewhere, from the survival function, so that both
+        tails keep their precision. A score is :math:`-\infty` where ``z2`` is 0, and
+        :math:`+\infty` where the survival function underflows to 0. For held-out
+        Gaussian spectra, ``observed`` approaches ``expected`` under the condition of
+        `tail`.
 
         Parameters
         ----------
         i : int, optional
-            The column; 0 <= i < k.
+            The column; from 0 to ncol − 1.
         where : array_like of bool, shape (nspec,), optional
             The spectra to use. None: all.
 
@@ -321,9 +331,10 @@ class Calibration:
         Raises
         ------
         TypeError
-            If i is not an integer, or where does not have a bool dtype.
+            If ``i`` is not an integer, or ``where`` does not have a bool dtype.
         ValueError
-            If i < 0 or i >= k, or where has another shape than (nspec,).
+            If ``i`` is outside 0 to ncol − 1, or ``where`` has another shape than
+            (nspec,).
         """
         i = integer(i, "i", 0)
         k = self.z2.shape[1]
@@ -375,63 +386,77 @@ def noise_audit(
     nguard: Integer = 20,
     progress: Progress | None = None,
 ) -> NDArray[np.float64]:
-    """Ratio of the residual scatter to the reported noise at each pixel.
+    r"""Ratio of the residual scatter to the reported noise at each pixel.
 
-    With f the flux and fhat its prediction by `pixelwise` with nguard, in flux units::
+    Let :math:`f` be the flux and :math:`\hat f` its prediction by `pixelwise` with
+    ``nguard``, in flux units. Then
 
-        rho_i^2 = mean_s (f_si - fhat_si)^2 ivar_si,
+    .. math::
 
-    where the mean runs over the spectra s whose pixel i is good (see `scale`). With t
-    the noise-free flux, let k_i be the mean of ivar_si var(f_si - t_si), which is 1
-    where ivar is right, and e_i the mean of ivar_si (t_si - fhat_si)^2. Then::
+        \rho_i^2 = \operatorname{mean}_s \, (f_{si} - \hat f_{si})^2 \,
+        \mathrm{ivar}_{si},
 
-        E[rho_i^2] = k_i + E[e_i]
+    where the mean runs over the spectra :math:`s` whose pixel :math:`i` is good (see
+    `scale`). Let :math:`t` be the noise-free flux. Let :math:`\eta_i` be the mean of
+    :math:`\mathrm{ivar}_{si} \operatorname{var}(f_{si} - t_{si})`, which is 1 where
+    ivar is right, and :math:`e_i` the mean of
+    :math:`\mathrm{ivar}_{si} (t_{si} - \hat f_{si})^2`. Then
 
-    if fhat_si does not depend on the noise of f_si. That holds for spectra not used to
-    fit model, with mask and ivar independent of the noise and noise uncorrelated beyond
-    nguard, except where the interpolation of a bad pixel carries f_si or a pixel within
-    nguard of i into fhat_si (see `pixelwise`). With several S/N bins, f_si also enters
-    the median S/N that picks the bin of s. e_i holds the astrophysical error, the noise
-    propagated from the conditioning pixels and the estimation error of model, so
-    E[rho_i^2] >= k_i where the identity holds, and e_i grows with S/N. Next to a bad
-    run longer than nguard, rho_i^2 can fall below k_i. A model without noise
-    absorbs into its covariance a k_i that its training spectra share, so the z of
-    `pixelwise` is blind to it; rho is not.
+    .. math::
+
+        E[\rho_i^2] = \eta_i + E[e_i]
+
+    if :math:`\hat f_{si}` does not depend on the noise of :math:`f_{si}`. That holds
+    for held-out spectra, with ``mask`` and ``ivar`` independent of the noise, and noise
+    that is uncorrelated beyond ``nguard``. It fails where the interpolation of a bad
+    pixel carries :math:`f_{si}`, or a pixel within ``nguard`` of :math:`i`, into
+    :math:`\hat f_{si}` (see `pixelwise`). With several S/N bins, :math:`f_{si}` also
+    enters the median S/N that picks the bin of :math:`s`.
+
+    :math:`e_i` holds the astrophysical error, the noise propagated from the
+    conditioning pixels, and the estimation error of ``model``.
+    So :math:`E[\rho_i^2] \ge \eta_i` where the identity holds, and :math:`e_i` grows
+    with S/N. Next to a run of bad pixels longer than ``nguard``, :math:`\rho_i^2` can
+    fall below :math:`\eta_i`. A scaled model absorbs into its covariance an
+    :math:`\eta_i` that its training spectra share, so the z of `pixelwise` is blind to
+    it. :math:`\rho` is not.
 
     Parameters
     ----------
     model : Model
         The model.
     flux, ivar, mask : array_like, shape (nspec, npix)
-        As in `scale`, with the npix of model.
+        As in `scale`, with the npix of ``model``.
     nguard : int, optional
-        The half-width of the guard window of `pixelwise` (pixels); >= 0.
+        The half-width of the guard window of `pixelwise` (pixels); 0 or more.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra, of one
-        spectrum for a noise model, with the stage "noise_audit", the number of
-        spectra done and their total.
+        ``progress(stage, done, total)``, called after each chunk of spectra, with the
+        stage ``"noise_audit"``, the number of spectra done and their total. For a
+        noise-aware model, a chunk is one spectrum.
 
     Returns
     -------
     ndarray, shape (npix,)
-        rho (unit-free); NaN at the pixels where no spectrum is good.
+        :math:`\rho` (unit-free); NaN at the pixels where no spectrum is good.
 
     Raises
     ------
     TypeError
-        If model is not a Model, nguard is not an integer, progress is not callable
-        or None, or flux, ivar or mask has a dtype that `scale` does not allow.
+        If ``model`` is not a Model, ``nguard`` is not an integer, or ``progress`` is
+        not callable or None. If ``flux``, ``ivar`` or ``mask`` has a dtype that `scale`
+        does not allow.
     ValueError
-        If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
-        has another npix than model, nguard < 0, or a spectrum has no good pixel.
+        If ``flux``, ``ivar`` or ``mask`` has a shape or a value that `scale` does not
+        allow. If ``flux`` has another npix than ``model``, ``nguard`` is negative, or a
+        spectrum has no good pixel.
     numpy.linalg.LinAlgError
         As in `pixelwise`.
 
     Notes
     -----
-    Cost: that of `pixelwise`. Beyond the inputs and their float64 copies if they are
-    long double, noise_audit holds a bool array of the input shape and a few float64
-    arrays of one chunk of max(1, 2**24 // npix) spectra.
+    Cost: that of `pixelwise`. Beyond the inputs, and their float64 copies if they are
+    long double, noise_audit holds a bool array of the input shape. It also holds a few
+    float64 arrays of one chunk of ``max(1, 2**24 // npix)`` spectra.
     """
     start = time.perf_counter()
     nguard = integer(nguard, "nguard", 0)
@@ -481,82 +506,95 @@ def calibration(
     rng: np.random.Generator,
     progress: Progress | None = None,
 ) -> Calibration:
-    """Held-out whitened residuals for masks drawn independently of the data.
+    r"""Held-out whitened residuals for masks drawn independently of the data.
 
-    For each spectrum and each size n of sizes, calibration draws a set M of n good
-    pixels, and computes, as `infill` with replace=M does::
+    For each spectrum and each size :math:`n` of ``sizes``, calibration draws a set
+    :math:`M` of :math:`n` good pixels. It computes, as `infill` with ``replace=M``
+    does,
 
-        z2 = r_M^T C_MM^-1 r_M,
+    .. math::
 
-    with r_M the input values at M minus their conditional mean given the pixels
-    outside G = M | bad, and C_MM their full conditional covariance, and
-    fs = f_s(N_s, npix - |G|, n) of `finite_sample_factor`, NaN where it is not
-    defined, with N_s the n_train of the bin of the spectrum, or 1 for a model with a
-    constant centre, weights, a `LowRank` covariance or noise, for which no factor is
-    derived. For held-out Gaussian spectra of a model with a derived factor,
-    z2 / (n fs) then has the mean 1, so use spectra that the model was not fitted to.
-    For a noise model, the covariance is C_s of the spectrum (see `Model`).
+        z^2 = r_M^\mathsf{T} C_{MM}^{-1} r_M,
 
-    Rank the m good pixels of a spectrum from 0 to m - 1 in increasing order. With
-    layout="run", M holds those of ranks start to start + n - 1, with
-    start = rng.integers(m - n + 1). With layout="scattered", M holds those of ranks
-    rng.choice(m, n, replace=False). rng draws these spectrum by spectrum in row order,
-    and size by size within a spectrum, and draws nothing else, so the masks do not
-    depend on the chunking. A spectrum with m < n draws nothing for that size, and its
-    entry there has n = 0 and z2 NaN.
+    with :math:`r_M` the input values at :math:`M` minus their conditional mean given
+    the pixels outside :math:`G = M \cup \mathrm{bad}`, and :math:`C_{MM}` their full
+    conditional covariance. It also computes :math:`f_s(N_s, \mathrm{npix} - |G|, n)` of
+    `finite_sample_factor`, NaN where it is not defined. :math:`N_s` is the ``n_train``
+    of the bin of the spectrum. The factor is 1 where no factor is derived (see
+    `Repaired.fs`). For held-out Gaussian spectra of a model with a derived factor,
+    :math:`z^2 / (n f_s)` then has the mean 1. For a noise-aware model, the covariance
+    is the :math:`C_s` of the spectrum (see `Model`).
+
+    Rank the :math:`m` good pixels of a spectrum from 0 to :math:`m - 1` in increasing
+    order. With ``layout="run"``, :math:`M` holds those of ranks ``start`` to
+    ``start + n - 1``, with ``start = rng.integers(m - n + 1)``.
+    With ``layout="scattered"``, :math:`M` holds those of ranks
+    ``rng.choice(m, n, replace=False)``. ``rng`` draws these spectrum by spectrum in row
+    order, and size by size within a spectrum. It draws nothing else, so the masks do
+    not depend on the chunking. A spectrum with :math:`m < n` draws nothing for that
+    size. Its entry there has ``n`` 0 and ``z2`` NaN.
 
     Parameters
     ----------
     model : Model
         The model.
     flux, ivar, mask : array_like, shape (nspec, npix)
-        As in `scale`, with the npix of model.
+        As in `scale`, with the npix of ``model``.
     sizes : iterable of int, optional
-        The sizes n, one column of the result each, in this order; >= 1. None: those
-        of 1, 4, 16, 64, 256 and 1024 that are not above half the median number of
-        good pixels per spectrum (np.median), or all six without a spectrum. A
-        spectrum with fewer good pixels than a size has n = 0 there, so the spectra
-        of a column can differ between sizes; `Calibration` methods with
-        where=(result.n > 0).all(axis=1) compare all sizes on the same spectra.
+        The sizes :math:`n`, one column of the result each, in this order; 1 or more.
+        None: the sizes 1, 4, 16, 64, 256 and 1024 that are not above half the median
+        number of good pixels per spectrum (``np.median``). Without a spectrum, all six.
+        A spectrum with fewer good pixels than a size has ``n`` 0 there, so the spectra
+        of a column can differ between sizes. `Calibration` methods with
+        ``where=(result.n > 0).all(axis=1)`` compare all sizes on the same spectra.
     layout : {"run", "scattered"}, optional
-        Whether M is a run of good pixels or good pixels scattered at random.
+        Whether :math:`M` is a run of good pixels, or good pixels scattered at random.
     rng : numpy.random.Generator
         The source of the masks, as above.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra, of one
-        spectrum for a noise model, with the stage "calibration", the number of
-        spectra done and their total.
+        ``progress(stage, done, total)``, called after each chunk of spectra, with the
+        stage ``"calibration"``, the number of spectra done and their total. For a
+        noise-aware model, a chunk is one spectrum.
 
     Returns
     -------
     Calibration
-        z2, n and fs of each spectrum (row) and size (column).
+        ``z2``, ``n`` and ``fs`` of each spectrum (row) and size (column).
 
     Raises
     ------
     TypeError
-        If model is not a Model, sizes is neither None nor an iterable of integers, rng
-        is not a numpy.random.Generator, progress is not callable or None, or flux,
-        ivar or mask has a dtype that `scale` does not allow.
+        If ``model`` is not a Model, or ``sizes`` is neither None nor an iterable of
+        integers. If ``rng`` is not a numpy.random.Generator, or ``progress`` is not
+        callable or None. If ``flux``, ``ivar`` or ``mask`` has a dtype that `scale`
+        does not allow.
     ValueError
-        If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
-        has another npix than model, a spectrum has no good pixel, sizes is empty or
-        holds an integer < 1, layout is neither "run" nor "scattered", or sizes is
-        None and the median number of good pixels per spectrum is below 2.
+        If ``flux``, ``ivar`` or ``mask`` has a shape or a value that `scale` does not
+        allow. If ``flux`` has another npix than ``model``, or a spectrum has no good
+        pixel. If ``sizes`` is empty or holds an integer below 1, or ``layout`` is
+        neither ``"run"`` nor ``"scattered"``. If ``sizes`` is None and the median
+        number of good pixels per spectrum is below 2.
     numpy.linalg.LinAlgError
-        Before the first chunk, if the covariance of a bin with a spectrum that has
-        more good pixels than the smallest size fails its check; for a noise model,
-        at the spectrum. Otherwise as in `infill` with replace=M.
+        Before the first chunk, if the covariance of a bin fails its check, for a bin
+        with a spectrum that has more good pixels than the smallest size. For a
+        noise-aware model, the check is at the spectrum. Otherwise as in `infill` with
+        ``replace=M``.
 
     Notes
     -----
-    Cost: for each size, npix^3 flops for P at the first use of a bin; then per
-    pattern of a chunk of max(1, 2**24 // npix) spectra, at most one per spectrum,
-    |G|^3/3 flops, or n^3/3 where G covers all pixels, and per spectrum
-    2 |G| (npix + |G|) flops, or 2 |G| npix where G is one run. The masks of a chunk
-    take up to len(sizes) x 2^24 bytes. A noise model costs per spectrum and size as
-    in `infill`, with M = T; a dense cov[0] factors C_s once per spectrum for all
-    sizes.
+    Cost:
+
+    - For each size, :math:`\mathrm{npix}^3` flops for :math:`P` at the first use of a
+      bin.
+    - Then :math:`|G|^3/3` flops per pattern of a chunk of ``max(1, 2**24 // npix)``
+      spectra, or :math:`n^3/3` where :math:`G` covers all pixels. A spectrum has at
+      most one pattern per size.
+    - Per spectrum, :math:`2 |G| (\mathrm{npix} + |G|)` flops, or
+      :math:`2 |G| \, \mathrm{npix}` where :math:`G` is one run.
+    - The masks of a chunk take up to :math:`\mathrm{len(sizes)} \times 2^{24}` bytes.
+    - A noise-aware model costs per spectrum and size as in `infill`, with
+      :math:`M = T`. A dense ``cov[0]`` factors :math:`C_s` once per spectrum for all
+      sizes.
     """
     start = time.perf_counter()
     if sizes is not None:

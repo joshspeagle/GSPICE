@@ -189,15 +189,20 @@ def scale(
     center: Real = 0.0,
     refmean: ArrayLike | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
-    """Scale spectra to unit mean noise:  X_s = a_s (ftilde_s - center) - refmean.
+    r"""Scale spectra to unit mean noise.
 
-    The bad pixels are (mask != 0) | (ivar == 0), and scale never reads flux or ivar
-    there. It checks and computes the float64 values of the inputs: a long double
-    beyond the float64 range is not finite, and one that rounds to 0 in float64 is 0.
-    ftilde_s is flux_s cast to float64, then linearly interpolated over its bad pixels
-    and held constant beyond its first and last good pixels. a_s is the square root of
-    the mean of ivar_s over its good pixels. With float64 flux, scale(flux, ivar, mask)
-    equals the 2022 standard_scale with the mask (mask != 0) | (ivar == 0), to
+    .. math::
+
+        X_s = a_s (\tilde f_s - \mathrm{center}) - \mathrm{refmean}
+
+    The bad pixels are ``(mask != 0) | (ivar == 0)``, and scale never reads ``flux`` or
+    ``ivar`` there. It checks and computes the float64 values of the inputs. A long
+    double beyond the float64 range is not finite, and one that rounds to 0 in float64
+    is 0. :math:`\tilde f_s` is ``flux[s]`` cast to float64, then linearly interpolated
+    over its bad pixels, and held constant beyond its first and last good pixels.
+    :math:`a_s` is the square root of the mean of :math:`\mathrm{ivar}_s` over its good
+    pixels. With float64 ``flux``, ``scale(flux, ivar, mask)`` equals the 2022
+    `gspice.legacy.standard_scale` with the mask ``(mask != 0) | (ivar == 0)``, to
     rounding.
 
     Parameters
@@ -205,35 +210,35 @@ def scale(
     flux : array_like, shape (nspec, npix)
         Flux, of an integer or floating dtype; finite at good pixels.
     ivar : array_like, shape (nspec, npix)
-        Inverse variance (flux^-2), of an integer or floating dtype; finite and >= 0
-        at pixels not in mask.
+        Inverse variance (flux⁻²), of an integer or floating dtype; finite and 0 or
+        more at pixels not in ``mask``.
     mask : array_like, shape (nspec, npix), optional
-        Nonzero marks a pixel in mask, of a bool, integer or floating dtype. None: no
-        pixel is in mask.
+        A nonzero value marks a pixel in ``mask``; of a bool, integer or floating dtype.
+        None: no pixel is in ``mask``.
     center : float, optional
-        Constant subtracted before scaling (flux).
+        A constant subtracted before scaling (flux).
     refmean : array_like, shape (npix,), optional
-        Mean subtracted after scaling (scaled); finite. None: the column mean of
-        a_s (ftilde_s - center), which needs at least one spectrum. For held-out
-        spectra, pass the model mean of their S/N bin: their own mean breaks the
-        finite-sample factor f_s.
+        The mean subtracted after scaling (scaled); finite. None: the column mean of
+        :math:`a_s (\tilde f_s - \mathrm{center})`, which needs at least one spectrum.
+        For held-out spectra, pass the model mean of their S/N bin: their own mean
+        breaks the finite-sample factor :math:`f_s`.
 
     Returns
     -------
     X : ndarray, shape (nspec, npix)
-        Scaled spectra (scaled).
+        The scaled spectra (scaled).
     refscale : ndarray, shape (nspec,)
-        a_s (flux^-1).
+        :math:`a_s` (flux⁻¹).
     refmean : ndarray, shape (npix,)
-        The subtracted mean (scaled); a copy if refmean is given.
+        The subtracted mean (scaled); a copy if ``refmean`` is given.
 
     Raises
     ------
     TypeError
         If an argument has a dtype or a type that is not allowed above.
     ValueError
-        If an argument has a shape or a value that is not allowed above, or a
-        spectrum has no good pixel.
+        If an argument has a shape or a value that is not allowed above, or a spectrum
+        has no good pixel.
     """
     flux, ivar, bad = validate(flux, ivar, mask)
     require_good_pixel(bad)
@@ -264,29 +269,34 @@ def unscale(
     center: Real = 0.0,
     var: ArrayLike | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64] | None]:
-    """Invert scale:  f = (x + refmean)/refscale + center,  var_f = var/refscale^2.
+    r"""Invert `scale`, for values and their variances.
 
-    It computes with the float64 values of the inputs, as scale does.
+    .. math::
+
+        f = \frac{x + \mathrm{refmean}}{\mathrm{refscale}} + \mathrm{center}, \qquad
+        \mathrm{var}_f = \frac{\mathrm{var}}{\mathrm{refscale}^2}
+
+    It computes with the float64 values of the inputs, as `scale` does.
 
     Parameters
     ----------
     x : array_like, shape (nspec, n)
-        Values at n pixels (scaled), of an integer or floating dtype.
+        Values at :math:`n` pixels (scaled), of an integer or floating dtype.
     refscale : array_like, shape (nspec,)
-        a_s of scale (flux^-1); finite and > 0.
+        :math:`a_s` of `scale` (flux⁻¹); finite and positive.
     refmean : array_like, shape (n,)
-        The mean that scale subtracted at these pixels (scaled); finite.
+        The mean that `scale` subtracted at these pixels (scaled); finite.
     center : float, optional
-        The center of scale (flux).
+        The ``center`` of `scale` (flux).
     var : array_like, shape (n,) or (nspec, n), optional
-        Variances of x (scaled^2), of an integer or floating dtype; >= 0.
+        Variances of ``x`` (scaled²), of an integer or floating dtype; 0 or more.
 
     Returns
     -------
     f : ndarray, shape (nspec, n)
         Flux.
     var_f : ndarray, shape (nspec, n), or None
-        Variances of f (flux^2); None if var is None.
+        Variances of ``f`` (flux²); None if ``var`` is None.
 
     Raises
     ------
@@ -319,15 +329,16 @@ def unscale(
 def snr(
     flux: ArrayLike, ivar: ArrayLike, mask: ArrayLike | None = None
 ) -> NDArray[np.float64]:
-    """Median of flux sqrt(ivar) over the good pixels of each spectrum.
+    r"""Median signal-to-noise ratio over the good pixels of each spectrum.
 
-    The bad pixels are (mask != 0) | (ivar == 0), and snr never reads flux or ivar
-    there. The products are computed in float64.
+    The ratio at a pixel is :math:`\mathrm{flux} \sqrt{\mathrm{ivar}}`. The bad pixels
+    are ``(mask != 0) | (ivar == 0)``, and snr never reads ``flux`` or ``ivar`` there.
+    The products are computed in float64.
 
     Parameters
     ----------
     flux, ivar, mask : array_like, shape (nspec, npix)
-        As in scale.
+        As in `scale`.
 
     Returns
     -------
@@ -337,10 +348,10 @@ def snr(
     Raises
     ------
     TypeError
-        If an argument has a dtype that scale does not allow.
+        If an argument has a dtype that `scale` does not allow.
     ValueError
-        If an argument has a shape or a value that scale does not allow, or a
-        spectrum has no good pixel.
+        If an argument has a shape or a value that `scale` does not allow, or a spectrum
+        has no good pixel.
     """
     flux, ivar, bad = validate(flux, ivar, mask)
     require_good_pixel(bad)

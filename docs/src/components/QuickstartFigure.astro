@@ -2,23 +2,16 @@
 // V-4: one test spectrum of the quickstart, with the masked pixels that infill
 // predicted. docs/scripts/explainers.py runs the code of the page and writes the data.
 import data from '../data/quickstart.json'
-import { axesFor, legend, plotMarkup, readout } from '../lib/spectrum-plot.ts'
+import { legend, plotMarkup, quickstartLegend, quickstartPlot, readout } from '../lib/spectrum-plot.ts'
 import '../styles/plot.css'
 
-// The prediction at the masked pixels, placed at their pixel numbers.
-const mu = new Float64Array(data.flux.length)
-const sd = new Float64Array(data.flux.length)
-mu.set(data.mu, data.start)
-sd.set(data.sd, data.start)
-const spectrum = { flux: data.flux, truth: data.truth, start: data.start, width: data.width, mu, sd }
-const bands = data.mu.flatMap((m, k) => [m - 2 * data.sd[k], m + 2 * data.sd[k]])
-const axes = axesFor([...data.flux, ...data.truth, ...bands], data.flux.length)
+const { spectrum, axes } = quickstartPlot(data)
 ---
 
 <figure class="not-content">
   <div class="gs-plot" data-npix={data.flux.length} role="img" aria-label={readout(spectrum)} set:html={plotMarkup(spectrum, axes)} />
   <figcaption class="gs-caption">
-    <Fragment set:html={legend(['obs', 'blk', 'pred', 'b1', 'b2', 'truth'])} />
+    <Fragment set:html={legend(quickstartLegend)} />
     <p>
       The spectrum <code>test.flux[{data.spectrum}]</code> after <code>infill</code>, at a
       signal-to-noise ratio of {data.snr}. {readout(spectrum)} The error is the prediction minus

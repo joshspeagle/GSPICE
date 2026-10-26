@@ -35,7 +35,7 @@ Predict pixels from other pixels.
 
 ## Repair
 
-Flag and replace bad pixels.
+Detect artifacts, and replace the flagged pixels and the bad pixels.
 
 ::: gspice.repair
 
