@@ -8,6 +8,7 @@
 - The documentation site has the visual design of `docs/brand.md`: dark and light themes on a navy header, the Archivo and IBM Plex Mono fonts, square corners, a new logo and favicon drawn in pixel cells, output blocks joined to their code, and framed figures.
 - The documentation site opens with a Getting started group: Is GSPICE right for my data?, Install, Quickstart, Prepare your spectra, and What you get back. The home page has an interactive figure that predicts the pixels under a block that you drag over a spectrum. The installation and quickstart pages moved to `start/install/` and `start/quickstart/`, and their old addresses redirect there.
 - The documentation site has a Guides group of seven task pages on simulated spectra, which need no download: Fill known bad pixels, Find outliers, Find and repair artifacts, Choose a model, Check your model, Save and load, and Troubleshooting. They replace the tutorials on pixelwise prediction, infilling, repair, calibration, the low-rank and noise-aware models, and saving, whose old addresses redirect to them. The glossary adds artifact, clean spectrum, flagged pixel, outlier, scaled model and shifted segment.
+- The docstrings, and so the API pages, use the terms of the glossary and show their equations as rendered maths. `README.md` has a figure of the quickstart, an example, badges and links to the pages of the site.
 
 ## 2.0.0 - 2026-10-19
 

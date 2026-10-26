@@ -56,127 +56,160 @@ def repair(
     rng: np.random.Generator | None = None,
     progress: Progress | None = None,
 ) -> Repaired:
-    """Detect and replace bad pixels.
+    r"""Detect artifacts, and replace the flagged pixels and the bad pixels.
 
-    For a spectrum with the working vector x (see `Model`) and the bad pixels
-    bad = (mask != 0) | (ivar == 0), let z(y | w) = (y - mu(w)) / sigma at every pixel
-    of a vector y, its interpolated bad pixels included, with mu(w) and sigma^2 the
-    mean and variance of `pixelwise` with nguard for a vector w, z(y) = z(y | y) the z
-    of `pixelwise`, and dil(F, d) the pixels within d of a pixel of F along the
-    spectrum. A "conditional mean" is that of `infill`. The steps, in this order, are:
+    Take a spectrum with the working vector :math:`x` (see `Model`) and the bad pixels
+    ``(mask != 0) | (ivar == 0)``. For a vector :math:`y`, let
+    :math:`z(y \mid w) = (y - \mu(w)) / \sigma` at every pixel, its interpolated bad
+    pixels included. Here :math:`\mu(w)` and :math:`\sigma^2` are the mean and variance
+    of `pixelwise` with ``nguard`` for a vector :math:`w`, and
+    :math:`z(y) = z(y \mid y)` is the z of `pixelwise`. Let :math:`\mathrm{dil}(F, d)`
+    be the pixels within :math:`d` of a pixel of :math:`F` along the spectrum, with
+    :math:`d` = ``dilate``. Let :math:`\tau_r` be ``nsigma_replace`` and :math:`\tau_i`
+    be ``nsigma_ignore``. A conditional mean is that of `infill`. The steps, in this
+    order, are:
 
-    1. M1 = dil(|z(x)| > nsigma_replace, dilate) | bad, and
-       I1 = dil(|z(x)| > nsigma_ignore, dilate) minus M1.
-    2. If blockwise: x_b is x with x at M1 | I1 replaced by its conditional mean given
-       the other pixels. While the largest ratio chi2_A(x_b) / thresholds[b, A] over
-       the blocks A of model.blocks that are not flagged exceeds 1, with chi2_A of
-       `fit_blocks` and b the S/N bin of the spectrum, the block of that ratio is
-       flagged and its pixels join M_b, and x_b becomes x with x at M1 | I1 | M_b
-       replaced by its conditional mean given the other pixels. A block is flagged at
-       most once, so there are at most nblock rounds. Without blockwise, M_b is empty.
-    3. x1 is x with x at M1 | M_b replaced by its conditional mean given the pixels
-       outside M1 | M_b | I1. With z2 = z(x | x1), M = dil((|z2| > nsigma_replace) |
-       ((|z(x)| > nsigma_replace) & (|z2| > nsigma_ignore)), dilate) | M_b | bad, and
-       I = dil(|z2| > nsigma_ignore, dilate) minus M.
-    4. If runlength is not None: every run of at least runlength consecutive pixels of
-       the counting set K adds every pixel within halfwidth of the run to I, minus M,
-       unless fewer than floor(minfrac npix) pixels outside M and I would remain (D-57).
-       K is M | I for count_on="all". For "flagged", K holds the pixels outside bad
-       with |z2| > nsigma_ignore, and M_b.
-    5. The result is that of `infill` with replace=M, ignore=I, and inflate,
-       covariance and rng, bit for bit, plus the flagged blocks. For a dense noise
-       model whose steps 1 to 4 form P_s, for guard windows or blocks short of all
-       pixels, step 5 conditions on that P_s, where `infill` uses the Cholesky factor
-       of C_s, so the two agree to rounding.
+    1. :math:`M_1 = \mathrm{dil}(|z(x)| > \tau_r, d) \cup \mathrm{bad}`, and
+       :math:`I_1 = \mathrm{dil}(|z(x)| > \tau_i, d) \setminus M_1`.
+    2. If ``blockwise``: let :math:`x_{\mathrm{blk}}` be :math:`x` with its values at
+       :math:`M_1 \cup I_1` replaced by their conditional mean given the other pixels.
+       Take the blocks :math:`A` of ``model.blocks`` that are not flagged, and the ratio
+       :math:`\chi^2_A(x_{\mathrm{blk}}) / \mathrm{thresholds}[b, A]`.
+       Here :math:`\chi^2_A` is that of `fit_blocks`, and :math:`b` is the S/N bin of
+       the spectrum. While the largest ratio exceeds 1, the block of that ratio is
+       flagged, and its pixels join :math:`M_{\mathrm{blk}}`.
+       :math:`x_{\mathrm{blk}}` then becomes :math:`x` with its values at
+       :math:`M_1 \cup I_1 \cup M_{\mathrm{blk}}` replaced by their conditional mean
+       given the other pixels. A block is flagged at most once, so there are at most
+       nblock rounds. Without ``blockwise``, :math:`M_{\mathrm{blk}}` is empty.
+    3. Let :math:`x_1` be :math:`x` with its values at :math:`M_1 \cup M_{\mathrm{blk}}`
+       replaced by their conditional mean given the pixels outside
+       :math:`M_1 \cup M_{\mathrm{blk}} \cup I_1`. Let :math:`z_2 = z(x \mid x_1)`. Then
 
-    Nothing limits the replaced set. Since M and I depend on the data, f_s does not hold
-    for Repaired.chi2 (see `finite_sample_factor`). For a noise model, x is in flux
-    units, and C_s of the spectrum (see `Model`) takes the place of cov[b] in every
-    step: repair runs the five steps one spectrum at a time, with one P_s for all of
-    them.
+       .. math::
+
+           M = \mathrm{dil}\bigl((|z_2| > \tau_r) \cup ((|z(x)| > \tau_r) \cap
+           (|z_2| > \tau_i)), d\bigr) \cup M_{\mathrm{blk}} \cup \mathrm{bad},
+
+       and :math:`I = \mathrm{dil}(|z_2| > \tau_i, d) \setminus M`.
+    4. If ``runlength`` is not None, step 4 widens :math:`I`. Every run of at least
+       ``runlength`` consecutive pixels of the counting set :math:`R` adds the pixels
+       within ``halfwidth`` of the run to :math:`I`, minus :math:`M`. Step 4 adds no
+       pixel to a spectrum if fewer than
+       :math:`\lfloor \mathrm{minfrac} \cdot \mathrm{npix} \rfloor` pixels outside
+       :math:`M` and :math:`I` would then remain. :math:`R` is :math:`M \cup I` for
+       ``count_on="all"``. For ``"flagged"``, :math:`R` holds :math:`M_{\mathrm{blk}}`
+       and the pixels outside bad with :math:`|z_2| > \tau_i`.
+    5. The result is that of `infill` with ``replace=M``, ``ignore=I``, and ``inflate``,
+       ``covariance`` and ``rng``, bit for bit, plus the flagged blocks. A dense
+       noise-aware model can form :math:`P_s` in steps 1 to 4, for guard windows or
+       blocks short of all pixels. Step 5 then conditions on that :math:`P_s`, where
+       `infill` uses the Cholesky factor of :math:`C_s`. The two then agree to rounding.
+
+    Nothing limits the replaced set. Since :math:`M` and :math:`I` depend on the data,
+    :math:`f_s` does not hold for ``Repaired.chi2`` (see `finite_sample_factor`). For a
+    noise-aware model, :math:`x` is in flux units, and the :math:`C_s` of the spectrum
+    (see `Model`) replaces ``cov[b]`` in every step. repair then runs the five steps one
+    spectrum at a time, with one :math:`P_s` for all of them.
 
     Parameters
     ----------
     model : Model
-        The model; with blockwise=True, one with blocks from `fit_blocks`.
+        The model; with ``blockwise=True``, one with blocks from `fit_blocks`.
     flux, ivar, mask : array_like, shape (nspec, npix)
-        As in `scale`, with the npix of model.
+        As in `scale`, with the npix of ``model``.
     nguard : int, optional
-        The half-width of the guard window of z (pixels); >= 0.
+        The half-width of the guard window of z (pixels); 0 or more.
     nsigma_replace : float, optional
-        The threshold of |z| for replacing a pixel; finite and > 0.
+        The threshold :math:`\tau_r` of :math:`|z|` for replacing a pixel; finite and
+        positive.
     nsigma_ignore : float, optional
-        The threshold of |z| for ignoring a pixel; finite, > 0 and <= nsigma_replace.
+        The threshold :math:`\tau_i` of :math:`|z|` for ignoring a pixel; finite,
+        positive and at most ``nsigma_replace``.
     dilate : int, optional
-        The pixels d by which dil widens the flags of z on each side; >= 0. Paper
-        Fig. 8 uses 2.
+        The number of pixels :math:`d` by which dil widens the flags of z on each side;
+        0 or more. Paper Fig. 8 uses 2.
     blockwise : bool, optional
         If True, run the block pass of step 2.
     runlength : int or None, optional
-        The shortest run of K that widens I (pixels); >= 1. None skips step 4.
+        The shortest run of :math:`R` that widens :math:`I` (pixels); 1 or more.
+        None skips step 4.
     halfwidth : int, optional
-        The pixels on each side of a run that join I; >= 0.
+        The number of pixels on each side of a run that join :math:`I`; 0 or more.
     minfrac : float, optional
         The fraction of npix that step 4 leaves to condition on; from 0 to 1.
     count_on : {"all", "flagged"}, optional
-        The counting set K of step 4.
+        The counting set :math:`R` of step 4.
     inflate, covariance : bool, optional
-        As in `infill`, for step 5. inflate needs a dense, mean-centred, unweighted
-        model without noise.
+        As in `infill`, for step 5. ``inflate`` needs a dense, mean-centred, unweighted
+        scaled model.
     rng : numpy.random.Generator, optional
-        As in `infill`, for step 5: the source of Repaired.draws. None: no draws.
+        As in `infill`, for step 5: the source of ``Repaired.draws``. None: no draws.
     progress : callable, optional
-        progress(stage, done, total), called with the stage "repair", the number of
-        spectra done and their total, after each chunk of spectra of steps 1 to 4, and
-        again after each chunk of step 5; a noise model runs the five steps on chunks
-        of one spectrum, and reports after its steps 1 to 4 and after its step 5.
+        ``progress(stage, done, total)``, called with the stage ``"repair"``, the number
+        of spectra done and their total. repair calls it after each chunk of spectra of
+        steps 1 to 4, and again after each chunk of step 5. A noise-aware model runs the
+        five steps on chunks of one spectrum, and reports after its steps 1 to 4 and
+        after its step 5.
 
     Returns
     -------
     Repaired
-        The repaired spectra, in flux units, with replaced = M and ignored = I, and
-        the flagged blocks of each spectrum in blocks, or None if blockwise is False.
+        The repaired spectra, in flux units, with ``replaced`` :math:`M` and ``ignored``
+        :math:`I`. ``blocks`` holds the flagged blocks of each spectrum, or None if
+        ``blockwise`` is False.
 
     Raises
     ------
     TypeError
-        If model is not a Model, nguard, dilate, runlength or halfwidth is not an
-        integer (or None for runlength), nsigma_replace, nsigma_ignore or minfrac is
-        not a real number, blockwise, inflate or covariance is not a bool, rng is
-        neither None nor a numpy.random.Generator, progress is not callable or None,
-        or flux, ivar or mask has a dtype that `scale` does not allow.
+        If ``model`` is not a Model, or ``nguard``, ``dilate``, ``runlength`` or
+        ``halfwidth`` is not an integer (or None for ``runlength``).
+        If ``nsigma_replace``, ``nsigma_ignore`` or ``minfrac`` is not a real number, or
+        ``blockwise``, ``inflate`` or ``covariance`` is not a bool. If ``rng`` is
+        neither None nor a numpy.random.Generator, or ``progress`` is not callable or
+        None. If ``flux``, ``ivar`` or ``mask`` has a dtype that `scale` does not allow.
     ValueError
-        If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
-        has another npix than model, a spectrum has no good pixel, an argument is
-        outside its range above, count_on is neither "all" nor "flagged", or blockwise
-        is True and model has no blocks. If inflate is True and model has a constant
-        centre, weights, a `LowRank` covariance or noise, or, before step 5,
-        N_s - N_k - 3 <= 0 for a spectrum with a replaced pixel, with
-        N_k = npix - |M | I|; the message names N_s and N_k.
+        If ``flux``, ``ivar`` or ``mask`` has a shape or a value that `scale` does not
+        allow. If ``flux`` has another npix than ``model``, or a spectrum has no good
+        pixel. If an argument is outside its range above, ``count_on`` is neither
+        ``"all"`` nor ``"flagged"``, or ``blockwise`` is True and ``model`` has no
+        blocks. If ``inflate`` is True and ``model`` has a constant centre, weights, a
+        `LowRank` covariance or noise. If ``inflate`` is True and, before step 5,
+        :math:`N_s - N_k - 3 \le 0` for a spectrum with a replaced pixel, with
+        :math:`N_k = \mathrm{npix} - |M \cup I|`; the message names :math:`N_s` and
+        :math:`N_k`.
     numpy.linalg.LinAlgError
-        If the covariance of a bin with spectra fails the check of its precision
-        matrix, as in `pixelwise`; repair checks P of every bin with spectra before
-        any spectrum, also for nguard >= npix - 1, where `pixelwise` computes no P.
-        As in `fit_blocks` for the blocks of a bin with spectra, with blockwise=True,
-        or as in `infill` for a conditional mean. The message names the bin, and the
-        block or the row. For a noise model, as in `infill`, with C_s in place of
-        cov[b], and checked for each spectrum where a step factors C_s.
+        If the covariance of a bin with spectra fails the check of its precision matrix,
+        as in `pixelwise`. repair checks the :math:`P` of every bin with spectra before
+        any spectrum, also for ``nguard >= npix - 1``, where `pixelwise` computes no
+        :math:`P`. As in `fit_blocks` for the blocks of a bin with spectra, with
+        ``blockwise=True``. As in `infill` for a conditional mean. The message names the
+        bin, and the block or the row. For a noise-aware model, as in `infill`, with
+        :math:`C_s` in place of ``cov[b]``, checked for each spectrum where a step
+        factors :math:`C_s`.
 
     Notes
     -----
-    Cost: npix^3 flops for P at the first use of a bin, the guard weights as in
-    `pixelwise`, and with blockwise=True |G|^3/3 flops per block and bin with spectra,
-    with G the block and its guard. Then per spectrum 4 npix^2 flops for the two
-    pixelwise passes, about 2 npix^2 + sum_A |G|^2 flops per scan of its blocks,
-    one scan and one infill per flagged block, and two infills as in `infill`: that
-    of step 5, and that of step 2, whose last x_b gives x1, or without blockwise that
-    of step 3. All but the infill of step 5 compute only the mean, from C_OO where
-    |G| > npix/2 (design section 4.2).
-    repair holds replaced and ignored of all spectra, and a few arrays of one chunk.
-    A noise model costs P_s, npix^3 flops for a dense cov[0] or npix^2 K for a
-    `LowRank` of rank K, its guard windows as in `pixelwise` and its block factors
-    for each spectrum; the infills of a `LowRank` cov[0] do not use P_s, and cost as
-    in `infill`.
+    Cost:
+
+    - :math:`\mathrm{npix}^3` flops for :math:`P` at the first use of a bin, and the
+      guard weights as in `pixelwise`.
+    - With ``blockwise=True``, :math:`|G|^3/3` flops per block and bin with spectra,
+      with :math:`G` the block and its guard.
+    - Per spectrum, :math:`4 \, \mathrm{npix}^2` flops for the two pixelwise passes, and
+      about :math:`2 \, \mathrm{npix}^2 + \sum_A |G|^2` flops per scan of its blocks.
+    - Per spectrum, one scan and one infill per flagged block, and two infills as in
+      `infill`. These two are the infill of step 5, and that of step 2, whose last
+      :math:`x_{\mathrm{blk}}` gives :math:`x_1`, or without ``blockwise`` that of step
+      3. All infills except that of step 5 compute only the mean, from :math:`C_{OO}`
+      where :math:`|G| > \mathrm{npix}/2`.
+    - repair holds ``replaced`` and ``ignored`` of all spectra, and a few arrays of one
+      chunk.
+    - A noise-aware model costs, for each spectrum, :math:`P_s`, its guard windows as in
+      `pixelwise`, and its block factors. :math:`P_s` takes :math:`\mathrm{npix}^3`
+      flops for a dense ``cov[0]``, or :math:`\mathrm{npix}^2 K` for a `LowRank` of rank
+      :math:`K`. The infills of a `LowRank` ``cov[0]`` do not use :math:`P_s`, and cost
+      as in `infill`.
     """
     start = time.perf_counter()
     nguard = integer(nguard, "nguard", 0)
@@ -318,12 +351,12 @@ def _detect(
 ) -> tuple[NDArray[np.bool_], NDArray[np.bool_], NDArray[np.bool_]]:
     # Steps 1 to 4 of design section 5.4 for the working vectors X of a chunk of
     # spectra, with the block factors of their bins: the flagged blocks, M and I.
-    # Step 1, with G1 = M1 | I1.
+    # Step 1, with G1 = M1 | I1. M_blk is the variable Mb, and x_blk is X_b.
     z1 = zscores(model, nguard, X, bins)
     M1 = _dilated(z1, nsigma_replace, d) | bad
     G1 = M1 | _dilated(z1, nsigma_ignore, d)
-    # Steps 2 and 3. The last x_b of the block pass conditions on the pixels outside
-    # G1 | M_b, as x1 does, so its values at M1 | M_b are those of x1.
+    # Steps 2 and 3. The last x_blk of the block pass conditions on the pixels outside
+    # G1 | M_blk, as x1 does, so its values at M1 | M_blk are those of x1.
     if blocks is None:
         flagged = np.zeros((len(X), 0), dtype=bool)
         Mb = np.zeros(X.shape, dtype=bool)
@@ -340,7 +373,7 @@ def _detect(
     keep = (np.abs(z1) > nsigma_replace) & ignore
     M = widen((z2 > nsigma_replace) | keep, d) | Mb | bad
     I = widen(ignore, d) & ~M
-    # Step 4.
+    # Step 4, with the counting set R in the variable K.
     if runlength is not None:
         if count_on == "all":
             K = M | I
@@ -372,15 +405,15 @@ def _block_pass(
     G: NDArray[np.bool_],
 ) -> tuple[NDArray[np.bool_], NDArray[np.bool_], NDArray[np.float64]]:
     # Step 2 of design section 5.4 for the working vectors X of a chunk of spectra, with
-    # G = M1 | I1: the flagged blocks (nspec, nblock), their pixels M_b and the last
-    # x_b.
+    # G = M1 | I1: the flagged blocks (nspec, nblock), their pixels M_blk (variable
+    # Mb) and the last x_blk (variable x_b).
     starts = blocks.starts[:, np.newaxis]
     pixels = np.arange(X.shape[1])
     cover = (pixels >= starts) & (pixels < starts + blocks.width)
     flagged = np.zeros((len(X), starts.size), dtype=bool)
     Mb = np.zeros(X.shape, dtype=bool)
     x_b = filled(model, X, bins, rows, G, G)
-    # The spectra to scan: all at first, then those whose x_b changed.
+    # The spectra to scan: all at first, then those whose x_blk changed.
     scan = np.arange(len(X))
     while scan.size:
         ratio = np.empty((scan.size, starts.size))
@@ -409,10 +442,11 @@ def _exclude_extended(
     minfrac: float,
 ) -> NDArray[np.bool_]:
     # Step 4 of design section 5.4, with the replaced, ignored and counting sets M, I
-    # and K of shape (nspec, npix), and M and I disjoint. It returns a new ignored set.
+    # and R (variable K) of shape (nspec, npix), and M and I disjoint. It returns a
+    # new ignored set.
     npix = M.shape[1]
     # The opening of each row by a window of runlength pixels, with the pixels beyond
-    # its ends unflagged, keeps the runs of K of at least runlength pixels. No run fills
+    # its ends unflagged, keeps the runs of R of at least runlength pixels. No run fills
     # npix + 1 pixels, so a longer window is cut to that size, which bounds the buffers
     # of the filters.
     runs = grey_opening(K, size=(1, min(runlength, npix + 1)), mode="constant")

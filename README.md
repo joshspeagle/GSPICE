@@ -1,14 +1,30 @@
-# GSPICE: Gaussian Pixelwise Conditional Estimation
+# GSPICE
 
-GSPICE models spectra on a common wavelength grid as a multivariate Gaussian with an empirical covariance, and predicts any set of pixels from the others. The prediction can replace bad pixels, and the distance of a pixel from its prediction can flag artifacts. The method is in Finkbeiner, Speagle & Karim, [arXiv:2511.16754](https://arxiv.org/abs/2511.16754). The IDL and Julia implementations, notebooks and notes of 2021 and 2022 are in the upstream repository [dfink/gspice](https://github.com/dfink/gspice/tree/1fbab9f).
+[![CI](https://github.com/joshspeagle/GSPICE/actions/workflows/ci.yml/badge.svg)](https://github.com/joshspeagle/GSPICE/actions/workflows/ci.yml)
+[![Docs](https://github.com/joshspeagle/GSPICE/actions/workflows/docs.yml/badge.svg)](https://github.com/joshspeagle/GSPICE/actions/workflows/docs.yml)
+[![License](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjoshspeagle%2FGSPICE%2Fmain%2Fpyproject.toml&query=%24.project.license&label=license)](https://github.com/joshspeagle/GSPICE/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fjoshspeagle%2FGSPICE%2Fmain%2Fpyproject.toml&query=%24.project%5B%27requires-python%27%5D&label=python)](https://github.com/joshspeagle/GSPICE/blob/main/pyproject.toml)
 
-## Installation
+Survey spectra contain pixels that you cannot trust, such as cosmic rays, hot columns and pixels that the pipeline masked. GSPICE learns from your own spectra how the pixels vary together, and predicts any pixels from the others, with an uncertainty.
 
-See the [installation page](https://joshspeagle.github.io/GSPICE/start/install/) of the documentation.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/joshspeagle/GSPICE/main/docs/readme/quickstart-dark.svg">
+  <img alt="A simulated spectrum of 200 pixels. Pixels 80 to 109 are masked, and GSPICE predicts them from the other pixels, with bands of ±1σ and ±2σ." src="https://raw.githubusercontent.com/joshspeagle/GSPICE/main/docs/readme/quickstart-light.svg">
+</picture>
+
+The figure shows one test spectrum of the example below. Pixels 80 to 109 are masked, and the orange line is their prediction by `infill`.
+
+## Install
+
+```sh
+pip install git+https://github.com/joshspeagle/GSPICE
+```
+
+[Install](https://joshspeagle.github.io/GSPICE/start/install/) gives the requirements and the other ways to install GSPICE.
 
 ## Example
 
-The functions take `flux` and `ivar` (inverse variance) arrays of shape (nspec, npix) on a common wavelength grid. An optional `mask` marks bad pixels with nonzero values, and a pixel with `ivar` = 0 is also bad. The example simulates its spectra.
+The example simulates spectra, fits a model to them, and predicts a range of pixels that it masks.
 
 ```python
 import numpy as np
@@ -16,33 +32,26 @@ import numpy as np
 import gspice
 
 rng = np.random.default_rng(2026)
-train = gspice.simulate(3000, 100, rng=rng, artifacts=0.3)
-test = gspice.simulate(1000, 100, rng=rng, artifacts=0.3)
-
-# Fit a mean and a covariance with iterative outlier clipping.
+train = gspice.simulate(3000, 200, rng=rng)
+test = gspice.simulate(5, 200, rng=rng)
 model, _ = gspice.fit(train.flux, train.ivar)
 
-# Predict each pixel from the pixels outside a guard window around it.
-prediction = gspice.pixelwise(model, test.flux, test.ivar)
-far = np.abs(prediction.z) > 6
-print(far.sum(), "pixels lie more than 6 standard deviations from their prediction")
-
-# Mask the injected artifacts, and replace them by their conditional mean given the
-# other pixels.
-repaired = gspice.infill(model, test.flux, test.ivar, mask=test.artifacts)
-print(repaired.replaced.sum(), "pixels replaced")
-
-# Write the model to an .npz file and read it back.
-gspice.save(model, "model.npz")
-model = gspice.load("model.npz")
+mask = np.zeros(test.flux.shape, dtype=bool)
+mask[:, 80:110] = True
+result = gspice.infill(model, test.flux, test.ivar, mask=mask)
+print(f"{result.replaced.sum()} pixels replaced")
 ```
 
-## The 2022 functions
+[Quickstart](https://joshspeagle.github.io/GSPICE/start/quickstart/) explains each step.
 
-`gspice.legacy` keeps the 2022 functions, with their signatures and results. The 2022 names at the top level of `gspice`, such as `gspice.gp_interp`, are deprecated. `CHANGELOG.md` lists their replacements and the behaviour changes of `gspice.legacy`.
+## Documentation
 
-## More
+The documentation is at [joshspeagle.github.io/GSPICE](https://joshspeagle.github.io/GSPICE/). Start with [Quickstart](https://joshspeagle.github.io/GSPICE/start/quickstart/), [Install](https://joshspeagle.github.io/GSPICE/start/install/) and the first guide, [Fill known bad pixels](https://joshspeagle.github.io/GSPICE/guides/infill/). The [API reference](https://joshspeagle.github.io/GSPICE/reference/api/) documents every public name, and [`CHANGELOG.md`](https://github.com/joshspeagle/GSPICE/blob/main/CHANGELOG.md) lists the changes since the 2022 package.
 
-- [The documentation](https://joshspeagle.github.io/GSPICE/).
-- [`docs/design.md`](docs/design.md): the design of the package and the plan of its phases.
-- [`CHANGELOG.md`](CHANGELOG.md): the changes since the 2022 package.
+## The 2022 package
+
+`gspice.legacy` keeps the 2022 functions, with their signatures and results: see [Legacy interface](https://joshspeagle.github.io/GSPICE/reference/legacy/). The 2022 names at the top level of `gspice`, such as `gspice.gp_interp`, are deprecated. [Migrating from the 2022 interface](https://joshspeagle.github.io/GSPICE/tutorials/migration/) lists their replacements, and `CHANGELOG.md` lists the behaviour changes of `gspice.legacy`.
+
+## Citation
+
+The method is in Finkbeiner, Speagle & Karim, [arXiv:2511.16754](https://arxiv.org/abs/2511.16754). The IDL and Julia implementations, notebooks and notes of 2021 and 2022 are in the upstream repository [dfink/gspice](https://github.com/dfink/gspice/tree/1fbab9f).

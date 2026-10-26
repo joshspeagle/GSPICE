@@ -38,93 +38,120 @@ def fit_blocks(
     percentile: Real = 99.9,
     progress: Progress | None = None,
 ) -> Model:
-    """Return model with block thresholds from artifact-free spectra.
+    r"""Return the model with block thresholds from clean spectra.
 
-    Block k holds the width pixels from starts[k], with the starts 0, stride,
-    2 stride, ... <= npix - width, and npix - width if the last of them is smaller:
-    31 blocks at npix 2400 with the defaults. fit_blocks first replaces the bad pixels
-    by their conditional mean as `infill` does, and runs no detection by z.
-    For a spectrum in S/N bin b, let x be the working vector of its infilled flux (see
-    `Model`), P the inverse of cov[b], A a block, G the pixels within nguard of A,
-    clipped at the ends, and O the pixels outside G. Then::
+    Block :math:`j` holds the ``width`` pixels from ``starts[j]``. The starts are 0,
+    ``stride``, 2 ``stride`` and so on, up to npix − ``width``. If the last of them is
+    smaller than npix − ``width``, the start npix − ``width`` follows. The defaults
+    give 31 blocks at npix 2400. fit_blocks first replaces the bad pixels by their
+    conditional mean, as `infill` does. It does not detect outliers by z.
 
-        chi2_A = r_A^T C_AA^-1 r_A / |A|,  r_A = x_A - mu_A,
+    Take a spectrum in S/N bin :math:`b`, with :math:`x` the working vector of its
+    infilled flux (see `Model`) and :math:`P` the inverse of ``cov[b]``. Let :math:`A`
+    be a block, :math:`G` the pixels within ``nguard`` of :math:`A`, clipped at the
+    ends, and :math:`O` the pixels outside :math:`G`. Then
 
-    where mu_A and C_AA = (P_GG^-1)_AA are the conditional mean and covariance of x_A
-    given x_O, so the guard pixels G \\ A are marginalized. Where G covers all pixels,
-    they are the prior 0 and cov[b] at A, computed without P. thresholds[b, k] is
-    np.percentile (linear) of chi2_A of block k at p = percentile over the m spectra of
-    bin b. A clean block then exceeds its threshold with probability
-    (m (1 - p/100) + p/100)/(m + 1) when (m - 1) p/100 is an integer, and at most that
-    otherwise, for a density that falls beyond the threshold: 0.20% at m = 1000 and
-    0.12% at m = 5000 for p = 99.9. `repair` also infills
-    z-flagged pixels, which lowers the rate. Use spectra not used for training. For a
-    noise model, x is in flux units, and C_s of each spectrum (see `Model`) takes the
-    place of cov[b] in its infill and its blocks.
+    .. math::
+
+        \chi^2_A = \frac{r_A^\mathsf{T} C_{AA}^{-1} r_A}{|A|}, \qquad r_A = x_A - \mu_A,
+
+    where :math:`\mu_A` and :math:`C_{AA} = (P_{GG}^{-1})_{AA}` are the conditional mean
+    and covariance of :math:`x_A` given :math:`x_O`. The guard pixels
+    :math:`G \setminus A` are thus marginalized. Where :math:`G` covers all pixels,
+    :math:`\mu_A` and :math:`C_{AA}` are those of the prior, 0 and ``cov[b]`` at
+    :math:`A`, computed without :math:`P`.
+
+    ``thresholds[b, j]`` is ``np.percentile`` (linear) of :math:`\chi^2_A` of block
+    :math:`j`, at :math:`p` = ``percentile``, over the :math:`m` spectra of bin
+    :math:`b`. A block without an artifact then exceeds its threshold with the
+    probability
+
+    .. math::
+
+        \frac{m (1 - p/100) + p/100}{m + 1}
+
+    if :math:`(m - 1) p/100` is an integer. Otherwise the probability is at most this
+    value, for a density that falls beyond the threshold. For :math:`p = 99.9`, it is
+    0.20% at :math:`m = 1000` and 0.12% at :math:`m = 5000`. `repair` also infills the
+    pixels that z flags, which lowers this rate. Use clean held-out spectra.
+
+    For a noise-aware model, :math:`x` is in flux units. The covariance :math:`C_s` of
+    each spectrum (see `Model`) then replaces ``cov[b]`` in its infill and its blocks.
 
     Parameters
     ----------
     model : Model
         The model.
     flux, ivar, mask : array_like, shape (nspec, npix)
-        As in `scale`, with the npix of model: spectra without artifacts, with at
-        least m spectra in each bin such that m (100 - p) >= 100, where p is read as
-        the decimal Fraction(str(p)): 1000 spectra at p = 99.9.
+        As in `scale`, with the npix of ``model``. Clean spectra, with at least
+        :math:`m` spectra in each bin such that :math:`m (100 - p) \ge 100`. The check
+        reads :math:`p` as the decimal ``Fraction(str(p))``: 1000 spectra at
+        :math:`p = 99.9`.
     width : int, optional
-        The pixels per block, |A|; from 1 to npix.
+        The number of pixels per block, :math:`|A|`; from 1 to npix.
     stride : int, optional
-        The distance between the starts of consecutive blocks (pixels); >= 1.
+        The distance between the starts of consecutive blocks (pixels); 1 or more.
     nguard : int, optional
         The half-width of the guard window around each block (pixels); from 0 to
-        2^63 - 1, as for `Blocks`.
+        :math:`2^{63} - 1`, as for `Blocks`.
     percentile : float, optional
-        The percentile p of the thresholds; > 0 and < 100.
+        The percentile :math:`p` of the thresholds; :math:`0 < p < 100`.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra, of one
-        spectrum for a noise model, with the stage "fit_blocks", the number of
-        spectra done and their total.
+        ``progress(stage, done, total)``, called after each chunk of spectra, with the
+        stage ``"fit_blocks"``, the number of spectra done and their total. For a
+        noise-aware model, a chunk is one spectrum.
 
     Returns
     -------
     Model
-        A new model, equal to model except for blocks, a `Blocks` that holds the
+        A new model, equal to ``model`` except for ``blocks``: a `Blocks` that holds the
         starts, width, nguard and thresholds.
 
     Raises
     ------
     TypeError
-        If model is not a Model, width, stride or nguard is not an integer,
-        percentile is not a real number, progress is not callable or None, or flux,
-        ivar or mask has a dtype that `scale` does not allow.
+        If ``model`` is not a Model, or ``width``, ``stride`` or ``nguard`` is not an
+        integer. If ``percentile`` is not a real number, or ``progress`` is not callable
+        or None. If ``flux``, ``ivar`` or ``mask`` has a dtype that `scale` does not
+        allow.
     ValueError
-        If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
-        has another npix than model, a spectrum has no good pixel, or width, stride,
-        nguard or percentile is outside its range. If a bin has fewer spectra than p
-        needs; the message names the bin and its count. If a threshold is not finite
-        or is 0, as for spectra equal to their conditional mean.
+        If ``flux``, ``ivar`` or ``mask`` has a shape or a value that `scale` does not
+        allow. If ``flux`` has another npix than ``model``, or a spectrum has no good
+        pixel. If ``width``, ``stride``, ``nguard`` or ``percentile`` is outside its
+        range. If a bin has fewer spectra than :math:`p` needs; the message names the
+        bin and its count. If a threshold is not finite or is 0, as for spectra equal to
+        their conditional mean.
     numpy.linalg.LinAlgError
         If the covariance of a bin fails the check of its precision matrix, as in
-        `pixelwise`, and G of a block does not cover all pixels; if P_GG of a block is
-        not positive definite; or, for a block whose G covers all pixels, if cov[b] at
-        T = A fails that check. Also as in `infill` for the bad pixels. The message
-        names the bin, and the block of a block or the row of a pattern. For a noise
-        model, as in `infill`, with C_s in place of cov[b].
+        `pixelwise`, and the :math:`G` of a block does not cover all pixels.
+        If :math:`P_{GG}` of a block is not positive definite. If ``cov[b]`` at
+        :math:`T = A` fails that check, for a block whose :math:`G` covers all pixels.
+        Also as in `infill`, for the bad pixels. The message names the bin, and the
+        block or the row of a pattern. For a noise-aware model, as in `infill`, with
+        :math:`C_s` in place of ``cov[b]``.
 
     Notes
     -----
-    Cost: npix^3 flops for P at the first use of a bin, then |G|^3/3 flops per bin and
-    block, and about 2 npix^2 + sum_A |G|^2 flops per spectrum, plus the `infill` of the
-    bad pixels, of the mean only. The factors of all bins take nbin sum_A |G|^2 x 8
-    bytes during the scan: 8.8 MB per bin at npix 2400 with the defaults, and 649 MB at
-    stride 1. Beyond the inputs and their float64 copies if they are long double,
-    fit_blocks holds a bool array of the input shape, chi2 of the spectra of one bin
-    (nblock float64 per spectrum), and a few float64 arrays of one chunk of
-    max(1, 2**24 // npix) spectra. The new model shares the arrays of model, its
-    precision matrices and its guard weights (see `Model`). A noise model forms P_s,
-    npix^3 flops for a dense cov[0] or npix^2 K for a `LowRank` of rank K, and the
-    factors of the blocks for each spectrum, unless every block covers all pixels with
-    its guard: the infill of the bad pixels then forms no P_s, and costs as in
-    `infill`.
+    Cost:
+
+    - :math:`\mathrm{npix}^3` flops for :math:`P` at the first use of a bin, then
+      :math:`|G|^3/3` flops per bin and block.
+    - About :math:`2\,\mathrm{npix}^2 + \sum_A |G|^2` flops per spectrum, plus the
+      `infill` of the bad pixels, of the mean only.
+    - The factors of all bins take :math:`\mathrm{nbin} \sum_A |G|^2 \times 8` bytes
+      during the scan: 8.8 MB per bin at npix 2400 with the defaults, and 649 MB at
+      ``stride=1``.
+    - Beyond the inputs, and their float64 copies if they are long double, fit_blocks
+      holds a bool array of the input shape. It also holds the :math:`\chi^2_A` of the
+      spectra of one bin (nblock float64 per spectrum), and a few float64 arrays of one
+      chunk of ``max(1, 2**24 // npix)`` spectra.
+    - The new model shares the arrays of ``model``, its precision matrices and its guard
+      weights (see `Model`).
+    - Unless every block covers all pixels with its guard, a noise-aware model forms
+      :math:`P_s` and the factors of the blocks for each spectrum. :math:`P_s` takes
+      :math:`\mathrm{npix}^3` flops for a dense ``cov[0]``, or :math:`\mathrm{npix}^2 K`
+      for a `LowRank` of rank :math:`K`. Otherwise the infill of the bad pixels forms no
+      :math:`P_s`, and costs as in `infill`.
     """
     start = time.perf_counter()
     width = integer(width, "width", 1)

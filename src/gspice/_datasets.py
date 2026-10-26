@@ -12,7 +12,7 @@ MAX_DEPTH = 0.95
 
 @dataclass(frozen=True, eq=False)
 class Simulation:
-    """Synthetic spectra from `simulate`, with their noise-free flux and artifacts.
+    r"""Synthetic spectra from `simulate`, with their noise-free flux and artifacts.
 
     The arrays that `simulate` returns are read-only.
 
@@ -21,7 +21,7 @@ class Simulation:
     flux : ndarray, shape (nspec, npix)
         The flux, with noise and artifacts (flux).
     ivar : ndarray, shape (nspec, npix)
-        The inverse variance of the noise, 1 / sigma^2 (flux^-2).
+        The inverse variance of the noise, :math:`1/\sigma^2` (flux⁻²).
     truth : ndarray, shape (nspec, npix)
         The noise-free flux without artifacts (flux).
     artifacts : ndarray of bool, shape (nspec, npix)
@@ -49,46 +49,62 @@ def simulate(
     artifacts: Real = 0.0,
     gaussian: Boolean = False,
 ) -> Simulation:
-    """Synthetic continuum-normalized spectra for tests and examples (no network).
+    r"""Synthetic continuum-normalized spectra for tests and examples (no network).
 
-    Each spectrum has the continuum 1 and nline = ceil(npix / 25) absorption lines
-    k = 1, ..., nline at evenly spaced centres, with Gaussian profiles p_k of standard
-    deviations from 1.5 to 4 pixels; the lines depend only on npix. Two latent
-    parameters theta set the depths. A spectrum is in population 1, the giants, with
-    probability 0.3, and has theta ~ N((0, 2), I); otherwise theta ~ N(0, I). Line k
-    has the depth 0.95 expit(logit(d_k / 0.95) + r_k . theta), with d_k from 0.1 to
-    0.6 its depth at theta = 0 and r_k = 0.5 (cos k, sin k), so that the depths are
-    correlated, in (0, 0.95), and not Gaussian. Then truth = 1 - sum_k depth_k p_k,
-    in (0, 1]. The continuum S/N has the density p(S/N) ~ (S/N)^-2.5 on [30, 400],
-    and the noise is Gaussian with sigma = sqrt(truth) / snr.
+    Each spectrum has the continuum 1 and
+    :math:`\mathrm{nline} = \lceil \mathrm{npix}/25 \rceil` absorption lines
+    :math:`j = 1, \dots, \mathrm{nline}` at evenly spaced centres. Line :math:`j` has a
+    Gaussian profile :math:`p_j`, with a standard deviation from 1.5 to 4 pixels.
+    The lines depend only on npix. Two latent parameters :math:`\theta` set the depths.
+    A spectrum is in population 1, the giants, with the probability 0.3, and then has
+    :math:`\theta \sim N((0, 2), I)`. Otherwise :math:`\theta \sim N(0, I)`.
+    Line :math:`j` has the depth
 
-    With gaussian=True, truth = mu + J theta, theta ~ N(0, I), where mu is the truth
-    of population 0 at theta = 0 and the columns of J are its derivatives there. Every
-    spectrum has label 0 and the S/N 50, and sigma = sqrt(mu) / 50. So ivar is equal
-    for all spectra, and without artifacts flux ~ N(mu, J J^T + diag(sigma^2)) and
-    the scaled spectra (see `scale`) are exactly Gaussian. truth can then leave
-    (0, 1].
+    .. math::
 
-    round(artifacts nspec) spectra (half to even), chosen at random, get one artifact
-    each, of a type drawn uniformly from three. A cosmic ray adds h sigma to each of
-    1 to 3 adjacent pixels, with h log-uniform on [5, 50]. A bad column sets the flux
-    of 5 to 20 adjacent pixels to 2. A shifted block of 200 to 600 adjacent pixels j
-    has the flux truth(j - d) plus the noise, with d from 0.5 to 3 pixels of either
-    sign, and truth interpolated linearly and held constant beyond its ends. An
-    artifact covers at most npix - 1 pixels, or 1 if npix is 1, from a uniformly
-    drawn start where it fits. For one state of rng, every value of artifacts gives
-    the same ivar, truth, snr and labels, and the same flux outside the pixels in
-    Simulation.artifacts.
+        \mathrm{depth}_j = 0.95\,\mathrm{expit}\bigl(\mathrm{logit}(d_j / 0.95)
+        + r_j \cdot \theta\bigr),
+
+    with :math:`d_j` from 0.1 to 0.6 its depth at :math:`\theta = 0`, and
+    :math:`r_j = 0.5 (\cos j, \sin j)`. The depths are thus correlated, in (0, 0.95),
+    and not Gaussian. Then :math:`\mathrm{truth} = 1 - \sum_j \mathrm{depth}_j\, p_j`,
+    in (0, 1]. The continuum S/N has the density
+    :math:`p(\mathrm{S/N}) \propto (\mathrm{S/N})^{-2.5}` on [30, 400]. The noise is
+    Gaussian with :math:`\sigma = \sqrt{\mathrm{truth}} / \mathrm{snr}`.
+
+    With ``gaussian=True``, :math:`\mathrm{truth} = \mu + J \theta` with
+    :math:`\theta \sim N(0, I)`. Here :math:`\mu` is the truth of population 0 at
+    :math:`\theta = 0`, and the columns of :math:`J` are its derivatives there.
+    Every spectrum has the label 0 and the S/N 50, and :math:`\sigma = \sqrt{\mu} / 50`.
+    So ``ivar`` is equal for all spectra. Without artifacts,
+    :math:`\mathrm{flux} \sim N(\mu, J J^\mathsf{T} + \mathrm{diag}(\sigma^2))`, and the
+    scaled spectra (see `scale`) are exactly Gaussian. truth can then leave (0, 1].
+
+    ``round(artifacts * nspec)`` spectra (half to even), chosen at random, get one
+    artifact each. Its type is drawn uniformly from three:
+
+    - A cosmic ray adds :math:`h \sigma` to each of 1 to 3 adjacent pixels, with
+      :math:`h` log-uniform on [5, 50].
+    - A bad column sets the flux of 5 to 20 adjacent pixels to 2.
+    - A shifted segment of 200 to 600 adjacent pixels :math:`i` has the flux
+      :math:`\mathrm{truth}(i - d)` plus the noise. The shift :math:`d` is from 0.5 to 3
+      pixels, of either sign. truth is interpolated linearly, and held constant beyond
+      its ends.
+
+    An artifact covers at most npix − 1 pixels, or 1 if npix is 1. Its start is drawn
+    uniformly from the starts where it fits. For one state of ``rng``, every value of
+    ``artifacts`` gives the same ``ivar``, ``truth``, ``snr`` and ``labels``. It also
+    gives the same ``flux`` outside the pixels in ``Simulation.artifacts``.
 
     Parameters
     ----------
     nspec : int
-        The number of spectra; >= 0.
+        The number of spectra; 0 or more.
     npix : int, optional
-        The number of pixels; >= 1.
+        The number of pixels; 1 or more.
     rng : numpy.random.Generator
-        The source of all randomness. With the same libraries and thread settings,
-        the same state gives the same result bit for bit.
+        The source of all randomness. With the same libraries and thread settings, the
+        same state gives the same result bit for bit.
     artifacts : float, optional
         The fraction of spectra with an artifact; from 0 to 1.
     gaussian : bool, optional
@@ -108,8 +124,9 @@ def simulate(
 
     Notes
     -----
-    Cost: O(nspec npix) time and memory, plus the nline profiles of npix values each
-    and, with gaussian=False, 2 nspec nline npix flops for the line sum.
+    Cost: :math:`O(\mathrm{nspec}\,\mathrm{npix})` time and memory, plus the nline
+    profiles of npix values each. With ``gaussian=False``, the line sum adds
+    :math:`2\,\mathrm{nspec}\,\mathrm{nline}\,\mathrm{npix}` flops.
     """
     nspec = integer(nspec, "nspec", 0)
     npix = integer(npix, "npix", 1)

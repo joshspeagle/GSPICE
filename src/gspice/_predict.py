@@ -48,7 +48,7 @@ SHARED, SMALLEST = 16, 64
 
 @dataclass(frozen=True, eq=False)
 class Prediction:
-    """The prediction of each pixel of a set of spectra, from `pixelwise`.
+    r"""The prediction of each pixel of a set of spectra, from `pixelwise`.
 
     The arrays that `pixelwise` returns are read-only.
 
@@ -57,11 +57,11 @@ class Prediction:
     flux : ndarray, shape (nspec, npix)
         The prediction of each pixel (flux).
     var : ndarray, shape (nspec, npix)
-        The conditional variance of each pixel (flux^2), which includes the noise;
-        multiplied by f_s(N_s, N_k, 1) with inflate=True.
+        The conditional variance of each pixel (flux²), which includes the noise.
+        With ``inflate=True``, it is multiplied by :math:`f_s(N_s, N_k, 1)`.
     z : ndarray, shape (nspec, npix)
-        (f - flux) / sqrt(var) at good pixels, with f the input flux, and NaN at bad
-        pixels (unit-free).
+        :math:`(f - \mathrm{flux}) / \sqrt{\mathrm{var}}` at good pixels, with :math:`f`
+        the input flux, and NaN at bad pixels (unit-free).
     """
 
     flux: NDArray[np.float64]
@@ -77,11 +77,11 @@ class _Covariances(NamedTuple):
 
 @dataclass(frozen=True, eq=False)
 class Repaired:
-    """Spectra whose replaced pixels hold their conditional mean, from `infill`.
+    r"""Spectra whose replaced pixels hold their conditional mean, from `infill`.
 
-    `repair` returns one too. The arrays that `infill` and `repair` return are
-    read-only. With covariance=True, ``covariance(s)`` gives the conditional covariance
-    of the replaced pixels of spectrum s.
+    `repair` also returns one. The arrays that `infill` and `repair` return are
+    read-only. With ``covariance=True``, ``covariance(s)`` gives the conditional
+    covariance of the replaced pixels of spectrum ``s``.
 
     Attributes
     ----------
@@ -89,36 +89,38 @@ class Repaired:
         The conditional mean at the replaced pixels, and the input flux elsewhere
         (flux).
     var : ndarray, shape (nspec, npix)
-        The conditional variance at the replaced pixels, which includes the noise,
-        multiplied by f_s(N_s, N_k, 1) with inflate=True; 1/ivar at the other good
-        pixels; inf at the other bad pixels (flux^2).
+        The conditional variance at the replaced pixels, which includes the noise.
+        With ``inflate=True``, it is multiplied by :math:`f_s(N_s, N_k, 1)`. 1/ivar at
+        the other good pixels, and inf at the other bad pixels (flux²).
     replaced : ndarray of bool, shape (nspec, npix)
-        The replaced pixels M.
+        The replaced pixels :math:`M`.
     ignored : ndarray of bool, shape (nspec, npix)
-        The pixels that are neither conditioned on nor replaced, G minus M.
+        The pixels that are neither conditioned on nor replaced, :math:`G \setminus M`.
     chi2 : ndarray, shape (nspec,)
-        r_T^T C_TT^-1 r_T over the replaced pixels T that are good in the input, with
-        r_T their input values minus the conditional mean and C_TT their conditional
-        covariance, which inflate=True multiplies by f_s(N_s, N_k, 1); 0 where dof is
-        0 (unit-free).
+        :math:`r_T^\mathsf{T} C_{TT}^{-1} r_T` over the replaced pixels :math:`T` that
+        are good in the input (unit-free). :math:`r_T` is their input values minus the
+        conditional mean. :math:`C_{TT}` is their conditional covariance, which
+        ``inflate=True`` multiplies by :math:`f_s(N_s, N_k, 1)`. 0 where ``dof`` is 0.
     dof : ndarray of int64, shape (nspec,)
-        The number |T| of replaced pixels that are good in the input.
+        The number :math:`|T|` of replaced pixels that are good in the input.
     fs : ndarray, shape (nspec,)
-        f_s(N_s, N_k, dof) of `finite_sample_factor`, with N_s the n_train of the bin
-        of the spectrum and N_k = npix - |G| its conditioning pixels, divided by
-        f_s(N_s, N_k, 1) with inflate=True. NaN where dof is 0 or
-        N_s - N_k - dof - 2 <= 0. 1 for a model with a constant centre, weights, a
-        `LowRank` covariance or noise, for which no factor is derived (unit-free).
-        For the other models and replace and ignore masks that do not depend on the
-        data, chi2 / (dof fs) has the mean 1 for held-out Gaussian spectra, with or
-        without inflate.
+        :math:`f_s(N_s, N_k, \mathrm{dof})` of `finite_sample_factor` (unit-free),
+        divided by :math:`f_s(N_s, N_k, 1)` with ``inflate=True``. :math:`N_s` is the
+        ``n_train`` of the bin of the spectrum, and :math:`N_k = \mathrm{npix} - |G|`
+        the number of its conditioning pixels. NaN where ``dof`` is 0 or
+        :math:`N_s - N_k - \mathrm{dof} - 2 \le 0`. 1 for a model with a constant
+        centre, weights, a `LowRank` covariance or noise, for which no factor is
+        derived. Take the other models, and replace and ignore masks that do not depend
+        on the data. Then ``chi2 / (dof * fs)`` has the mean 1 for held-out Gaussian
+        spectra, with or without ``inflate``.
     draws : ndarray, shape (nspec, npix), or None
         A draw from the conditional distribution at the replaced pixels, with the
-        covariance of `covariance`, and the input flux elsewhere (flux); None if
-        the call ran without rng.
+        covariance of `covariance`, and the input flux elsewhere (flux). None if the
+        call ran without ``rng``.
     blocks : ndarray of bool, shape (nspec, nblock), or None
-        The blocks of model.blocks that the block pass of `repair` flagged in each
-        spectrum; None for a result of `infill` or of `repair` with blockwise=False.
+        The blocks of ``model.blocks`` that the block pass of `repair` flagged in each
+        spectrum. None for a result of `infill`, or of `repair` with
+        ``blockwise=False``.
     """
 
     flux: NDArray[np.float64]
@@ -133,27 +135,29 @@ class Repaired:
     _covariances: _Covariances | None = field(default=None, repr=False)
 
     def covariance(self, s: Integer) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
-        """Return the conditional covariance of the replaced pixels of spectrum s.
+        """Return the conditional covariance of the replaced pixels of spectrum ``s``.
 
         Parameters
         ----------
         s : int
-            The row of the spectrum; 0 <= s < nspec.
+            The row of the spectrum; from 0 to nspec − 1.
 
         Returns
         -------
         pixels : ndarray of int64, shape (m,)
-            The replaced pixels of spectrum s, in increasing order.
+            The replaced pixels of spectrum ``s``, in increasing order.
         cov : ndarray, shape (m, m)
-            Their conditional covariance (flux^2), multiplied by f_s(N_s, N_k, 1) with
-            inflate=True. Its diagonal is var[s, pixels].
+            Their conditional covariance (flux²), multiplied by
+            :math:`f_s(N_s, N_k, 1)` with ``inflate=True``. Its diagonal is
+            ``var[s, pixels]``.
 
         Raises
         ------
         TypeError
-            If s is not an integer.
+            If ``s`` is not an integer.
         ValueError
-            If the call ran without covariance=True, or s < 0 or s >= nspec.
+            If the call ran without ``covariance=True``, or ``s`` is outside 0 to nspec
+            − 1.
         """
         if self._covariances is None:
             raise ValueError(
@@ -182,45 +186,54 @@ def pixelwise(
     inflate: Boolean = False,
     progress: Progress | None = None,
 ) -> Prediction:
-    """Predict each pixel from all pixels farther than nguard from it (paper Alg. 3).
+    r"""Predict each pixel from all pixels farther than nguard from it (paper Alg. 3).
 
-    For pixel i of a spectrum in S/N bin b, with x its working vector (see `Model`) and
-    P the inverse of cov[b]::
+    Take pixel :math:`i` of a spectrum in S/N bin :math:`b`, with :math:`x` its working
+    vector (see `Model`) and :math:`P` the inverse of ``cov[b]``.
+    Let :math:`g = \{j : |j - i| \le \mathrm{nguard}\}`, and let :math:`O` hold the
+    pixels outside :math:`g`. Then
 
-        x_i | x_O ~ N(-(P_gg^-1 P_gO x_O)_i, (P_gg^-1)_ii),
-        g = {j : |j - i| <= nguard},
+    .. math::
 
-    where O holds the pixels outside g. Prediction.flux and Prediction.var are this
-    mean and variance in flux units, as `unscale` returns them. Bad pixels enter as
-    interpolated values; their z is NaN, and var omits the error of those values (next
-    to a 60-pixel bad run at correlation length 20, <z^2> measured 0.65 to 2.45,
-    depending on the noise level). A bad pixel farther than nguard from i takes its
-    value from the nearest good pixels, so that a good pixel within nguard of i, or i
-    itself next to a bad run longer than nguard, can enter the prediction of i.
-    nguard >= npix - 1 gives the prior. For a noise model, x is in flux units and P is
-    the inverse of the covariance C_s of the spectrum (see `Model`), which pixelwise
-    forms for each spectrum. Where 2 nguard + 1 <= npix, it computes the mean as
-    x_i - (P_gg^-1 (P x)_g)_i, equal in exact arithmetic, so the values in g cancel
-    only to rounding.
+        x_i \mid x_O \sim N\bigl(-(P_{gg}^{-1} P_{gO} x_O)_i,
+        \ (P_{gg}^{-1})_{ii}\bigr).
+
+    ``Prediction.flux`` and ``Prediction.var`` are this mean and variance in flux units,
+    as `unscale` returns them. Bad pixels enter as interpolated values. Their z is NaN,
+    and ``var`` omits the error of those values. Next to a run of 60 bad pixels at the
+    correlation length 20, the measured :math:`\langle z^2 \rangle` was 0.65 to 2.45,
+    depending on the noise level.
+
+    A bad pixel farther than ``nguard`` from :math:`i` takes its value from the nearest
+    good pixels. So a good pixel within ``nguard`` of :math:`i` can enter the prediction
+    of :math:`i`. Next to a run of bad pixels longer than ``nguard``, :math:`i` itself
+    can also enter it. ``nguard >= npix - 1`` gives the prior.
+
+    For a noise-aware model, :math:`x` is in flux units, and :math:`P` is the inverse of
+    the covariance :math:`C_s` of the spectrum (see `Model`). pixelwise forms :math:`P`
+    for each spectrum. Where :math:`2 \, \mathrm{nguard} + 1 \le \mathrm{npix}`, it
+    computes the mean as :math:`x_i - (P_{gg}^{-1} (P x)_g)_i`. This is equal in exact
+    arithmetic, but the values in :math:`g` cancel only to rounding.
 
     Parameters
     ----------
     model : Model
         The model.
     flux, ivar, mask : array_like, shape (nspec, npix)
-        As in `scale`, with the npix of model.
+        As in `scale`, with the npix of ``model``.
     nguard : int, optional
-        The half-width of the guard window g (pixels); >= 0.
+        The half-width of the guard window :math:`g` (pixels); 0 or more.
     inflate : bool, optional
-        If True, multiply var by f_s(N_s, N_k, 1) of `finite_sample_factor`, with N_s
-        the n_train of the bin of the spectrum and N_k = npix - |g| the conditioning
-        pixels of each pixel, more near the ends, where g is clipped. z^2 then has the
-        mean 1 for held-out Gaussian spectra. Needs a dense, mean-centred, unweighted
-        model without noise.
+        If True, multiply ``var`` by :math:`f_s(N_s, N_k, 1)` of `finite_sample_factor`.
+        :math:`N_s` is the ``n_train`` of the bin of the spectrum.
+        :math:`N_k = \mathrm{npix} - |g|` is the number of conditioning pixels of each
+        pixel, which is larger near the ends, where :math:`g` is clipped.
+        :math:`z^2` then has the mean 1 for held-out Gaussian spectra. It needs a dense,
+        mean-centred, unweighted scaled model.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra, of one
-        spectrum for a noise model, with the stage "pixelwise", the number of
-        spectra done and their total.
+        ``progress(stage, done, total)``, called after each chunk of spectra, with the
+        stage ``"pixelwise"``, the number of spectra done and their total. For a
+        noise-aware model, a chunk is one spectrum.
 
     Returns
     -------
@@ -230,31 +243,41 @@ def pixelwise(
     Raises
     ------
     TypeError
-        If model is not a Model, nguard is not an integer, inflate is not a bool,
-        progress is not callable or None, or flux, ivar or mask has a dtype that
-        `scale` does not allow.
+        If ``model`` is not a Model, ``nguard`` is not an integer, ``inflate`` is not a
+        bool, or ``progress`` is not callable or None. If ``flux``, ``ivar`` or ``mask``
+        has a dtype that `scale` does not allow.
     ValueError
-        If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
-        has another npix than model, nguard < 0, or a spectrum has no good pixel. If
-        inflate is True and model has a constant centre, weights, a `LowRank`
-        covariance or noise, or N_s - N_k - 3 <= 0 at a pixel of a bin with spectra,
-        where f_s(N_s, N_k, 1) is not defined; the message names N_s and N_k.
+        If ``flux``, ``ivar`` or ``mask`` has a shape or a value that `scale` does not
+        allow. If ``flux`` has another npix than ``model``, ``nguard`` is negative, or a
+        spectrum has no good pixel. If ``inflate`` is True and ``model`` has a constant
+        centre, weights, a `LowRank` covariance or noise. If ``inflate`` is True and
+        :math:`N_s - N_k - 3 \le 0` at a pixel of a bin with spectra, where
+        :math:`f_s(N_s, N_k, 1)` is not defined; the message names :math:`N_s` and
+        :math:`N_k`.
     numpy.linalg.LinAlgError
-        If nguard < npix - 1 and the covariance of a bin with spectra fails the check
-        of its precision matrix: it is not positive definite, or the reciprocal
-        condition number of the covariance scaled to unit diagonal is below 1e-13, or
-        kappa_W of a `LowRank` covariance is above 1e13. The message names the bin,
-        or for a noise model the row whose C_s fails.
+        If ``nguard < npix - 1`` and the covariance of a bin with spectra fails the
+        check of its precision matrix. The check fails if the matrix is not positive
+        definite, or if the reciprocal condition number of the covariance, scaled to
+        unit diagonal, is below :math:`10^{-13}`. It also fails if :math:`\kappa_W` of a
+        `LowRank` covariance is above :math:`10^{13}`. The message names the bin, or for
+        a noise-aware model the row whose :math:`C_s` fails.
 
     Notes
     -----
-    Cost: npix^3 flops for P at the first use of a bin, npix^2 K for a `LowRank` of
-    rank K, and about npix (w^3/3 + 2 npix w) flops for the guard weights at the first
-    use of a bin and after each change of nguard, w = min(2 nguard + 1, npix); then
-    2 npix^2 flops per spectrum. The model keeps P and the guard weights (see
-    `Model`). A noise model costs P per spectrum, and where 2 nguard + 1 <= npix
-    about npix (w^3/3 + 2 w^2) flops for its guard windows and 2 npix (npix + w) for
-    the mean instead of the guard weights; it keeps none.
+    Cost:
+
+    - :math:`\mathrm{npix}^3` flops for :math:`P` at the first use of a bin, or
+      :math:`\mathrm{npix}^2 K` for a `LowRank` of rank :math:`K`.
+    - About :math:`\mathrm{npix} (w^3/3 + 2 \, \mathrm{npix} \, w)` flops for the guard
+      weights, at the first use of a bin and after each change of ``nguard``, with
+      :math:`w = \min(2 \, \mathrm{nguard} + 1, \mathrm{npix})`.
+    - Then :math:`2 \, \mathrm{npix}^2` flops per spectrum.
+    - The model keeps :math:`P` and the guard weights (see `Model`).
+    - A noise-aware model costs :math:`P` per spectrum, and keeps none.
+      Where :math:`2 \, \mathrm{nguard} + 1 \le \mathrm{npix}`, it costs about
+      :math:`\mathrm{npix} (w^3/3 + 2 w^2)` flops for its guard windows and
+      :math:`2 \, \mathrm{npix} (\mathrm{npix} + w)` for the mean, instead of the guard
+      weights.
     """
     start = time.perf_counter()
     nguard = integer(nguard, "nguard", 0)
@@ -307,66 +330,78 @@ def infill(
     rng: np.random.Generator | None = None,
     progress: Progress | None = None,
 ) -> Repaired:
-    """Replace pixels by their Gaussian conditional mean given the trusted pixels.
+    r"""Replace pixels by their Gaussian conditional mean given the conditioning pixels.
 
-    For a spectrum in S/N bin b, with x its working vector (see `Model`) and P the
-    inverse of cov[b], let G = replace | ignore | bad, with the bad pixels
-    (mask != 0) | (ivar == 0), and let O hold the other pixels. Then::
+    Take a spectrum in S/N bin :math:`b`, with :math:`x` its working vector (see
+    `Model`) and :math:`P` the inverse of ``cov[b]``. Let :math:`G` be the pixels of
+    ``replace | ignore | bad``, with the bad pixels ``(mask != 0) | (ivar == 0)``.
+    The other pixels :math:`O` are the conditioning pixels. Then
 
-        x_G | x_O ~ N(-P_GG^-1 P_GO x_O, P_GG^-1).
+    .. math::
 
-    Repaired.flux is this mean at the replaced pixels M = replace, in flux units as
-    `unscale` returns it, and the input flux elsewhere. The pixels of G outside M keep
-    their input value and are reported as ignored; a pixel in both replace and ignore
-    is replaced. Values in G never enter the mean, so an outlier there cannot change
-    it. chi2 compares the input values at T = M & ~bad, the replaced pixels that are
-    good in the input, with their conditional distribution. Where G covers all pixels,
-    the result is the prior N(0, cov[b]), which infill computes from cov[b] without P.
-    For a noise model, x is in flux units, and C_s of the spectrum (see `Model`)
-    takes the place of cov[b], so that each spectrum has its own P and pattern.
-    With rng, Repaired.draws holds the draw mu_M + F z_M of x_M, in flux units like the
-    mean, with mu_M the mean at M, F F^T = (P_GG^-1)_MM and z_M the normals of the
-    spectrum at M. Spectra of one S/N bin with equal G, M and T form a pattern, whose
-    spectra in one chunk of max(1, 2**24 // npix) rows share one factorization of
-    P_GG. To infill with another model the pixels that a result r replaced and
-    ignored, pass replace=r.replaced and ignore=r.ignored.
+        x_G \mid x_O \sim N(-P_{GG}^{-1} P_{GO} x_O, \ P_{GG}^{-1}).
+
+    ``Repaired.flux`` is this mean at the replaced pixels :math:`M` = ``replace``, in
+    flux units as `unscale` returns it, and the input flux elsewhere. The pixels of
+    :math:`G` outside :math:`M` keep their input value, and the result reports them as
+    ignored. A pixel in both ``replace`` and ``ignore`` is replaced. Values in :math:`G`
+    never enter the mean, so an outlier there cannot change it. ``chi2`` compares the
+    input values at :math:`T = M \setminus \mathrm{bad}`, the replaced pixels that are
+    good in the input, with their conditional distribution.
+
+    Where :math:`G` covers all pixels, the result is the prior
+    :math:`N(0, \mathrm{cov}[b])`, which infill computes from ``cov[b]`` without
+    :math:`P`. For a noise-aware model, :math:`x` is in flux units, and the :math:`C_s`
+    of the spectrum (see `Model`) replaces ``cov[b]``. Each spectrum then has its own
+    :math:`P` and pattern.
+
+    With ``rng``, ``Repaired.draws`` holds the draw :math:`\mu_M + F z_M` of
+    :math:`x_M`, in flux units like the mean. Here :math:`\mu_M` is the mean at
+    :math:`M`, :math:`F F^\mathsf{T} = (P_{GG}^{-1})_{MM}`, and :math:`z_M` holds the
+    normals of the spectrum at :math:`M`.
+
+    Spectra of one S/N bin with equal :math:`G`, :math:`M` and :math:`T` form a pattern.
+    The spectra of a pattern in one chunk of ``max(1, 2**24 // npix)`` rows share one
+    factorization of :math:`P_{GG}`. To infill with another model the pixels that a
+    result ``r`` replaced and ignored, pass ``replace=r.replaced`` and
+    ``ignore=r.ignored``.
 
     Parameters
     ----------
     model : Model
         The model.
     flux, ivar, mask : array_like, shape (nspec, npix)
-        As in `scale`, with the npix of model.
+        As in `scale`, with the npix of ``model``.
     replace : array_like of bool, shape (nspec, npix) or (npix,), optional
-        The pixels to replace, M. An (npix,) mask applies to every spectrum, for
-        example to predict a block. None: the bad pixels.
+        The pixels to replace, :math:`M`. An (npix,) mask applies to every spectrum, for
+        example to predict a range of pixels. None: the bad pixels.
     ignore : array_like of bool, shape (nspec, npix) or (npix,), optional
         Pixels that are neither conditioned on nor replaced, unless they are in
-        replace, such as a guard around a block. None: no pixels.
+        ``replace``, such as a guard around a range of pixels. None: no pixels.
     inflate : bool, optional
-        If True, multiply var and the covariance at the replaced pixels by
-        f_s(N_s, N_k, 1) of `finite_sample_factor`, with N_s the n_train of the bin of
-        the spectrum and N_k = npix - |G| its conditioning pixels, divide chi2 by it,
-        and multiply the deviation F z_M of each draw from the mean by its square
-        root. For held-out Gaussian spectra, the squared residual of every fixed
-        linear combination of the replaced pixels, divided by its variance from the
-        covariance, then has the mean 1. Needs a dense, mean-centred, unweighted
-        model without noise.
+        If True, multiply ``var`` and the covariance at the replaced pixels by
+        :math:`f_s(N_s, N_k, 1)` of `finite_sample_factor`. :math:`N_s` is the
+        ``n_train`` of the bin of the spectrum, and :math:`N_k = \mathrm{npix} - |G|`
+        the number of its conditioning pixels. Also divide ``chi2`` by the factor, and
+        multiply the deviation :math:`F z_M` of each draw from the mean by its square
+        root. Then, for held-out Gaussian spectra, take any fixed linear combination of
+        the replaced pixels. Its squared residual, divided by its variance from the
+        covariance, has the mean 1. It needs a dense, mean-centred, unweighted scaled
+        model.
     covariance : bool, optional
         If True, keep the conditional covariance of each pattern for
         `Repaired.covariance`.
     rng : numpy.random.Generator, optional
-        If given, the source of Repaired.draws: infill draws
-        rng.standard_normal((n, npix)) for each chunk of n rows, in row order, and
-        nothing else, and each spectrum uses its row of these normals. Calls on
-        consecutive slices with one generator give the draws of one call, to
-        rounding. Draws widen the errors of measurements made on them;
-        var and covariance give the uncertainty of the replaced pixels. None: no
-        draws.
+        If given, the source of ``Repaired.draws``. infill draws
+        ``rng.standard_normal((n, npix))`` for each chunk of :math:`n` rows, in row
+        order, and nothing else. Each spectrum uses its row of these normals. Calls on
+        consecutive slices with one generator give the draws of one call, to rounding.
+        Draws widen the errors of measurements made on them; ``var`` and ``covariance``
+        give the uncertainty of the replaced pixels. None: no draws.
     progress : callable, optional
-        progress(stage, done, total), called after each chunk of spectra, of one
-        spectrum for a noise model, with the stage "infill", the number of
-        spectra done and their total.
+        ``progress(stage, done, total)``, called after each chunk of spectra, with the
+        stage ``"infill"``, the number of spectra done and their total. For a
+        noise-aware model, a chunk is one spectrum.
 
     Returns
     -------
@@ -376,60 +411,93 @@ def infill(
     Raises
     ------
     TypeError
-        If model is not a Model, inflate or covariance is not a bool, rng is neither
-        None nor a numpy.random.Generator, progress is not callable or None, flux, ivar
-        or mask has a dtype that `scale` does not allow, or replace or ignore is not of
-        a bool dtype.
+        If ``model`` is not a Model, or ``inflate`` or ``covariance`` is not a bool.
+        If ``rng`` is neither None nor a numpy.random.Generator, or ``progress`` is not
+        callable or None. If ``flux``, ``ivar`` or ``mask`` has a dtype that `scale`
+        does not allow, or ``replace`` or ``ignore`` is not of a bool dtype.
     ValueError
-        If flux, ivar or mask has a shape or a value that `scale` does not allow, flux
-        has another npix than model, a spectrum has no good pixel, or replace or
-        ignore has another shape than (nspec, npix) or (npix,). If inflate is True and
-        model has a constant centre, weights, a `LowRank` covariance or noise, or
-        N_s - N_k - 3 <= 0 for a spectrum with a pixel to replace, where
-        f_s(N_s, N_k, 1) is not defined; the message names N_s and N_k.
+        If ``flux``, ``ivar`` or ``mask`` has a shape or a value that `scale` does not
+        allow. If ``flux`` has another npix than ``model``, or a spectrum has no good
+        pixel. If ``replace`` or ``ignore`` has another shape than (nspec, npix) or
+        (npix,). If ``inflate`` is True and ``model`` has a constant centre, weights, a
+        `LowRank` covariance or noise. If ``inflate`` is True and
+        :math:`N_s - N_k - 3 \le 0` for a spectrum with a pixel to replace, where
+        :math:`f_s(N_s, N_k, 1)` is not defined; the message names :math:`N_s` and
+        :math:`N_k`.
     numpy.linalg.LinAlgError
         If the covariance of a bin fails the check of its precision matrix, as in
-        `pixelwise`, where a spectrum of the bin has a pixel to replace and G does not
-        cover all its pixels; if P_GG of a pattern is not positive definite; or, for a
-        pattern whose G covers all pixels, if cov[b] at T fails that check, or if rng
-        is given and cov[b] at M is not positive definite. The message names the bin,
-        and for a pattern its first spectrum. For a noise model, C_s replaces cov[b],
-        and a C_s that fails the check of its precision matrix raises with its row in
-        the message. A `LowRank` cov[0] forms no precision matrix: its C_s raises
-        where kappa_K = 1 + lambda_max(Lambda^1/2 V^T D_s^-1 V Lambda^1/2) > 1e13, with
-        V, Lambda = diag(values) and D_s = diag(diag + nu_s) of C_s, or where the
-        factor of I + Lambda^1/2 V_O^T D_s,O^-1 V_O Lambda^1/2, or of its conditional
-        covariance at M (at T without rng), fails, with its row in the message.
-        kappa_K accepts every C_s that ``woodbury`` accepts, and some with kappa_W up to
-        npix kappa_K, which `pixelwise` and `repair` still reject.
+        `pixelwise`, where a spectrum of the bin has a pixel to replace and :math:`G`
+        does not cover all its pixels. If :math:`P_{GG}` of a pattern is not positive
+        definite. For a pattern whose :math:`G` covers all pixels, if ``cov[b]`` at
+        :math:`T` fails that check, or if ``rng`` is given and ``cov[b]`` at :math:`M`
+        is not positive definite. The message names the bin, and for a pattern its first
+        spectrum.
+
+        For a noise-aware model, :math:`C_s` replaces ``cov[b]``. A :math:`C_s` that
+        fails the check of its precision matrix raises with its row in the message.
+        A `LowRank` ``cov[0]`` forms no precision matrix. Its :math:`C_s` raises where
+        :math:`\kappa_K > 10^{13}`, with
+
+        .. math::
+
+            \kappa_K = 1 + \lambda_{\max}(\Lambda^{1/2} V^\mathsf{T} D_s^{-1} V
+            \Lambda^{1/2}),
+
+        :math:`\Lambda = \mathrm{diag}(\mathrm{values})`, and
+        :math:`D_s = \mathrm{diag}(\mathrm{diag} + \nu_s)` of :math:`C_s`. It also
+        raises where the factor of
+        :math:`I + \Lambda^{1/2} V_O^\mathsf{T} D_{s,O}^{-1} V_O \Lambda^{1/2}` fails,
+        or the factor of its conditional covariance at :math:`M` (at :math:`T` without
+        ``rng``). The message names its row. :math:`\kappa_K` accepts every :math:`C_s`
+        that the :math:`\kappa_W` check of `LowRank` accepts. It also accepts some with
+        :math:`\kappa_W` up to :math:`\mathrm{npix} \, \kappa_K`, which `pixelwise` and
+        `repair` still reject.
 
     Notes
     -----
-    Cost: npix^3 flops for P at the first use of a bin, npix^2 K for a `LowRank` of rank
-    K; then per pattern and chunk |G|^3/3 + |M|^3/3 flops, and |M|^3/3 more with
-    covariance=True, and per spectrum 2 |G| (npix + |G|) flops, or 2 |G| npix where G is
-    one run. Without rng, n >= 2 patterns of a chunk with one bin and one M, and G short
-    of all pixels, share one factor where each has |E| + |D| <= |B|/16, with B the
-    pixels in the G of all of them, E the pixels of G outside B, and D the pixels of M
-    in the T of another of them but not in their own, where |B| >= 64 (1 + 2/n), and
-    where the shared factor costs fewer flops than their own factors, or than the mean
-    from C_OO. They cost |B|^3/3 + |M|^3/3 flops, and |M|^3/3 more with covariance=True,
-    each of these patterns |B|^2 |E| + |M|^2 |E| + |U| (|D| + |E|)^2 flops, with U the
-    pixels in the T of any of them, and |M|^2 |E| more with covariance=True, and each
-    spectrum 2 |G| npix + |B|^2 + |M|^2 + 2 |U|^2 + 4 (|U| + |E|) (|D| + |E|) flops. An
-    (npix,) mask on spectra with a few bad pixels of their own is such a case. The model
-    keeps P (see `Model`). With covariance=True, the result keeps |M|^2 x 8 bytes per
-    pattern and chunk. With rng, each spectrum costs npix normals and |M|^2 flops more.
-    Where G covers all pixels, it costs 2 |M|^2 flops more instead, and each pattern and
-    chunk |M|^3/3 flops for the factor of cov[b] at M, which a `LowRank` forms at |M|^2
-    K flops. A noise model forms C_s for each spectrum with a pixel to replace; every
-    spectrum is its own pattern. Where G is also short of all pixels, a dense cov[0]
-    forms no P_s: per spectrum, npix^3/3 flops for the Cholesky factor of C_s and about
-    (npix - g0)^2 |G| + npix |G|^2 for P_GG and P_{G,:} x0 from it, with g0 the first
-    pixel of G, before the pattern costs above. A `LowRank` cov[0] of rank K forms no
-    P_s: per spectrum, npix K^2 flops for its K x K system, |M| K^2 for the mean and
-    var, and |T|^2 K + |T|^3/3 for chi2, or with rng |M|^2 K + |M|^3/3 for chi2 and the
-    draws.
+    Cost:
+
+    - :math:`\mathrm{npix}^3` flops for :math:`P` at the first use of a bin, or
+      :math:`\mathrm{npix}^2 K` for a `LowRank` of rank :math:`K`.
+    - Per pattern and chunk, :math:`|G|^3/3 + |M|^3/3` flops, and :math:`|M|^3/3` more
+      with ``covariance=True``.
+    - Per spectrum, :math:`2 |G| (\mathrm{npix} + |G|)` flops, or
+      :math:`2 |G| \, \mathrm{npix}` where :math:`G` is one run.
+    - Without ``rng``, some patterns share one factor: :math:`n \ge 2` patterns of a
+      chunk with one bin and one :math:`M`, and :math:`G` short of all pixels.
+      Let :math:`B` be the pixels in the :math:`G` of all of them. For each pattern, let
+      :math:`E` be the pixels of its :math:`G` outside :math:`B`. Let :math:`D` be the
+      pixels of :math:`M` in the :math:`T` of another of them but not in its own.
+      The patterns share the factor under three conditions. Each has
+      :math:`|E| + |D| \le |B|/16`, and :math:`|B| \ge 64 (1 + 2/n)`. The shared factor
+      costs fewer flops than their own factors, or than the mean from :math:`C_{OO}`.
+    - These patterns together cost :math:`|B|^3/3 + |M|^3/3` flops, and :math:`|M|^3/3`
+      more with ``covariance=True``. Let :math:`U` be the pixels in the :math:`T` of any
+      of them. Each of these patterns costs
+      :math:`|B|^2 |E| + |M|^2 |E| + |U| (|D| + |E|)^2` flops, and :math:`|M|^2 |E|`
+      more with ``covariance=True``. Each of their spectra costs
+      :math:`2|G|\,\mathrm{npix} + |B|^2 + |M|^2 + 2|U|^2 + 4(|U| + |E|)(|D| + |E|)`
+      flops. An (npix,) mask on spectra with a few bad pixels of their own is such a
+      case.
+    - The model keeps :math:`P` (see `Model`).
+    - With ``covariance=True``, the result keeps :math:`|M|^2 \times 8` bytes per
+      pattern and chunk.
+    - With ``rng``, each spectrum costs npix normals and :math:`|M|^2` flops more.
+      Where :math:`G` covers all pixels, it costs :math:`2 |M|^2` flops more instead.
+      Each pattern and chunk then also costs :math:`|M|^3/3` flops for the factor of
+      ``cov[b]`` at :math:`M`, which a `LowRank` forms at :math:`|M|^2 K` flops.
+    - A noise-aware model forms :math:`C_s` for each spectrum with a pixel to replace,
+      and every spectrum is its own pattern. Where :math:`G` is also short of all
+      pixels, a dense ``cov[0]`` forms no :math:`P_s`. Per spectrum, it costs
+      :math:`\mathrm{npix}^3/3` flops for the Cholesky factor of :math:`C_s`, before the
+      pattern costs above. From this factor, :math:`P_{GG}` and :math:`P_{G,:} x_0` cost
+      about :math:`(\mathrm{npix} - g_0)^2 |G| + \mathrm{npix} |G|^2` flops, with
+      :math:`g_0` the first pixel of :math:`G`.
+    - A `LowRank` ``cov[0]`` of rank :math:`K` forms no :math:`P_s`. Per spectrum, it
+      costs :math:`\mathrm{npix} K^2` flops for its :math:`K \times K` system, and
+      :math:`|M| K^2` for the mean and ``var``. ``chi2`` costs
+      :math:`|T|^2 K + |T|^3/3`. With ``rng``, ``chi2`` and the draws cost
+      :math:`|M|^2 K + |M|^3/3` instead.
     """
     start = time.perf_counter()
     inflate = boolean(inflate, "inflate")

@@ -43,8 +43,8 @@ FIELDS = {"parameters", "other parameters", "attributes", "returns", "raises"}
 
 
 def plain(text: str) -> str:
-    # Markdown syntax that is plain text in reST; the escaped | also keeps the |G| of the
-    # docstrings from opening a table cell.
+    # Markdown syntax that is plain text in reST; the escaped | also keeps a | in prose,
+    # such as in the legacy docstrings, from opening a table cell.
     return re.sub(r"([\\*_|<$~])", r"\\\1", text)
 
 
@@ -123,14 +123,16 @@ class Reference:
 
 
 def text(line: str, reference: Reference, name: str) -> str:
-    # A single backtick span is a cross-reference, and a double one is code. A span
-    # that wraps onto the next line would pass unchecked.
+    # A single backtick span is a cross-reference, a double one is code, and a :math:
+    # role is inline maths. A span that wraps onto the next line would pass unchecked.
     if re.sub(r"``[^`]+``", "", line).count("`") % 2:
         raise SystemExit(f"{name}: a backtick span wraps onto the next line: {line!r}")
     out = []
-    for i, part in enumerate(re.split(r"(``[^`]+``|`[^`]+`)", line)):
+    for i, part in enumerate(re.split(r"(:math:`[^`]+`|``[^`]+``|`[^`]+`)", line)):
         if i % 2 == 0:
             out.append(plain(part))
+        elif part.startswith(":math:"):
+            out.append(f"${part.removeprefix(':math:')[1:-1]}$")
         elif part.startswith("``"):
             out.append(part)
         else:
@@ -139,8 +141,9 @@ def text(line: str, reference: Reference, name: str) -> str:
 
 
 def prose(value: str, reference: Reference, name: str) -> list[str]:
-    # A line that ends in "::" opens a reST literal block: the lines after it that are
-    # blank or indented deeper than it.
+    # A line ".. math::" opens a block of display maths, and another line that ends in
+    # "::" a reST literal block: the lines after it that are blank or indented deeper
+    # than it.
     out: list[str] = []
     lines = value.splitlines()
     i = 0
@@ -150,7 +153,9 @@ def prose(value: str, reference: Reference, name: str) -> list[str]:
         if not line.endswith("::"):
             out.append(text(line, reference, name))
             continue
-        out.append(text(line[:-1], reference, name))
+        math = line.strip() == ".. math::"
+        if not math:
+            out.append(text(line[:-1], reference, name))
         indent = len(line) - len(line.lstrip())
         block = []
         while i < len(lines) and (
@@ -160,11 +165,12 @@ def prose(value: str, reference: Reference, name: str) -> list[str]:
             i += 1
         if not "".join(block).strip():
             raise SystemExit(f"{name}: no literal block after {line!r}")
+        # The block keeps the indent of its opening line, as in a list item.
+        opening, closing = ("$$", "$$") if math else ("```text", "```")
+        body = textwrap.dedent("\n".join(block)).strip("\n").split("\n")
         out += [
             "",
-            "```text",
-            *textwrap.dedent("\n".join(block)).strip("\n").split("\n"),
-            "```",
+            *((line[:indent] + x) if x else x for x in [opening, *body, closing]),
         ]
         if i < len(lines):
             out.append("")
