@@ -1,0 +1,174 @@
+---
+title: Detection
+description: How repair finds artifacts with z-scores and a block scan, and replaces them.
+---
+
+import BlockScanFigure from '../../../components/BlockScanFigure.astro'
+import PixelSets from '../../../components/PixelSets.astro'
+import ThresholdsFigure from '../../../components/ThresholdsFigure.astro'
+import blocks from '../../../data/concepts-blockscan.json'
+import shifted from '../../../data/concepts-shifted.json'
+
+export const percent = (v) => `${Math.round(100 * v)}%`
+
+How does [`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) decide which pixels are
+[artifacts](/GSPICE/concepts/glossary/#term-artifact)? It uses two detectors: the
+pixelwise [z-score](/GSPICE/concepts/glossary/#term-z-score) of
+[Prediction](/GSPICE/concepts/prediction/) for narrow artifacts, and a
+[block scan](/GSPICE/concepts/glossary/#term-block-scan) for broad ones. It extends the
+pixelwise repair of the paper's Secs. 2.6 and 3.3 [@finkbeiner2025gspice].
+
+## Why a block scan
+
+The pixelwise prediction of a pixel comes from the pixels beyond its guard window. Inside
+a broad artifact, many of those pixels belong to the artifact too. The prediction then
+follows the artifact, and the z-scores stay small:
+
+<BlockScanFigure />
+
+The block scan compares a whole [block](/GSPICE/concepts/glossary/#term-block) of pixels
+with its prediction from the pixels beyond a guard window around the block. A weak
+deviation that repeats over many pixels then adds up to a large statistic.
+
+## The block threshold
+
+A [block](/GSPICE/concepts/glossary/#term-block) holds `width` consecutive pixels. The
+blocks start at 0, `stride`, 2 `stride` and so on up to npix − `width`. One more block
+ends at the last pixel if the last start is smaller than npix − `width`. The defaults
+are `width=150`, `stride=75` and `nguard=20`. At npix {blocks.npix} they give the starts
+{blocks.starts.join(', ')}, and at npix 2400 they give 31 blocks, at 0, 75, ..., 2250.
+
+<PixelSets kind="block" />
+
+For block $A$, $G$ holds the pixels within `nguard` of $A$, clipped at the ends, and $O$
+holds the other pixels. The statistic is
+
+$$
+\chi^2_A = \frac{1}{|A|}\, r_A^\mathsf{T} C_{AA}^{-1} r_A , \qquad
+r_A = x_A - \hat x_A , \qquad C_{AA} = \big(P_{GG}^{-1}\big)_{AA} ,
+$$
+
+with $\hat x_A$ and $C_{AA}$ the conditional mean and covariance of $x_A$ given $x_O$. The
+guard pixels are [marginalized](/GSPICE/concepts/glossary/#term-marginalize).
+
+[`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks) sets a
+[threshold](/GSPICE/concepts/glossary/#term-threshold) for each block and S/N bin: the
+percentile `percentile` (99.9 by default) of $\chi^2_A$ over the $N_c$ spectra of the
+bin. It replaces their bad pixels by the conditional mean first, and flags no pixel by
+z-score. A percentile of the data needs no assumption about the distribution of
+$\chi^2_A$, and it includes the [held-out](/GSPICE/concepts/held-out/) widening.
+[Training, threshold and held-out spectra](/GSPICE/start/spectra/#training-threshold-and-held-out-spectra)
+says which spectra to use.
+
+For a percentile $p$, each bin needs $N_c (100 - p) \ge 100$ spectra: 1000 at 99.9. A
+block of a clean spectrum then exceeds its threshold with a probability of at most
+$(N_c (1 - p/100) + p/100) / (N_c + 1)$. At $N_c = 1000$ and $p = 99.9$, that is
+$(1 + 0.999) / 1001 = 0.20\%$.
+
+## Two z thresholds, and dilation
+
+A z-score near the threshold is uncertain: the pixel may hold a weak artifact, or a rare
+value of a clean pixel. `repair` therefore uses two thresholds of $|z|$
+[@finkbeiner2025gspice]:
+
+- A pixel above $\tau_r$ = `nsigma_replace` (10 by default) is a
+  [replaced pixel](/GSPICE/concepts/glossary/#term-replaced-pixel).
+- A pixel above $\tau_i$ = `nsigma_ignore` (5 by default), and not replaced, is an
+  [ignored pixel](/GSPICE/concepts/glossary/#term-ignored-pixel). It keeps its value, and
+  no prediction uses it.
+
+An artifact also changes its neighbours by less than the threshold, so `repair` widens
+each set by [dilation](/GSPICE/concepts/glossary/#term-dilation):
+$\mathrm{dil}(F)$ is the set $F$ plus every pixel within `dilate` pixels (1 by default)
+of a pixel of $F$ along the spectrum.
+
+<ThresholdsFigure />
+
+## The procedure
+
+`repair` runs five steps on each spectrum. Each pixel that it detects becomes a
+[flagged pixel](/GSPICE/concepts/glossary/#term-flagged-pixel), replaced or ignored. A
+"conditional mean" is that of [`gspice.infill()`](/GSPICE/reference/api/#gspice.infill),
+and $x$ is the [working vector](/GSPICE/concepts/glossary/#term-working-vector).
+
+1. **Pixelwise pass.** The first pass flags the strong narrow artifacts. Compute $z_1$,
+   the pixelwise z-scores of $x$ at every pixel, interpolated bad pixels included. Then
+   $M_1 = \mathrm{dil}(|z_1| > \tau_r) \cup \mathrm{bad}$ and
+   $I_1 = \mathrm{dil}(|z_1| > \tau_i) \setminus M_1$.
+2. **Block pass**, if `blockwise=True`. This pass flags the broad artifacts, one block
+   at a time. Replace $x$ at $M_1 \cup I_1$ by its conditional mean, which gives
+   $x_{\mathrm{blk}}$. Then repeat:
+   1. For each block $A$ not yet flagged, compute the ratio of
+      $\chi^2_A(x_{\mathrm{blk}})$ to its threshold in the S/N bin of the spectrum.
+   2. If the largest ratio exceeds 1, flag that block, and add its pixels to
+      $M_{\mathrm{blk}}$.
+   3. Recompute $x_{\mathrm{blk}}$, with $x$ at $M_1 \cup I_1 \cup M_{\mathrm{blk}}$
+      replaced by its conditional mean.
+
+   The pass stops when no ratio exceeds 1. A block is flagged at most once, so there are
+   at most as many rounds as blocks. The scan runs on $x_{\mathrm{blk}}$, so a narrow
+   artifact that step 1 found does not raise the $\chi^2_A$ of its block.
+3. **Second pixelwise pass.** This pass tests the flags of step 1 again, against
+   predictions that the flagged pixels no longer corrupt. Replace $x$ at
+   $M_1 \cup M_{\mathrm{blk}}$ by its conditional mean given the pixels outside
+   $M_1 \cup M_{\mathrm{blk}} \cup I_1$, which gives $x_1$. Compute $z_2$, the z-scores
+   of $x$ against the pixelwise prediction from $x_1$. Then
+   $M = \mathrm{dil}\big((|z_2| > \tau_r) \cup ((|z_1| > \tau_r) \cap (|z_2| > \tau_i))\big)
+   \cup M_{\mathrm{blk}} \cup \mathrm{bad}$ and
+   $I = \mathrm{dil}(|z_2| > \tau_i) \setminus M$.
+
+   A strong artifact moves the prediction of each pixel whose guard window does not hold
+   it. Step 1 can flag pixels of a clean region. A pixel above $\tau_r$ in step 1
+   therefore stays in the core of $M$ only while its $|z_2|$ exceeds $\tau_i$. The lower
+   threshold keeps the pixels of a smooth extended artifact: its ignored pixels keep
+   their values in $x_1$ and pull the prediction toward it.
+4. **Exclusion**, if `runlength` is not None. A long run of flagged pixels suggests an
+   artifact that is wider than its flags. Take each run of at least `runlength`
+   consecutive pixels of the [counting set](/GSPICE/concepts/glossary/#term-counting-set)
+   $R$. Every pixel within `halfwidth` of the run joins $I$, except the pixels of $M$. $R$ is
+   $M \cup I$ with `count_on="all"`. With `count_on="flagged"`, $R$ holds the pixels
+   outside the bad set with $|z_2| > \tau_i$, and $M_{\mathrm{blk}}$. A spectrum keeps
+   its earlier $I$ if fewer than $\lfloor \mathtt{minfrac} \cdot \mathrm{npix} \rfloor$
+   pixels outside $M$ and $I$ would remain.
+5. **Final infill.** The last step replaces $M$ from the pixels outside $M$ and $I$.
+   The result is that of `infill` with `replace=M` and `ignore=I`, and the options
+   `inflate`, `covariance` and `rng`.
+
+## Long shifted segments
+
+A [shifted segment](/GSPICE/concepts/glossary/#term-shifted-segment) longer than a block
+defeats the block scan. Each block is predicted from the pixels beyond its guard window.
+Inside the segment, these pixels are shifted too, and the prediction follows them. The
+z-scores of steps 1 and 3 come from the same kind of prediction, so they miss the inside
+of the segment as well.
+
+A simulation shows the size of this limit. Its setup: {shifted.ntrain} training and
+{shifted.nclean} clean spectra of `gspice.simulate` at npix {shifted.npix}, and
+{shifted.nshifted} test spectra with one shifted segment each, of {shifted.shortest} to
+{shifted.longest} pixels. `repair` ran with its defaults.
+
+| Measure | Result |
+|---|---|
+| Spectra with a flagged block | {percent(shifted.flagged)} |
+| Spectra flagged by a χ² test of the known segment | {percent(shifted.known)} |
+| Pixels of the segments replaced or ignored | {percent(shifted.all)} |
+| Pixels more than 5σ from their noise-free flux, replaced or ignored | {percent(shifted.strong)} |
+
+The χ² test of the known segment uses the 99.9th percentile of the same statistic on
+the clean spectra. It needs the segment to be known, so it shows what a χ² test could
+find. The block scan flags few of these spectra. The pixelwise passes find nearly all
+the strong pixels, at the edges of the shifted lines. Still, {percent(1 - shifted.all)} of
+the pixels of the segments stay in the output. [What it misses](/GSPICE/guides/repair/#what-it-misses)
+shows the same on spectra of 400 pixels.
+
+## The result
+
+`repair` returns a [`gspice.Repaired`](/GSPICE/reference/api/#gspice.Repaired), as
+`infill` does. `replaced` is $M$, which always holds the bad pixels, and `ignored` is
+$I$. `blocks` holds the flagged blocks of each spectrum, or None with `blockwise=False`.
+The pixels outside $M$ keep their input values, bit for bit.
+
+$M$ and $I$ depend on the data, so the finite-sample factor does not hold for
+`Repaired.chi2` of `repair` ([Conditions](/GSPICE/concepts/held-out/#conditions)). To
+replace the same pixels with another model, call `infill` with the masks of the result
+as `replace` and `ignore`.

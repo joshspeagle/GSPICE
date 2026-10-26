@@ -5,7 +5,7 @@ title: Fitting a model
 import ThemeImage from '../../../components/ThemeImage.astro'
 
 This tutorial fits a model to a simulated survey, and compares the outliers that the
-fit clips with the artifacts that the simulation injected. [Fitting](/GSPICE/background/fitting/)
+fit clips with the artifacts that the simulation injected. [Fitting](/GSPICE/concepts/fitting/)
 explains the method.
 
 ## The survey
@@ -39,7 +39,7 @@ test = slice(int(0.8 * n), n)
 
 The tutorials use the 1500 pixels from 3802 to 5369 Å. A dense model needs many more
 training spectra than pixels: the error of its covariance widens the residuals of
-held-out spectra by the finite-sample factor $f_s$ of [Prediction](/GSPICE/background/prediction/).
+held-out spectra by the finite-sample factor $f_s$ of [Held-out uncertainty](/GSPICE/concepts/held-out/).
 For a pixelwise prediction from 6000 training spectra, $f_s$ is 6.8 on all 3741
 pixels and 1.7 on these 1500: `gspice.finite_sample_factor(6000, npix - 41)`, with
 npix − 41 the pixels outside a guard window of 20 pixels on each side.
@@ -92,5 +92,5 @@ covariance describes it as a feature of the spectra.
 ## Other models
 
 `fit` also fits models with a constant centre, S/N bins, a low rank or the noise of
-each spectrum. [Fitting](/GSPICE/background/fitting/) compares them. [Choose a model](/GSPICE/guides/models/) uses each of
+each spectrum. [Fitting](/GSPICE/concepts/fitting/) compares them. [Choose a model](/GSPICE/guides/models/) uses each of
 them, and [Check your model](/GSPICE/guides/checks/) checks a model.

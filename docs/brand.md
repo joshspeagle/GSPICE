@@ -17,7 +17,7 @@ Dark mode is designed first, on a cool blue-black ground. Light mode keeps the n
 | `--gs-rule-2` | #3A4868 | #A9B4C4 | solid edges, inactive cells |
 | `--gs-ink` | #E8ECF2 | #111827 | text |
 | `--gs-ink-2` | #A7B1C2 | #4A5568 | secondary text |
-| `--gs-ink-3` | #7F8AA0 | #5F6B7F | tertiary text, scatter points |
+| `--gs-ink-3` | #7F8AA0 | #5F6B7F | tertiary text, interpolated flux, P_GO cells |
 | `--gs-accent` | #F0592A | #F0592A | predicted cells and marks; never text |
 | `--gs-accent-text` | #FF8A5C | #C2410C | links and orange text |
 | `--gs-pred` | #FF7A45 | #E2481A | prediction line |
@@ -137,4 +137,24 @@ The theme of #142 builds the header, the sidebar, "On this page", the page title
 - All text in a figure is HTML at 12 px or more, placed over the plot, so it does not shrink on a phone.
 - Pixel boundaries inside the masked block are hidden when a pixel is narrower than 4 px.
 - A draw is a thin orange step line, drawn under the prediction.
-- The reference curve of a histogram, class `ref`, is a thin ink-2 step line.
+- The reference curve of a histogram or a plot, class `ref`, and a threshold line, class `edge`, are thin ink-2 lines.
+
+The figures of the Concepts pages add these marks:
+
+| Mark | Class | Form |
+|---|---|---|
+| Interpolated flux | `interp` | An ink-3 step line, 1.5 px |
+| Guard window | `guard` | A flat `--gs-rule` fill, without an edge |
+| Artifact | `span-mark` | A 4 px ink-2 bar along the top of the plot area |
+| Pixels a clipping pass flags | `newflag` | A flat `--gs-rule-2` fill |
+| Scatter point | `pt held`, `pt in` | An 8 px square, solid ink, or hollow with a 1.5 px ink-2 outline |
+
+A strip of pixel cells, class `gs-cells`, gives each cell one of these states:
+
+| State | Class | Fill |
+|---|---|---|
+| Predicted or replaced | `replaced` | `--gs-accent` |
+| Guard window | `guard` | `--gs-rule` |
+| Ignored, or a value not read | `ignored`, `unread` | `--gs-mask-fill` with a 1 px `--gs-mask-edge` outline |
+| Bad | `bad` | `--gs-mask-edge` |
+| Conditioned on | `kept` | `--gs-strip-lo` |

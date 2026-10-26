@@ -19,7 +19,7 @@ Here nspec is the number of spectra and npix the number of pixels.
 | `ivar` | The inverse variance of the noise, 1/σ², where σ is its standard deviation | flux⁻² | yes |
 | `mask` | Nonzero at each bad pixel | none | no |
 
-A [bad pixel](/GSPICE/background/glossary/#term-bad-pixel) has a nonzero `mask` or
+A [bad pixel](/GSPICE/concepts/glossary/#term-bad-pixel) has a nonzero `mask` or
 `ivar == 0`. GSPICE never reads `flux` or `ivar` there, so `flux` may hold NaN at a bad
 pixel. `ivar` may hold NaN only where `mask` is nonzero. The arrays may be float32.
 
@@ -40,7 +40,7 @@ it.
 GSPICE does not need continuum-normalized flux. Before it fits, it multiplies each
 spectrum by $a_s$, the square root of the mean `ivar` of its good pixels. Two spectra that differ
 only by a constant factor of flux, at the same signal-to-noise ratio (S/N), then become
-equal. A [noise-aware model](/GSPICE/background/glossary/#term-noise-aware-model) is the
+equal. A [noise-aware model](/GSPICE/concepts/glossary/#term-noise-aware-model) is the
 exception: it works in flux units.
 
 The spectra of [`gspice.simulate()`](/GSPICE/reference/api/#gspice.simulate) and of the
@@ -82,12 +82,12 @@ Split your spectra into three separate sets:
 
 - **Training spectra** go to [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit). They may
   contain artifacts: `fit` removes the pixels far from their prediction in several
-  passes. An [artifact](/GSPICE/background/glossary/#term-artifact) is a corruption of the data, such as a cosmic ray.
+  passes. An [artifact](/GSPICE/concepts/glossary/#term-artifact) is a corruption of the data, such as a cosmic ray.
 - **Threshold spectra** go to [`gspice.fit_blocks()`](/GSPICE/reference/api/#gspice.fit_blocks).
-  `fit_blocks` sets the thresholds of the [block scan](/GSPICE/background/glossary/#term-block-scan)
+  `fit_blocks` sets the thresholds of the [block scan](/GSPICE/concepts/glossary/#term-block-scan)
   of `repair`, for artifacts that cover many pixels.
 - **Held-out spectra** are the spectra that you repair or check. A
-  [held-out spectrum](/GSPICE/background/glossary/#term-held-out-spectrum) is a spectrum
+  [held-out spectrum](/GSPICE/concepts/glossary/#term-held-out-spectrum) is a spectrum
   that `fit` did not use.
 
 The threshold spectra must be clean spectra, without artifacts, that `fit` did not use.

@@ -64,44 +64,93 @@ export function steps(values: ArrayLike<number>, from: number, to: number, y: (v
   return d
 }
 
+// The scale of an axis, from low to high.
+export interface Scale {
+  low: number
+  high: number
+}
+
+// y(v) in the units of the SVG: 100 at low, at the bottom of the plot area, and 0 at high.
+export function yScale(scale: Scale) {
+  return (v: number) => (100 * (scale.high - v)) / (scale.high - scale.low)
+}
+
+// x(v) as a percentage of the width of the plot area: 0 at low and 100 at high.
+export function xScale(scale: Scale) {
+  return (v: number) => (100 * (v - scale.low)) / (scale.high - scale.low)
+}
+
+// The SVG of a plot area width units wide from x0, stretched to its box.
+export function plotSvg(body: string, width: number, x0 = 0) {
+  return `<svg viewBox="${x0} 0 ${width} 100" preserveAspectRatio="none" aria-hidden="true">${body}</svg>`
+}
+
+// The horizontal grid lines at the ticks, across a plot area width units wide.
+export function gridPath(ticks: readonly number[], y: (v: number) => number, width: number) {
+  return ticks.length ? `<path class="grid" d="${ticks.map((v) => `M0,${y(v).toFixed(2)}H${width}`).join('')}"/>` : ''
+}
+
+// v with digits decimals and a minus sign, U+2212, for negative values.
+export function signed(v: number, digits: number) {
+  return v.toFixed(digits).replace('-', '−')
+}
+
+// The tick labels of axes, with the pixel ticks along npix pixels.
+export function axisLabels(axes: Axes, npix: number, y: (v: number) => number) {
+  return tickLabels(
+    axes.yticks.map((v) => [y(v), signed(v, axes.digits)]),
+    axes.xticks.map((i) => [(100 * i) / npix, String(i)]),
+  )
+}
+
+// The ±k sd cell of a prediction mu at x, width units wide.
+export function bandCell(x: number, mu: number, sd: number, k: number, y: (v: number) => number, width = 1) {
+  const top = y(mu + k * sd)
+  return `<rect class="b${k}" x="${x}" y="${top.toFixed(2)}" width="${width}" height="${(y(mu - k * sd) - top).toFixed(2)}"/>`
+}
+
+// The masked block of pixels start to start + width - 1 in a plot of npix pixels: its
+// fill, which goes under the cells, its edges, which go over them, and its two grips, in
+// HTML.
+export function blockMarkup(start: number, width: number, npix: number) {
+  const end = start + width
+  const left = (i: number) => ((100 * i) / npix).toFixed(3)
+  return {
+    fill: `<rect class="blk" x="${start}" y="0" width="${width}" height="100"/>`,
+    edge: `<path class="blk-edge" d="M${start},0V100M${end},0V100"/>`,
+    grips: `<span class="grip" style="left:${left(start)}%"></span><span class="grip" style="left:${left(end)}%"></span>`,
+  }
+}
+
+// A path of class cls, or nothing for an empty d.
+export function line(cls: string, d: string) {
+  return d ? `<path class="${cls}" d="${d}"/>` : ''
+}
+
 export function plotMarkup(spectrum: Spectrum, axes: Axes): string {
   const { flux, truth, start, width, mu, sd, draws = [] } = spectrum
   const npix = flux.length
   const end = start + width
-  // 100 units from the top of the plot area to its bottom.
-  const y = (v: number) => (100 * (axes.high - v)) / (axes.high - axes.low)
+  const y = yScale(axes)
   const cells: string[] = []
-  const cell = (i: number, k: number, sd: ArrayLike<number>) => {
-    const top = y(mu[i] + k * sd[i])
-    return `<rect class="b${k}" x="${i}" y="${top.toFixed(2)}" width="1" height="${(y(mu[i] - k * sd[i]) - top).toFixed(2)}"/>`
-  }
-  if (sd) for (let i = start; i < end; i++) cells.push(cell(i, 2, sd), cell(i, 1, sd))
+  if (sd) for (let i = start; i < end; i++) cells.push(bandCell(i, mu[i], sd[i], 2, y), bandCell(i, mu[i], sd[i], 1, y))
   const gaps: string[] = []
   for (let i = start + 1; i < end; i++) gaps.push(`M${i},0V100`)
-  const grid = axes.yticks.map((v) => `M0,${y(v).toFixed(2)}H${npix}`).join('')
-  const line = (cls: string, d: string) => (d ? `<path class="${cls}" d="${d}"/>` : '')
-  const svg =
-    `<svg viewBox="0 0 ${npix} 100" preserveAspectRatio="none" aria-hidden="true">` +
-    line('grid', grid) +
-    `<rect class="blk" x="${start}" y="0" width="${width}" height="100"/>` +
-    cells.join('') +
-    line('cellgap', gaps.join('')) +
-    `<path class="blk-edge" d="M${start},0V100M${end},0V100"/>` +
-    line('obs', steps(flux, 0, start, y)) +
-    line('obs', steps(flux, end, npix, y)) +
-    (truth ? line('truth', steps(truth, 0, npix, y)) : '') +
-    draws.map((draw) => line('draw', steps(draw, start, end, y))).join('') +
-    line('pred', steps(mu, start, end, y)) +
-    '</svg>'
-  const left = (i: number) => (100 * i) / npix
-  return (
-    svg +
-    `<span class="grip" style="left:${left(start).toFixed(3)}%"></span><span class="grip" style="left:${left(end).toFixed(3)}%"></span>` +
-    tickLabels(
-      axes.yticks.map((v) => [y(v), v.toFixed(axes.digits)]),
-      axes.xticks.map((i) => [left(i), String(i)]),
-    )
+  const block = blockMarkup(start, width, npix)
+  const svg = plotSvg(
+    gridPath(axes.yticks, y, npix) +
+      block.fill +
+      cells.join('') +
+      line('cellgap', gaps.join('')) +
+      block.edge +
+      line('obs', steps(flux, 0, start, y)) +
+      line('obs', steps(flux, end, npix, y)) +
+      (truth ? line('truth', steps(truth, 0, npix, y)) : '') +
+      draws.map((draw) => line('draw', steps(draw, start, end, y))).join('') +
+      line('pred', steps(mu, start, end, y)),
+    npix,
   )
+  return svg + block.grips + axisLabels(axes, npix, y)
 }
 
 type Tick = readonly [position: number, text: string]
@@ -174,8 +223,9 @@ export function quickstartPlot(data: QuickstartData) {
 export const quickstartLegend = ['obs', 'blk', 'pred', 'b1', 'b2', 'truth'] as const
 
 // The legend of a plot, as cell swatches, with the items in this order. An item is a
-// key of labels, or a class and its HTML text.
+// key of labels, or a class and its HTML text. The text is one span, so that a subscript
+// in it stays against its letter in the flex row of the item.
 export function legend(items: readonly (keyof typeof labels | readonly [cls: string, text: string])[]): string {
-  const item = (cls: string, text: string) => `<li><i class="${cls}"></i>${text}</li>`
+  const item = (cls: string, text: string) => `<li><i class="${cls}"></i><span>${text}</span></li>`
   return `<ul class="gs-legend">${items.map((i) => (typeof i === 'string' ? item(i, labels[i]) : item(...i))).join('')}</ul>`
 }

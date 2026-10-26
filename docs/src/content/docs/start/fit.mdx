@@ -24,7 +24,7 @@ So the spectra must agree pixel by pixel:
   pixels in every spectrum.
 - **Many training spectra.** [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit)
   estimates a covariance between every pair of pixels from the
-  [training spectra](/GSPICE/background/glossary/#term-training-spectra).
+  [training spectra](/GSPICE/concepts/glossary/#term-training-spectra).
 
 The default model needs at least npix + 1 training spectra, for npix pixels. By default,
 `fit` uses a training spectrum only if it has at most 64 bad pixels. It raises a
@@ -51,14 +51,14 @@ for n_train in (300, 1000, 3000, 10000):
 
 Each factor is the mean squared error of a prediction divided by its variance from
 GSPICE. It holds for one pixel of a
-[held-out spectrum](/GSPICE/background/glossary/#term-held-out-spectrum), predicted from
+[held-out spectrum](/GSPICE/concepts/glossary/#term-held-out-spectrum), predicted from
 the other 199, if the spectra are Gaussian. With 300 training spectra, the squared
 errors are 9.21 times the variance on average. With 10000, they are 1.04 times the
-variance. [The finite-sample factor](/GSPICE/background/prediction/#the-finite-sample-factor)
+variance. [The finite-sample factor](/GSPICE/concepts/held-out/#the-finite-sample-factor)
 explains this factor, and the option `inflate=True` that corrects for it.
 
 If you have fewer spectra than pixels, fit a
-[low-rank model](/GSPICE/background/glossary/#term-low-rank-model) with `fit(..., rank=K)`.
+[low-rank model](/GSPICE/concepts/glossary/#term-low-rank-model) with `fit(..., rank=K)`.
 It needs only $K + 2$ training spectra. [Choose a model](/GSPICE/guides/models/#low-rank)
 shows one.
 
@@ -75,7 +75,7 @@ shows one.
 
 - **Long shifted segments.** A segment with a shifted wavelength scale can cover hundreds
   of pixels. Inside it, the pixels that predict each pixel are shifted too, so `repair`
-  misses much of it. [Long defects](/GSPICE/background/repair/#long-defects) measures
+  misses much of it. [Long shifted segments](/GSPICE/concepts/detection/#long-shifted-segments) measures
   this limit.
 - **Artifacts at the same pixels in every training spectrum.** `fit` learns them as part
   of the spectra, so `repair` does not find them.

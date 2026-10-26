@@ -1,0 +1,118 @@
+---
+title: Prediction
+description: How pixelwise and infill choose the pixels that predict, and how χ² compares a prediction with the data.
+---
+
+import PixelSets from '../../../components/PixelSets.astro'
+
+How do [`gspice.pixelwise()`](/GSPICE/reference/api/#gspice.pixelwise) and
+[`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) choose which pixels to use?
+Both use the [conditional distribution](/GSPICE/concepts/glossary/#term-conditional-distribution)
+of [The model](/GSPICE/concepts/model/), and both return flux units. They differ in the
+set $G$ of pixels that they do not condition on.
+
+## Pixelwise prediction
+
+To find [outliers](/GSPICE/concepts/glossary/#term-outlier), you need a prediction of
+every pixel that does not use the pixel itself. `pixelwise` predicts each pixel $i$ from
+the pixels beyond its [guard window](/GSPICE/concepts/glossary/#term-guard-window)
+$g = \{i' : |i' - i| \le \mathrm{nguard}\}$, clipped at the ends of the spectrum:
+
+<PixelSets kind="pixelwise" />
+
+The [conditioning pixels](/GSPICE/concepts/glossary/#term-conditioning-pixels) $O$ are all
+the pixels outside $g$. With $P$ the
+[precision matrix](/GSPICE/concepts/glossary/#term-precision-matrix) of
+[Numerics](/GSPICE/concepts/numerics/#the-precision-form),
+
+$$
+x_i \mid x_O \sim \mathcal{N}\!\left(-\big(P_{gg}^{-1} P_{gO}\, x_O\big)_i,\;
+\big(P_{gg}^{-1}\big)_{ii}\right) .
+$$
+
+The other pixels of $g$ are [marginalized](/GSPICE/concepts/glossary/#term-marginalize).
+
+### The guard window
+
+The guard window keeps the neighbours of pixel $i$ out of its prediction, for two
+reasons. First, neighbouring pixels are correlated through the line-spread function and
+the upstream processing. The prediction should come from the correlations of the
+spectra instead [@finkbeiner2025gspice]. Second, an artifact a few pixels wide also
+changes the neighbours of $i$, and a prediction from them would follow the artifact.
+
+The default `nguard=20` is the paper's choice, set by the size of the smoothing kernel
+of its continuum normalization. `nguard >= npix - 1` gives the
+[prior](/GSPICE/concepts/glossary/#term-prior). [The guard window](/GSPICE/guides/outliers/#the-guard-window)
+measures the effect of `nguard` on simulated artifacts.
+
+### Bad pixels and the z-score
+
+`pixelwise` conditions on the [bad pixels](/GSPICE/concepts/glossary/#term-bad-pixel)
+through their interpolated values. Their z-score is NaN, and the variance omits the
+error of the interpolated values. Next to a long run of bad pixels, the z-scores of the
+good pixels are therefore not calibrated. An interpolated bad pixel beyond the guard
+window can also carry the flux of a good pixel inside it into the prediction.
+
+The [z-score](/GSPICE/concepts/glossary/#term-z-score) of pixel $i$ of spectrum $s$ is
+
+$$
+z_{si} = \frac{f_{si} - \hat f_{si}}{\sqrt{\mathrm{var}_{si}}} ,
+$$
+
+with $\hat f_{si}$ and $\mathrm{var}_{si}$ the conditional mean and variance in flux
+units. [`gspice.Prediction`](/GSPICE/reference/api/#gspice.Prediction) holds the three
+arrays.
+
+## Infill
+
+To replace pixels, you predict them from all the pixels that you trust. `infill`
+divides the pixels of each spectrum into four kinds:
+
+<PixelSets kind="infill" />
+
+- the [replaced pixels](/GSPICE/concepts/glossary/#term-replaced-pixel) $M$, given by
+  `replace`, the bad pixels by default;
+- the [ignored pixels](/GSPICE/concepts/glossary/#term-ignored-pixel), given by
+  `ignore`, which are neither conditioned on nor replaced, such as a guard window around
+  a range of pixels;
+- the bad pixels, which are never conditioned on;
+- the conditioning pixels $O$, all the other pixels.
+
+$G$ is the union of `replace`, `ignore` and the bad pixels:
+
+$$
+x_G \mid x_O \sim \mathcal{N}\!\left(-P_{GG}^{-1} P_{GO}\, x_O,\; P_{GG}^{-1}\right) .
+$$
+
+A pixel in both `replace` and `ignore` is replaced. The pixels of $G$ outside $M$ keep
+their input values and are marginalized. Unlike `pixelwise`, `infill` never conditions
+on a bad pixel, and no value in $G$ enters the mean, so an outlier in $G$ cannot change
+it.
+
+A [draw](/GSPICE/concepts/glossary/#term-draw) is a random sample of $x_M$ from this
+distribution. [Fill known bad pixels](/GSPICE/guides/infill/) shows the mean, the
+variance, the covariance and the draws, and when to use each.
+[What you get back](/GSPICE/start/results/#repaired) lists the fields of the result.
+
+## χ² and its degrees of freedom
+
+A prediction of several pixels needs one number that says whether the observed values
+agree with it. `Repaired.chi2` compares the input values with their prediction at $T$,
+the replaced pixels that are good in the input:
+
+$$
+\chi^2 = r_T^\mathsf{T} C_{TT}^{-1} r_T ,
+$$
+
+with $r_T$ the input values minus the conditional mean, and $C_{TT}$ their conditional
+covariance. A bad pixel has no input value to compare, so it is in $M$ but not in $T$.
+`Repaired.dof`, the number of degrees of freedom, is $|T|$.
+
+The [χ²](/GSPICE/concepts/glossary/#term-chi2) uses the full conditional covariance, so
+the correlated errors of neighbouring pixels do not count twice. Suppose that the mean and
+the covariance were exact, and that the pixel sets did not depend on the data. Then
+$\chi^2$ would follow the χ² distribution with $|T|$ degrees of freedom, whose mean is
+$|T|$. A fitted model predicts a
+[held-out spectrum](/GSPICE/concepts/glossary/#term-held-out-spectrum) less well:
+the mean of $\chi^2 / |T|$ is then the finite-sample factor of
+[Held-out uncertainty](/GSPICE/concepts/held-out/), which `Repaired.fs` holds.

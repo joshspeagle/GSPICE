@@ -1,0 +1,125 @@
+---
+// V-15: the clipping passes of fit on one training spectrum with a bad column: its
+// in-sample |z| in each pass, the threshold of the pass, the pixels that earlier passes
+// masked and the pixels that the pass flags. docs/scripts/concepts.py writes the data.
+import data from '../data/concepts-clipping.json'
+import { axesFor, gridPath, legend, line, plotSvg, signed, steps, tickLabels, xScale, yScale } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { npix, start, width, passes } = data
+// The figure shows a window of up to 100 pixels around the bad column, through the
+// viewBox of each plot.
+const shown = Math.min(npix, 100)
+const lo = Math.max(0, Math.min(npix - shown, start - 10))
+const left = xScale({ low: lo, high: lo + shown })
+const xticks = [0, 1, 2, 3, 4].map((k) => lo + Math.round((k * shown) / 4))
+const ranges = (pixels: number[]) => {
+  // Runs of consecutive pixels, as [first, last].
+  const runs: [number, number][] = []
+  for (const i of pixels) {
+    const run = runs.at(-1)
+    if (run && run[1] === i - 1) run[1] = i
+    else runs.push([i, i])
+  }
+  return runs
+}
+const named = (pixels: number[]) =>
+  pixels.length
+    ? ranges(pixels)
+        .map(([a, b]) => (a === b ? `${a}` : `${a} to ${b}`))
+        .join(', ')
+    : 'none'
+
+// The spectrum, with the bad column marked above it.
+const axes = axesFor(data.flux.slice(lo, lo + shown), shown)
+const yf = yScale(axes)
+const spectrum =
+  plotSvg(gridPath(axes.yticks, yf, npix) + line('obs', steps(data.flux, 0, npix, yf)), shown, lo) +
+  `<span class="span-mark" style="left:${left(start)}%;width:${left(start + width) - left(start)}%"></span>` +
+  tickLabels(
+    axes.yticks.map((v) => [yf(v), signed(v, axes.digits)]),
+    xticks.map((i) => [left(i), String(i)]),
+  )
+
+// |z| on a log scale from 0.1 to 100; a pixel that an earlier pass masked has no z.
+const low = -1
+const high = 2
+const logz = yScale({ low, high })
+const yz = (v: number) => logz(Math.log10(Math.max(v, 10 ** low)))
+function zpanel(z: (number | null)[], threshold: number, before: number[], flagged: number[]) {
+  let d = ''
+  for (let i = 0; i < npix; i++) {
+    const v = z[i]
+    if (v === null) continue
+    d += `${i === 0 || z[i - 1] === null ? `M${i},` : 'V'}${yz(v).toFixed(2)}H${i + 1}`
+  }
+  const cells = (cls: string, pixels: number[]) =>
+    ranges(pixels)
+      .map(([a, b]) => `<rect class="${cls}" x="${a}" y="0" width="${b - a + 1}" height="100"/>`)
+      .join('')
+  return (
+    plotSvg(
+      gridPath([1, 10], yz, npix) +
+        cells('blk', before) +
+        cells('newflag', flagged) +
+        line('edge', `M0,${yz(threshold).toFixed(2)}H${npix}`) +
+        line('obs', d),
+      shown,
+      lo,
+    ) +
+    tickLabels(
+      [-1, 0, 1, 2].map((k) => [yz(10 ** k), String(10 ** k)]),
+      xticks.map((i) => [left(i), String(i)]),
+    )
+  )
+}
+---
+
+<figure class="gs-fig not-content">
+  <p class="title">
+    Pixels {lo} to {lo + shown - 1} of training spectrum {data.spectrum}, with a bad column at pixels {start} to {start + width - 1}
+  </p>
+  <div class="gs-plot" data-npix={npix} role="img" aria-label={`Training spectrum ${data.spectrum}`} set:html={spectrum} />
+  {
+    passes.map(({ threshold, z, before, flagged }, k) => (
+      <div class="pass">
+        <p class="title">
+          Pass {k + 1}: |z| &gt; {threshold} flags {flagged.length ? `pixels ${named(flagged)}` : 'no pixel'}
+        </p>
+        <div
+          class="gs-plot"
+          data-npix={npix}
+          role="img"
+          aria-label={`Pass ${k + 1}, threshold ${threshold}: pixels masked before, ${named(before)}; flagged, ${named(flagged)}`}
+          set:html={zpanel(z, threshold, before, flagged)}
+        />
+      </div>
+    ))
+  }
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        ['obs', 'flux, then in-sample |z|'],
+        ['edge', 'threshold of the pass'],
+        ['blk', 'masked by earlier passes'],
+        ['newflag', 'flagged by the pass'],
+      ])}
+    />
+    <p>
+      fit with its default passes on {data.ntrain} simulated spectra of {npix} pixels, {100 * data.artifacts}% of them with an artifact. Each pass fits a covariance without the masked pixels and computes |z| of every pixel, with nguard {data.nguard}. The bad column widens the covariance of pass 1, so only its strongest pixels pass 20. Each refit is narrower, so the next pass finds more of the column. A flag also covers the pixel on each side.
+    </p>
+  </figcaption>
+</figure>
+
+<style>
+  .pass {
+    margin-top: 0.5rem;
+  }
+  .gs-plot {
+    --gs-plot-height: 6rem;
+  }
+  /* The threshold of each pass is thicker than the grid. */
+  .gs-plot :global(.edge) {
+    stroke-width: 1.5;
+  }
+</style>

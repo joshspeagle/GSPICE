@@ -11,7 +11,7 @@ Which pixels disagree with the rest of their spectrum? This guide finds them wit
 ## Set up
 
 The model is fitted to 3000 simulated spectra of 200 pixels. Half of the 1000 test
-spectra have one [artifact](/GSPICE/background/glossary/#term-artifact) each: a cosmic
+spectra have one [artifact](/GSPICE/concepts/glossary/#term-artifact) each: a cosmic
 ray, a bad column or a shifted segment.
 
 ```python
@@ -29,7 +29,7 @@ model, _ = gspice.fit(train.flux, train.ivar)
 
 The training spectra here have no artifacts. In real training spectra, `fit` removes the
 pixels far from their prediction in several passes
-([Outlier clipping](/GSPICE/background/fitting/#outlier-clipping)).
+([Outlier clipping](/GSPICE/concepts/fitting/#outlier-clipping)).
 
 ## Predict each pixel
 
@@ -46,9 +46,9 @@ print(f"{flagged.mean():.0%} of the spectra have a pixel with |z| > 5")
 50% of the spectra have a pixel with |z| > 5
 ```
 
-`prediction.z` holds the [z-score](/GSPICE/background/glossary/#term-z-score) of each
+`prediction.z` holds the [z-score](/GSPICE/concepts/glossary/#term-z-score) of each
 pixel: its flux minus its prediction, divided by the square root of the variance. An
-[outlier](/GSPICE/background/glossary/#term-outlier) is a pixel with a large $|z|$. The
+[outlier](/GSPICE/concepts/glossary/#term-outlier) is a pixel with a large $|z|$. The
 variance `prediction.var` includes the noise of the pixel. The next sections compare the
 flagged pixels with the artifacts.
 
@@ -80,7 +80,7 @@ for threshold in (3, 4, 5, 6, 8):
 8: 2.0e-04 of clean pixels (1.2e-15 if Gaussian), 77% of cosmic-ray pixels
 ```
 
-A [clean spectrum](/GSPICE/background/glossary/#term-clean-spectrum) is a spectrum
+A [clean spectrum](/GSPICE/concepts/glossary/#term-clean-spectrum) is a spectrum
 without an artifact. Its pixels exceed each threshold more often than a Gaussian would.
 So set the threshold from clean spectra, not from a table of the Gaussian distribution.
 
@@ -91,7 +91,7 @@ So set the threshold from clean spectra, not from a table of the Gaussian distri
 An artifact also changes the prediction of the pixels near it, if they are predicted
 from it. `pixelwise` therefore predicts each pixel only from the pixels farther than
 `nguard` from it. The pixels within `nguard` form its
-[guard window](/GSPICE/background/glossary/#term-guard-window).
+[guard window](/GSPICE/concepts/glossary/#term-guard-window).
 
 ```python
 column = test.artifacts & (length > 3) & (length <= 20)
@@ -115,14 +115,14 @@ A bad column covers 5 to 20 pixels. Its neighbours are the good pixels within 5 
 of it. With a small guard window, the bad column pulls the prediction of its neighbours,
 and many of them are flagged. The default, `nguard=20`, suits artifacts up to about 20
 pixels long. A wider window leaves fewer pixels to predict from.
-[Pixelwise prediction](/GSPICE/background/prediction/#pixelwise-prediction) gives the
+[Pixelwise prediction](/GSPICE/concepts/prediction/#pixelwise-prediction) gives the
 equations.
 
 ## Held-out spectra and inflate
 
 The option `inflate=True` corrects the variances for the
-[finite-sample factor](/GSPICE/background/glossary/#term-finite-sample-factor), whose
-square root widens the z-scores of [held-out spectra](/GSPICE/background/glossary/#term-held-out-spectrum):
+[finite-sample factor](/GSPICE/concepts/glossary/#term-finite-sample-factor), whose
+square root widens the z-scores of [held-out spectra](/GSPICE/concepts/glossary/#term-held-out-spectrum):
 
 ```python
 for inflate in (False, True):
@@ -139,7 +139,7 @@ inflate=True: standard deviation of z 1.005
 
 With `inflate=True`, the z-scores of the clean spectra have a standard deviation near 1.
 Use it when you set a threshold on held-out spectra. It needs a dense, mean-centred,
-unweighted model without noise, as [The finite-sample factor](/GSPICE/background/prediction/#the-finite-sample-factor)
+unweighted model without noise, as [The finite-sample factor](/GSPICE/concepts/held-out/#the-finite-sample-factor)
 explains.
 
 To find artifacts and replace them in one call, use

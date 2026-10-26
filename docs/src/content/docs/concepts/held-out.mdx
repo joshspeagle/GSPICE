@@ -1,0 +1,94 @@
+---
+title: Held-out uncertainty
+description: Why the z-scores of spectra that a model was not fitted to are wider than 1, and how inflate and Repaired.fs correct for it.
+---
+
+import HeldOutFigure from '../../../components/HeldOutFigure.astro'
+
+Why are z-scores wider on held-out spectra, and what does `inflate` do? In one sentence:
+a model fitted to $N_s$ spectra has errors in its mean and covariance, and a new
+spectrum sees all of them.
+
+## Held-out and in-sample spectra
+
+A [held-out spectrum](/GSPICE/concepts/glossary/#term-held-out-spectrum) is a spectrum
+that the model was not fitted to, such as a spectrum that you repair. Its residuals
+include the error of the estimated mean and covariance. A training spectrum is
+different: it helped to fit the model, so the model leans toward it, and its
+[in-sample](/GSPICE/concepts/glossary/#term-in-sample) residuals are smaller. The figure
+shows both:
+
+<HeldOutFigure />
+
+With few training spectra per pixel, the z-scores of held-out spectra are much wider
+than 1. A threshold of 5 on such z-scores then flags far more pixels than a Gaussian
+distribution would. With many training spectra per pixel, the effect becomes small.
+
+## The finite-sample factor
+
+The [finite-sample factor](/GSPICE/concepts/glossary/#term-finite-sample-factor) $f_s$
+states the widening exactly. A model predicts $N_*$ pixels of a held-out spectrum from
+$N_k$ [conditioning pixels](/GSPICE/concepts/glossary/#term-conditioning-pixels). Let
+$Z^2$ be the [χ²](/GSPICE/concepts/glossary/#term-chi2) of those pixels, with their full
+conditional covariance. Then $E[Z^2] / N_* = f_s$, with
+
+$$
+f_s = \left(1 + \frac{1}{N_s}\right) \frac{N_s - 2}{N_s - N_k - 2} \cdot
+\frac{N_s - 1}{N_s - N_k - N_* - 2} .
+$$
+
+The factor grows as $N_s$ approaches $N_k$. It is not defined where
+$N_s - N_k - N_* - 2 \le 0$. For one pixel of a pixelwise prediction, $N_* = 1$ and
+$N_k$ is the number of pixels outside the guard window. The curve of the figure is the
+square root of the mean of $f_s$ over the pixels, and it matches the points.
+[What GSPICE needs](/GSPICE/start/fit/#what-gspice-needs) gives $f_s$ for a spectrum of
+200 pixels, and [Fitting a model](/GSPICE/tutorials/fitting/#the-survey) for the survey
+of the tutorials. [`gspice.finite_sample_factor()`](/GSPICE/reference/api/#gspice.finite_sample_factor)
+computes $f_s$.
+
+## Conditions
+
+$f_s$ is exact under five conditions:
+
+1. The model is dense and mean-centred: no low rank and no constant centre.
+2. The model is unweighted and not noise-aware.
+3. The working vectors are independent draws from one Gaussian distribution.
+4. The pixel sets do not depend on the data.
+5. $N_k$ counts the conditioning pixels only. Guard and ignored pixels do not count.
+
+Condition 3 fails for scaled spectra with a spread of S/N, which are a mixture of
+Gaussian distributions. Condition 4 fails for
+[`gspice.repair()`](/GSPICE/reference/api/#gspice.repair), whose replaced and ignored
+pixels depend on the z-scores. A model of another kind has no derived factor and
+reports 1, although its held-out residuals are wider too.
+[Calibration](/GSPICE/concepts/diagnostics/#calibration) measures the widening on your
+own held-out spectra.
+
+## inflate
+
+`inflate=True` corrects the predicted uncertainty for this widening. `pixelwise`,
+`infill` and `repair` then multiply each conditional variance and covariance by
+$f_s(N_s, N_k, 1)$. Here $N_s$ counts the training spectra of the S/N bin of the
+spectrum, and $N_k$ the conditioning pixels of the prediction. The deviation of each
+[draw](/GSPICE/concepts/glossary/#term-draw) from the conditional mean grows by the
+square root of that factor.
+
+The factor of one pixel, $N_* = 1$, calibrates every fixed linear combination of the
+predicted pixels, such as the flux in a band. The joint χ² of $N_*$ pixels needs
+$f_s(N_s, N_k, N_*)$ instead, which is larger. `inflate=True` raises a `ValueError` for
+a model without a derived factor, and where $f_s(N_s, N_k, 1)$ is not defined.
+[Find outliers](/GSPICE/guides/outliers/#held-out-spectra-and-inflate) and
+[Fill known bad pixels](/GSPICE/guides/infill/#the-variance-of-each-pixel) show the
+effect on simulated spectra.
+
+## Repaired.fs
+
+`Repaired.fs` holds the factor that keeps `chi2 / (dof * fs)` at the mean 1 for
+held-out Gaussian spectra, with or without `inflate`:
+
+- without `inflate`, $f_s(N_s, N_k, \mathrm{dof})$;
+- with `inflate=True`, $f_s(N_s, N_k, \mathrm{dof}) / f_s(N_s, N_k, 1)$, because
+  `chi2` already uses the inflated covariance.
+
+It is NaN where $f_s(N_s, N_k, \mathrm{dof})$ is not defined, and 1 for a model without
+a derived factor.

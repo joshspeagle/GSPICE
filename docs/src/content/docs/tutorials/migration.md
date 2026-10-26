@@ -37,7 +37,7 @@ import from `gspice.legacy`, for example
 
 `covar_iter_mask` returns a covariance and a float mask. [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit) returns a
 [`gspice.Model`](/GSPICE/reference/api/#gspice.Model) and a bool mask. With `cumulative=False`, it uses the 2022 rule
-for the masks of its clipping passes ([Fitting](/GSPICE/background/fitting/)), and its
+for the masks of its clipping passes ([Fitting](/GSPICE/concepts/fitting/)), and its
 docstring states the conditions under which the two agree:
 
 ```python

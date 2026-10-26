@@ -10,8 +10,8 @@ questions of the chart, then read the section of the model it gives.
 
 <ModelChart />
 
-[Fitting](/GSPICE/background/fitting/) gives the maths of each model, and its table
-[Choosing a model](/GSPICE/background/fitting/#choosing-a-model) lists what each one
+[Fitting](/GSPICE/concepts/fitting/) gives the maths of each model, and its table
+[What each model needs](/GSPICE/concepts/fitting/#what-each-model-needs) lists what each one
 needs.
 
 ## Set up
@@ -39,12 +39,12 @@ def rms_error(model, flux, ivar, truth):
 
 Each comparison below is one run on one training set, without error bars. The constant
 centre, low-rank and noise-aware models do not support `inflate=True`
-([The finite-sample factor](/GSPICE/background/prediction/#the-finite-sample-factor)).
+([The finite-sample factor](/GSPICE/concepts/held-out/#the-finite-sample-factor)).
 
 ## Default
 
 The default model has one mean and one covariance for all spectra, in
-[scaled units](/GSPICE/background/glossary/#term-scaled-units). Start with it:
+[scaled units](/GSPICE/concepts/glossary/#term-scaled-units). Start with it:
 
 ```python
 model, _ = gspice.fit(train.flux, train.ivar)
@@ -61,7 +61,7 @@ It needs more training spectra than pixels: at least npix + 1.
 
 The S/N of the simulated spectra spans 30 to 400. In scaled units, the variation
 between spectra grows with the S/N, so one covariance mixes spectra of different S/N
-([S/N bins](/GSPICE/background/fitting/#sn-bins)). `snr_bins=3` fits one model to each
+([S/N bins](/GSPICE/concepts/fitting/#sn-bins)). `snr_bins=3` fits one model to each
 third of the spectra by S/N:
 
 ```python
@@ -73,15 +73,15 @@ print(f"S/N bins: {rms_error(binned, test.flux, test.ivar, test.truth):.1f}")
 S/N bins: 11.4
 ```
 
-Each [S/N bin](/GSPICE/background/glossary/#term-S-N-bin) has a third of the training
+Each [S/N bin](/GSPICE/concepts/glossary/#term-S-N-bin) has a third of the training
 spectra, and needs as many as a default model. Use bins when you have several times
 the spectra that one model needs.
 
 ## Noise-aware
 
-A default model is a [scaled model](/GSPICE/background/glossary/#term-scaled-model): its
+A default model is a [scaled model](/GSPICE/concepts/glossary/#term-scaled-model): its
 one covariance holds both the variation between spectra and the noise. A
-[noise-aware model](/GSPICE/background/glossary/#term-noise-aware-model) separates the
+[noise-aware model](/GSPICE/concepts/glossary/#term-noise-aware-model) separates the
 two. It learns the covariance of the noise-free flux, and adds the noise of each
 spectrum from its own `ivar`:
 
@@ -131,11 +131,11 @@ The errors are those of the 500 test spectra with the extra noise. Choose a nois
 model when the noise differs a lot between spectra, in level or in shape, and:
 
 - `ivar` does not depend on the observed flux
-  ([Noise-aware model](/GSPICE/background/fitting/#noise-aware-model)).
+  ([Noise-aware model](/GSPICE/concepts/fitting/#noise-aware-model)).
 - You can afford one factorization per spectrum, or pass `rank=K` too
-  ([Choosing a model](/GSPICE/background/fitting/#choosing-a-model)).
+  ([Cost](/GSPICE/concepts/numerics/#cost)).
 - You need no S/N bins and no constant centre
-  ([Noise-aware model](/GSPICE/background/fitting/#noise-aware-model)).
+  ([Noise-aware model](/GSPICE/concepts/fitting/#noise-aware-model)).
 
 ## Low rank
 
@@ -153,7 +153,7 @@ except ValueError as error:
 fit: pass 1 needs at least 101 spectra for a mean-centred model of 100 pixels, got 60: of 60 spectra, maxbadpix removed 0, weight 0 removed 0 and full masks removed 0
 ```
 
-A [low-rank model](/GSPICE/background/glossary/#term-low-rank-model) describes the
+A [low-rank model](/GSPICE/concepts/glossary/#term-low-rank-model) describes the
 correlations between pixels with $K$ components, and needs only $K + 2$ spectra. Choose
 $K$ by the error on held-out spectra:
 

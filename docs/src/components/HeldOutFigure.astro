@@ -1,0 +1,58 @@
+---
+// V-17: the RMS of the pixelwise z of held-out and of training spectra against
+// N_s / npix, with the square root of the mean f_s over the pixels. The spectra are
+// exactly Gaussian. docs/scripts/concepts.py writes the data.
+import data from '../data/concepts-heldout.json'
+import { gridPath, legend, line, plotSvg, tickLabels, xScale, yScale } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { npix, points, curve } = data
+// N_s / npix on a log axis from 1 to 100, so that the end ticks sit at the ends, and
+// the RMS of z on a linear axis from 0.8 to 3.
+const log = xScale({ low: 0, high: 2 })
+// x as a percentage of the width, and y in the units of the SVG.
+const x = (ratio: number) => log(Math.log10(ratio))
+const y = yScale({ low: 0.8, high: 3 })
+const yticks = [1, 1.5, 2, 2.5, 3]
+// The SVG is 1000 units wide, ten per percent.
+const curvePath = curve.ntrain.map((n, k) => `${k === 0 ? 'M' : 'L'}${(10 * x(n / npix)).toFixed(1)},${y(curve.rms[k]).toFixed(2)}`).join('')
+const svg = plotSvg(gridPath(yticks, y, 1000) + line('ref', curvePath), 1000)
+// The points are HTML squares, so that the stretched SVG does not distort them.
+const mark = (cls: string, ntrain: number, v: number) =>
+  `<span class="pt ${cls}" style="left:${x(ntrain / npix).toFixed(2)}%;top:${y(v).toFixed(2)}%"></span>`
+const marks = points.map((p) => mark('in', p.ntrain, p.in_sample) + mark('held', p.ntrain, p.held_out)).join('')
+const labels = tickLabels(
+  yticks.map((v) => [y(v), v.toFixed(1)]),
+  [1, 2, 5, 10, 20, 50, 100].map((r) => [x(r), String(r)]),
+)
+const smallest = points[0]
+const at = (ratio: number) => points.find((p) => p.ntrain === ratio * npix)!
+---
+
+<figure class="gs-fig not-content">
+  <div
+    class="gs-plot"
+    role="img"
+    aria-label={`RMS of z against training spectra per pixel: held-out ${smallest.held_out} at ${smallest.ntrain} spectra, falling toward 1; in-sample near 1`}
+    set:html={svg + marks + labels}
+  />
+  <p class="axis">training spectra per pixel, N<sub>s</sub> / npix (log scale)</p>
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        ['pt held', 'held-out spectra'],
+        ['pt in', 'training spectra'],
+        ['ref', 'square root of the mean finite-sample factor'],
+      ])}
+    />
+    <p>
+      The RMS of the pixelwise z, with nguard {data.nguard}, for models of {npix} pixels fitted to N<sub>s</sub> exactly Gaussian simulated spectra. Each point averages {data.repeats} training sets, and the held-out points use the same {data.nheld} other spectra. At N<sub>s</sub> = 2 npix the held-out RMS is {at(2).held_out}, and at 20 npix it is {at(20).held_out}. The training spectra stay near 1.
+    </p>
+  </figcaption>
+</figure>
+
+<style>
+  .gs-plot {
+    --gs-plot-height: 14rem;
+  }
+</style>
