@@ -1,10 +1,12 @@
-"""Write the API reference pages of the site from the docstrings of src/gspice.
+"""Write the reference pages of the site from templates, docstrings and CHANGELOG.md.
 
     python docs/scripts/api.py
 
 Each page of docs/reference/ is a template: a line "::: name" becomes the reference of
-the object name, which griffe reads from src/gspice without importing the package. The
-pages go to docs/src/content/docs/reference/, which the Astro build reads.
+the object name, which griffe reads from src/gspice without importing the package, and
+a line "<!-- include FILE -->" becomes the text of FILE, a path from the repository
+root, without its title line and with the links to the site made relative. The pages go
+to docs/src/content/docs/reference/, which the Astro build reads.
 
 The script fails, naming the object, on a griffe warning, on a docstring section that
 it does not render, and on a backtick reference (a cross-reference, as with a default
@@ -32,6 +34,7 @@ DOCS = Path(__file__).parents[1]
 SRC = DOCS.parent / "src"
 TEMPLATES = DOCS / "reference"
 OUT = DOCS / "src" / "content" / "docs" / "reference"
+SITE = "https://joshspeagle.github.io/GSPICE/"
 INVENTORIES = (
     "https://docs.python.org/3/",
     "https://numpy.org/doc/stable/",
@@ -327,6 +330,13 @@ def public(package: griffe.Module) -> Counter[str]:
     return names
 
 
+def included(path: Path) -> list[str]:
+    # The strict build rejects absolute links to the site, which a file such as
+    # CHANGELOG.md needs on GitHub and PyPI.
+    text = path.read_text(encoding="utf-8").replace(f"]({SITE}", "](/GSPICE/")
+    return text.splitlines()[1:]
+
+
 def main() -> None:
     warnings = logging.handlers.BufferingHandler(sys.maxsize)
     warnings.setLevel(logging.WARNING)
@@ -358,9 +368,12 @@ def main() -> None:
     for page, source in templates.items():
         lines = []
         for line in source.splitlines():
-            lines += (
-                render(line[4:], 3, reference) if line.startswith("::: ") else [line]
-            )
+            if line.startswith("::: "):
+                lines += render(line[4:], 3, reference)
+            elif include := re.fullmatch(r"<!-- include (\S+) -->", line):
+                lines += included(DOCS.parent / include[1])
+            else:
+                lines.append(line)
         (OUT / f"{page}.md").write_text(
             "\n".join(lines).rstrip("\n") + "\n", encoding="utf-8"
         )

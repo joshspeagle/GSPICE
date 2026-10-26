@@ -1,0 +1,66 @@
+---
+// The worked example: at each pixel, the fraction of the training spectra with an
+// injected artifact, and the fraction that fit clipped. docs/scripts/survey.py writes
+// the data.
+import data from '../data/survey-clipped.json'
+import { gridPath, legend, line, plotSvg, steps, tickLabels, waveTicks, yScale } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { ntrain, wave, artifacts, clipped } = data
+const npix = artifacts.length
+// A log axis of the fraction of the training spectra, in the whole decades that hold
+// every count above 0.
+const counts = [...artifacts, ...clipped].filter((count) => count > 0)
+const low = Math.floor(Math.log10(Math.min(...counts) / ntrain))
+const high = Math.ceil(Math.log10(Math.max(...counts) / ntrain))
+const decades = Array.from({ length: high - low + 1 }, (_, k) => low + k)
+const logy = yScale({ low, high })
+const y = (count: number) => logy(Math.log10(count / ntrain))
+// A pixel without an artifact breaks the line.
+let d = ''
+for (let i = 0; i < npix; i++) {
+  if (artifacts[i] === 0 || artifacts[i - 1] > 0) continue
+  let end = i
+  while (end < npix && artifacts[end] > 0) end++
+  d += steps(artifacts, i, end, y)
+}
+const bars = clipped.map((count, i) => (count > 0 ? `M${i},100V${y(count).toFixed(2)}H${i + 1}V100Z` : '')).join('')
+const svg = plotSvg(gridPath(decades, logy, npix) + line('newflag', bars) + line('obs', d), npix)
+const labels = tickLabels(
+  decades.map((k) => [logy(k), `${(100 * 10 ** k).toFixed(Math.max(0, -k - 2))}%`]),
+  waveTicks(wave[0], wave[1], npix, 500),
+)
+const percent = (count: number) => ((100 * count) / ntrain).toFixed(1)
+const most = Math.max(...clipped)
+---
+
+<figure class="gs-fig not-content">
+  <div
+    class="gs-plot"
+    role="img"
+    aria-label={`Fraction of the ${ntrain} training spectra with an artifact at each pixel, up to ${percent(Math.max(...artifacts))}%, and the fraction clipped by fit, up to ${percent(most)}%`}
+    set:html={svg + labels}
+  />
+  <p class="axis">rest-frame wavelength (Å)</p>
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        ['obs', 'training spectra with an injected artifact'],
+        ['newflag', 'training spectra that fit clipped'],
+      ])}
+    />
+    <p>
+      The fraction of the {ntrain} training spectra at each of the {npix} pixels, on a log scale. The narrow peaks are hot columns, which reach nearly the same pixels in every spectrum of one spectrograph: up to {percent(data.column_peak)}% of the training spectra. The fit clips few pixels at these peaks, because the covariance describes a column that recurs this often as a feature of the spectra.
+    </p>
+  </figcaption>
+</figure>
+
+<style>
+  /* Room on the left for the percent labels. */
+  .gs-fig {
+    --gs-label-room: 3rem;
+  }
+  .gs-plot {
+    --gs-plot-height: 14rem;
+  }
+</style>

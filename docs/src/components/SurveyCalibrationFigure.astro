@@ -1,0 +1,66 @@
+---
+// The worked example: the calibration mean of runs of n pixels in each S/N quartile of
+// the test spectra, for one covariance and for three S/N bins, with ±2 standard errors.
+// docs/scripts/survey.py writes the data.
+import data from '../data/survey-calibration.json'
+import { axesFor, gridPath, legend, line, plotSvg, tickLabels, yLabels, yScale } from '../lib/spectrum-plot.ts'
+import '../styles/plot.css'
+
+const { n, edges, count, models } = data
+const series = [
+  { cls: 'hollow', model: models['one bin'], offset: -6 },
+  { cls: 'solid', model: models['snr_bins=3'], offset: 6 },
+]
+const axes = axesFor(
+  series.flatMap(({ model }) => model.mean.flatMap((m, q) => [m - 2 * model.sem[q], m + 2 * model.sem[q]])).concat([1]),
+  4,
+)
+const y = yScale(axes)
+// The SVG is 100 wide, so x is in percent of the width and in its units.
+const x = (q: number, offset: number) => 25 * q + 12.5 + offset
+const bars = series
+  .flatMap(({ model, offset }) =>
+    model.mean.map((m, q) => `M${x(q, offset)},${y(m + 2 * model.sem[q]).toFixed(2)}V${y(m - 2 * model.sem[q]).toFixed(2)}`),
+  )
+  .join('')
+const svg = plotSvg(gridPath(axes.yticks, y, 100) + line('ref', `M0,${y(1).toFixed(2)}H100`) + line('err', bars), 100)
+const marks = series
+  .flatMap(({ cls, model, offset }) =>
+    model.mean.map((m, q) => `<span class="pt ${cls}" style="left:${x(q, offset)}%;top:${y(m).toFixed(2)}%"></span>`),
+  )
+  .join('')
+const labels = tickLabels(
+  yLabels(axes, y),
+  edges.slice(0, -1).map((low, q) => [x(q, 0), `${low}–${edges[q + 1]}`]),
+)
+const describe = (name: string, model: { mean: number[] }) => `${name}: ${model.mean.map((m) => m.toFixed(2)).join(', ')}`
+---
+
+<figure class="gs-fig not-content">
+  <div
+    class="gs-plot"
+    role="img"
+    aria-label={`Calibration mean at n = ${n} by S/N quartile. ${describe('One bin', models['one bin'])}. ${describe('Three S/N bins', models['snr_bins=3'])}`}
+    set:html={svg + marks + labels}
+  />
+  <p class="axis">S/N quartile of the test spectra</p>
+  <figcaption class="gs-caption">
+    <Fragment
+      set:html={legend([
+        ['pt hollow', 'one covariance'],
+        ['pt solid', 'snr_bins=3'],
+        ['err', '±2 standard errors'],
+        ['ref', 'a correct model'],
+      ])}
+    />
+    <p>
+      The mean of z²/(n f<sub>s</sub>) for runs of n = {n} pixels, in each S/N quartile of {count} test spectra without their artifacts. One covariance gives {models['one bin'].mean[0].toFixed(2)} in the faintest quartile and {models['one bin'].mean[3].toFixed(2)} in the brightest. Three S/N bins give {models['snr_bins=3'].mean[0].toFixed(2)} and {models['snr_bins=3'].mean[3].toFixed(2)}.
+    </p>
+  </figcaption>
+</figure>
+
+<style>
+  .gs-plot {
+    --gs-plot-height: 12rem;
+  }
+</style>

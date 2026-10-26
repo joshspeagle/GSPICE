@@ -6,8 +6,9 @@ import Search from 'virtual:starlight/components/Search'
 import SiteTitle from 'virtual:starlight/components/SiteTitle'
 import { href } from '../lib/href.ts'
 
-// The Reference group of the sidebar: reference/api, reference/legacy and references.
-const api = Astro.locals.starlightRoute.id.startsWith('reference')
+// API marks the pages of the Reference group of the sidebar, and Docs every other page.
+const reference = Astro.locals.starlightRoute.sidebar.find((entry) => entry.type === 'group' && entry.label === 'Reference')
+const api = reference?.type === 'group' && reference.entries.some((link) => link.type === 'link' && link.isCurrent)
 const links = [
   { label: 'Docs', href: href('start/fit/'), current: !api },
   { label: 'API', href: href('reference/api/'), current: api },

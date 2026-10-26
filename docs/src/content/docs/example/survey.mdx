@@ -1,0 +1,222 @@
+---
+title: A survey end to end
+description: Fit, clip, repair and check GSPICE on 10000 simulated LAMOST-like stellar spectra, against the known artifacts.
+---
+
+import SurveyCalibrationFigure from '../../../components/SurveyCalibrationFigure.astro'
+import SurveyClippedFigure from '../../../components/SurveyClippedFigure.astro'
+import SurveyRepairFigure from '../../../components/SurveyRepairFigure.astro'
+
+What does GSPICE do on a realistic survey? This page fits a model to simulated stellar
+spectra, repairs held-out spectra and checks the uncertainties. The simulation knows
+every artifact that it injected, so each result is compared with the truth.
+
+## The survey
+
+The spectra are 10000 simulated spectra of a LAMOST-like survey, made from PHOENIX
+stellar models [@husser2013phoenix] and the lines of a sky atlas [@hanuschik2003uves].
+[`docs/scripts/spectra.py`](https://github.com/joshspeagle/GSPICE/blob/main/docs/scripts/spectra.py)
+makes them. Its docstring describes the stars, the instrument, the artifacts and the
+keys of the output file. From a clone of the repository, with numpy and scipy installed,
+run:
+
+```sh
+python docs/scripts/spectra.py --cache DIR
+```
+
+It downloads about 380 MB once, and keeps about 463 MB of models and sky line lists in
+`DIR`. It then writes `DIR/spectra.npz`, a file of 1.0 GB. Copy or link that file into
+the directory where you run the code below. The code keeps the 1500 pixels from 3802 to
+5369 Å and splits the spectra into three sets:
+
+```python
+import numpy as np
+
+import gspice
+
+data = np.load("spectra.npz")
+pixels = (data["wave"] > 3800) & (data["wave"] < 5370)
+flux = data["flux"][:, pixels]
+ivar = data["ivar"][:, pixels]
+clean = data["clean"][:, pixels]
+clean_ivar = data["clean_ivar"][:, pixels]
+names = ("cosmic", "column", "shift")
+kinds = {name: data[name][:, pixels] for name in names}
+artifacts = kinds["cosmic"] | kinds["column"] | kinds["shift"]
+
+n = len(flux)
+train = slice(0, int(0.6 * n))
+blocks = slice(int(0.6 * n), int(0.8 * n))
+test = slice(int(0.8 * n), n)
+print((len(flux), data["wave"].size), flux.shape)
+share = artifacts.any(axis=1).mean()
+print(f"{share:.0%} have an artifact in these pixels")
+```
+
+```text output
+(10000, 3741) (10000, 1500)
+55% have an artifact in these pixels
+```
+
+- `clean` and `clean_ivar` are the same spectra, with the same noise, without the
+  artifacts.
+- `kinds` marks the pixels that each type of artifact reaches: a cosmic ray, a hot
+  column or a shifted block.
+- The spectra are in random order. The first 60% train the model. The next 20%, without
+  their artifacts, set the block thresholds. The last 20% are the test spectra.
+
+### Why 1500 pixels
+
+A dense model needs many more training spectra than pixels. The error of its covariance
+widens the residuals of held-out spectra by the
+[finite-sample factor](/GSPICE/concepts/held-out/) $f_s$. For a pixelwise prediction
+from 6000 training spectra, $f_s$ is 6.82 on all 3741 pixels and 1.75 on these 1500.
+The code below computes both, with the 41 pixels of the default guard window left out.
+[Choose a model](/GSPICE/guides/models/#low-rank) shows the other remedy, a low-rank
+model of all the pixels.
+
+## Fit
+
+```python
+model, mask = gspice.fit(flux[train], ivar[train])
+print(model.n_train, model.mean.shape)
+for npix in (data["wave"].size, flux.shape[1]):
+    fs = gspice.finite_sample_factor(model.n_train[0], npix - 41)
+    print(f"f_s = {fs:.2f} on {npix} pixels")
+```
+
+```text output
+(6000,) (1, 1500)
+f_s = 6.82 on 3741 pixels
+f_s = 1.75 on 1500 pixels
+```
+
+`fit` uses all 6000 training spectra, in one S/N bin. `mask` is the final training
+mask. The survey has no bad pixels, so `mask` holds only the pixels that the
+[clipping passes](/GSPICE/concepts/fitting/#outlier-clipping) flagged.
+
+## The clipped pixels
+
+The flags of the fit can be checked against the injected artifacts:
+
+```python
+amplitude = np.abs(flux - clean) * np.sqrt(clean_ivar)
+strong = artifacts & (amplitude > 5)
+print(f"clipped: {mask.mean():.2%} of the training pixels")
+print(f"clipped: {mask[strong[train]].mean():.0%} of the artifact pixels over 5σ")
+print(f"clipped: {mask[~artifacts[train]].mean():.3%} of the other pixels")
+```
+
+```text output
+clipped: 0.10% of the training pixels
+clipped: 63% of the artifact pixels over 5σ
+clipped: 0.031% of the other pixels
+```
+
+`amplitude` is the change that an artifact made to a pixel, in units of its noise. The
+clipping removes the largest artifacts, which would widen the covariance. It does not
+need to find them all: the test spectra get their own search below.
+
+<SurveyClippedFigure />
+
+## Repair
+
+[Find and repair artifacts](/GSPICE/guides/repair/) explains each step here.
+`fit_blocks` sets the block thresholds from the clean spectra of the middle set.
+`repair` then finds and replaces the artifacts of the test spectra:
+
+```python
+model = gspice.fit_blocks(model, clean[blocks], clean_ivar[blocks])
+result = gspice.repair(model, flux[test], ivar[test])
+found = result.replaced | result.ignored
+for name, kind in kinds.items():
+    hits = strong[test] & kind[test]
+    print(
+        f"{name:>6}: {result.replaced[hits].mean():.0%} replaced, "
+        f"{found[hits].mean():.0%} replaced or ignored"
+    )
+other = ~artifacts[test]
+print(f" other: {result.replaced[other].mean():.2%} replaced")
+```
+
+```text output
+cosmic: 87% replaced, 98% replaced or ignored
+column: 6% replaced, 72% replaced or ignored
+ shift: 73% replaced, 98% replaced or ignored
+ other: 0.06% replaced
+```
+
+Each line is the recall of one type of artifact: the fraction of its pixels over 5σ
+that `repair` found. The last line is the fraction of the pixels without an artifact
+that it replaced.
+
+<SurveyRepairFigure />
+
+The hot columns are the exception. A hot column reaches nearly the same pixels in
+every spectrum of one spectrograph, so the covariance learns it as a feature of the
+spectra. Pass such pixels as bad in the `mask` argument of `fit`. In a real survey the
+pipeline often knows them. [What it misses](/GSPICE/guides/repair/#what-it-misses)
+lists the other limits.
+
+A test spectrum without an artifact can get a replaced pixel too:
+
+```python
+none = ~artifacts[test].any(axis=1)
+flagged = result.replaced[none].any(axis=1)
+print(f"{flagged.mean():.1%} of the {none.sum()} clean test spectra")
+```
+
+```text output
+2.5% of the 909 clean test spectra
+```
+
+## Calibration by S/N
+
+Are the predicted variances right at every signal-to-noise ratio (S/N)?
+[`gspice.calibration()`](/GSPICE/reference/api/#gspice.calibration) hides runs of $n$
+pixels of each held-out spectrum and compares the residuals with their predicted
+covariance. [Check your model](/GSPICE/guides/checks/) explains its numbers. Here it
+runs on the test spectra without their artifacts, in four S/N quartiles. It checks the
+model above and a model of three [S/N bins](/GSPICE/concepts/fitting/#sn-bins):
+
+```python
+snr = data["snr"][test]
+edges = np.quantile(snr, [0, 0.25, 0.5, 0.75, 1])
+quartile = np.digitize(snr, edges[1:-1])
+binned, _ = gspice.fit(flux[train], ivar[train], snr_bins=3)
+checks = {
+    name: gspice.calibration(
+        fitted, clean[test], clean_ivar[test], rng=np.random.default_rng(1)
+    )
+    for name, fitted in (("one bin", model), ("snr_bins=3", binned))
+}
+for name, check in checks.items():
+    print(name, "n:", check.n[0])
+    for q in range(4):
+        mean, sem = check.ratio(where=quartile == q)
+        print(f"  S/N {edges[q]:3.0f} to {edges[q + 1]:3.0f}:", mean.round(2))
+```
+
+```text output
+one bin n: [  1   4  16  64 256]
+  S/N  31 to  46: [1.21 1.15 1.12 1.1  1.11]
+  S/N  46 to  58: [1.06 0.94 1.02 1.   0.98]
+  S/N  58 to  90: [0.93 0.92 0.97 0.96 0.99]
+  S/N  90 to 532: [0.93 0.92 0.98 0.94 0.94]
+snr_bins=3 n: [  1   4  16  64 256]
+  S/N  31 to  46: [1.16 1.05 1.   1.02 1.01]
+  S/N  46 to  58: [1.   1.05 1.01 1.   0.99]
+  S/N  58 to  90: [1.09 1.04 1.06 1.05 1.05]
+  S/N  90 to 532: [1.01 1.09 1.06 1.04 1.04]
+```
+
+Each row is one quartile of 500 spectra, and each column one size $n$. A correct model
+gives 1. Both models get the same masks, from the same seed.
+
+<SurveyCalibrationFigure />
+
+One covariance of all the spectra mixes their S/N. Its predicted variances are too
+small for the faintest quartile and too large for the brightest.
+[S/N bins](/GSPICE/concepts/fitting/#sn-bins) explains why. With three bins, every
+quartile is within 6% of 1 for $n \ge 16$, though the two brightest stay 4% to 6% above
+it.
