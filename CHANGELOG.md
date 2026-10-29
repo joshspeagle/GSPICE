@@ -20,7 +20,8 @@
 - Golden tests in `tests/golden/`: the outputs of every public function of the 2022 package (commit `1fbab9f`) on synthetic inputs, and tests that compare an implementation with them.
 - Continuous integration on Linux with Python 3.11 to 3.15, on macOS and Windows with Python 3.11 and 3.15, and on the oldest supported numpy and scipy.
 - A CI job that builds the wheel and the sdist, checks that the sdist holds the sources and tests and that the wheel holds `py.typed` and no tests, and runs a smoke test of the wheel in a clean environment.
-- A workflow that publishes a GitHub release for each tag `vX.Y.Z`, with the wheel, the sdist and the CHANGELOG section of X.Y.Z. It checks that the tag names the version of the built package.
+- The package is on PyPI as `pygspice`, because PyPI does not allow the name `gspice`: `pip install pygspice`. The import name is `gspice`. Before you install it, run `pip uninstall gspice` if you installed GSPICE from GitHub, because both packages write the same files.
+- A workflow that, for each tag `vX.Y.Z`, runs CI, uploads the wheel and the sdist to PyPI once the lead approves, and publishes a GitHub release with them and the CHANGELOG section of X.Y.Z. It checks that the tag names the version of the built package.
 - `pyproject.toml`: `pip install .` installs the package. It requires Python 3.11 or later, numpy 1.26 or later and scipy 1.11 or later.
 - `gspice.__version__`, which is `2.0.0`.
 - `CITATION.cff`, the citation metadata for the software and the paper, which the sdist holds.

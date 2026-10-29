@@ -28,7 +28,7 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - When a requested behaviour conflicts with the 2022 results, or a numerical problem appears, record it as a decision in the pull request. Never choose silently.
 - A phase ends when its "Done when" list is complete, with a checkpoint report on its tracking issue: what changed, the test and benchmark status, the behaviour changes and numerical problems found, a link to the decision log, and the pull requests to inspect. Claude then closes the tracking issue and starts the next phase.
 - The lead must approve, on the pull request or the tracking issue, before any tag, release or package upload.
-- On 2026-10-18 the lead gave that approval in advance. The lead makes any upload to PyPI.
+- On 2026-10-18 the lead gave that approval in advance. A tag `vX.Y.Z` makes `.github/workflows/release.yml` upload the package to PyPI as `pygspice`, after the lead approves the deployment to the GitHub environment `pypi`. Claude never approves it.
 
 ## GitHub
 
