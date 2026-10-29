@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `README.md`, the home page and the Install page give `pip install pygspice` as the install command.
+
 ## 2.0.0 - 2026-10-29
 
 ### Added

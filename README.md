@@ -17,7 +17,7 @@ The figure shows one test spectrum of the example below. Pixels 80 to 109 are ma
 ## Install
 
 ```sh
-pip install git+https://github.com/joshspeagle/GSPICE
+pip install pygspice
 ```
 
 [Install](https://joshspeagle.github.io/GSPICE/start/install/) gives the requirements and the other ways to install GSPICE.
