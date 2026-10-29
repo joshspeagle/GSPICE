@@ -21,7 +21,7 @@ jobs:
       - run: python -m build
       - run: python tools/check_dist.py dist
       # The tag must name the version of the built package.
-      - run: test -f "dist/gspice-${GITHUB_REF_NAME#v}-py3-none-any.whl"
+      - run: test -f "dist/pygspice-${GITHUB_REF_NAME#v}-py3-none-any.whl"
       - run: |
           awk -v version="${GITHUB_REF_NAME#v}" '
             /^## / { inside = index($0, "## " version " ") == 1; next }
