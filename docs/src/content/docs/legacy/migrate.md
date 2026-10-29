@@ -86,7 +86,7 @@ artifacts: [Find and repair artifacts](/GSPICE/guides/repair/) shows
 
 | Version | What changes |
 |---|---|
-| 2.0.0, 2026-10-19 | The 11 functions move to `gspice.legacy`. `gspice.<name>` still works, with a `DeprecationWarning`. The 2022 modules move, and their old paths fail. |
+| 2.0.0, 2026-10-29 | The 11 functions move to `gspice.legacy`. `gspice.<name>` still works, with a `DeprecationWarning`. The 2022 modules move, and their old paths fail. |
 | 3.0.0 | `gspice.<name>` is removed. `gspice.legacy` stays. |
 
 The warning names the replacement. The example catches it to print it:
@@ -109,5 +109,5 @@ To keep the 2022 results without the warning, import from `gspice.legacy`, for e
 its path, as in `from gspice.legacy.specUtils import gp_interp`.
 
 `gspice.legacy` also fixes crashes and wrong results of the 2022 code on some inputs.
-The [changelog](/GSPICE/reference/changelog/#200---2026-10-19) lists these behaviour
+The [changelog](/GSPICE/reference/changelog/#200---2026-10-29) lists these behaviour
 changes under 2.0.0.
