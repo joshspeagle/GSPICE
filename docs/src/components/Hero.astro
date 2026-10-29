@@ -14,7 +14,7 @@ const home = id === ''
   <div class="gs-hero-copy">
     <h1 id="_top" data-page-title set:html={title} />
     <p class="gs-tagline" set:html={tagline} />
-    {home && <Code code="pip install git+https://github.com/joshspeagle/GSPICE" lang="sh" />}
+    {home && <Code code="pip install pygspice" lang="sh" />}
   </div>
   {home && <MaskExplainer />}
 </div>

@@ -1,6 +1,6 @@
 ---
 title: Install
-description: Install GSPICE from GitHub, and check that Python can import it.
+description: Install GSPICE from PyPI, and check that Python can import it.
 ---
 
 This page installs GSPICE and checks that Python can import it.
@@ -10,14 +10,17 @@ This page installs GSPICE and checks that Python can import it.
 GSPICE needs Python 3.11 or later, numpy 1.26 or later and scipy 1.11 or later. pip
 installs numpy and scipy if they are missing.
 
-## Install from GitHub
+## Install from PyPI
 
-GSPICE is not on the Python Package Index (PyPI) yet. Install it from its GitHub
-repository, which needs `git`:
+GSPICE is on the Python Package Index (PyPI) as `pygspice`. Its import name is
+`gspice`:
 
 ```sh
-pip install git+https://github.com/joshspeagle/GSPICE
+pip install pygspice
 ```
+
+An install from GitHub made before 2026-10-29 is named `gspice`. If `pip show gspice`
+finds it, run `pip uninstall gspice` first, because both packages write the same files.
 
 ## Install from a clone
 
