@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # release.yml runs CI on the tagged commit before it uploads.
+  workflow_call:
 
 # Each run on main has its own group, so it is never cancelled: CLAUDE.md reverts the
 # commit that broke CI. A new push to a pull request cancels its older run.
@@ -89,6 +91,12 @@ jobs:
           python -m venv "$RUNNER_TEMP/clean"
           "$RUNNER_TEMP/clean/bin/python" -m pip install dist/*.whl
           cd "$RUNNER_TEMP" && clean/bin/python -I "$GITHUB_WORKSPACE/tools/smoke.py"
+      # release.yml uploads these files, the ones the smoke test checked, to PyPI.
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
 
   slow:
     # Runs only when started by hand, with every test: -m "" lifts the -m "not slow" of

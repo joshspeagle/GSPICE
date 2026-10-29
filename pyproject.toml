@@ -3,7 +3,8 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "gspice"
+# PyPI does not allow the name gspice. The import name is gspice.
+name = "pygspice"
 dynamic = ["version"]
 description = "Gaussian pixelwise conditional estimation for spectra"
 readme = "README.md"
@@ -39,6 +40,10 @@ logo = ["fonttools[woff]==4.67.0"]
 
 [tool.hatch.version]
 path = "src/gspice/__init__.py"
+
+# hatchling finds src/<name> on its own only when the names match.
+[tool.hatch.build.targets.wheel]
+packages = ["src/gspice"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/src", "/tests", "/README.md", "/CHANGELOG.md", "/CITATION.cff"]
