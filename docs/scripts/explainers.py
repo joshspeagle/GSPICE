@@ -51,9 +51,9 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy import stats
 from scipy.linalg import cho_factor, cho_solve
-from scipy.ndimage import maximum_filter1d
 
 import gspice
+from gspice._spectra import dilate
 
 DOCS = Path(__file__).parents[1]
 OUT = DOCS / "src" / "data"
@@ -355,17 +355,9 @@ def replay(model: gspice.Model, test: Any, result: gspice.Repaired) -> list[Mask
     z = np.abs(
         gspice.pixelwise(model, test.flux, test.ivar, nguard=REPAIR_OPTIONS["nguard"]).z
     )
-    size = 2 * REPAIR_OPTIONS["dilate"] + 1
-
-    def widen(flags: NDArray[np.bool_]) -> NDArray[np.bool_]:
-        # dil(F, d) of repair: no flag beyond the ends of a spectrum.
-        dilated: NDArray[np.bool_] = maximum_filter1d(
-            flags, size, axis=1, mode="constant", cval=0
-        )
-        return dilated
-
-    M1 = widen(z > REPAIR_OPTIONS["nsigma_replace"])
-    I1 = widen(z > REPAIR_OPTIONS["nsigma_ignore"]) & ~M1
+    d = REPAIR_OPTIONS["dilate"]
+    M1 = dilate(z > REPAIR_OPTIONS["nsigma_replace"], d)
+    I1 = dilate(z > REPAIR_OPTIONS["nsigma_ignore"], d) & ~M1
     third = gspice.repair(model, test.flux, test.ivar, runlength=None)
     assert result.blocks is not None and third.blocks is not None
     none = np.zeros_like(result.blocks)

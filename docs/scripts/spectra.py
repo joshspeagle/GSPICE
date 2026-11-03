@@ -371,15 +371,19 @@ def block_shifts(n: int, rng: np.random.Generator) -> np.ndarray:
     return shift
 
 
-def resample(
-    spectra: np.ndarray, grid: np.ndarray, position: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def grid_indices(
+    grid: np.ndarray, position: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     index = (position - grid[0]) / (grid[1] - grid[0])
     lower = np.floor(index).astype(int)
-    t = index - lower
+    return lower, index - lower
+
+
+def resample(spectra: np.ndarray, grid: np.ndarray, position: np.ndarray) -> np.ndarray:
+    lower, t = grid_indices(grid, position)
     below = np.take_along_axis(spectra, lower, axis=1)
     above = np.take_along_axis(spectra, lower + 1, axis=1)
-    return (1 - t) * below + t * above, lower, t
+    return (1 - t) * below + t * above
 
 
 def amplitude(
@@ -425,8 +429,8 @@ def observe(
     rest = OBS_LOG - np.log10(1 + stars["rv"] / C)[:, None]
     shift = block_shifts(n, rng)
     gain = response(OBS_WAVE)
-    unshifted = resample(model, MODEL_LOG, rest)[0] * gain
-    shifted = resample(model, MODEL_LOG, rest + 1e-4 * shift)[0] * gain
+    unshifted = resample(model, MODEL_LOG, rest) * gain
+    shifted = resample(model, MODEL_LOG, rest + 1e-4 * shift) * gain
 
     background = sky * rng.lognormal(0, 0.2, n)[:, None]
     scale = amplitude(target, unshifted, background + READ_NOISE**2)
@@ -446,17 +450,16 @@ def observe(
 
     # The pipeline resamples to the rest frame with a measured radial velocity.
     measured = REST_LOG + np.log10(1 + (stars["rv"] + rng.normal(0, 5, n)) / C)[:, None]
+    lower, t = grid_indices(OBS_LOG, measured)
     out = {}
     for (key, ivar), mean in expected.items():
         counts = mean + np.sqrt(mean) * photon + READ_NOISE * read
         variance = (np.maximum(counts, 0) + READ_NOISE**2) / calibration**2
-        out[key], lower, t = resample(
-            (counts - sky_model) / calibration, OBS_LOG, measured
-        )
+        out[key] = resample((counts - sky_model) / calibration, OBS_LOG, measured)
         below = np.take_along_axis(variance, lower, axis=1)
         above = np.take_along_axis(variance, lower + 1, axis=1)
         out[ivar] = 1 / ((1 - t) ** 2 * below + t**2 * above)
-    out["truth"] = resample(star0 / calibration, OBS_LOG, measured)[0]
+    out["truth"] = resample(star0 / calibration, OBS_LOG, measured)
     for key, source in (("cosmic", cosmic), ("column", column), ("shift", shift)):
         hit = source != 0
         below = np.take_along_axis(hit, lower, axis=1)

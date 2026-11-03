@@ -131,12 +131,12 @@ def root_mean_ivar(ivar: NDArray[Any], bad: NDArray[np.bool_]) -> NDArray[np.flo
 def to_working(
     x: NDArray[np.float64],
     a: NDArray[np.float64],
-    center: float,
+    center: float | None,
     refmean: NDArray[np.float64] | None,
 ) -> NDArray[np.float64]:
     # x = a (x - center) - refmean in place, in the order of the 2022 standard_scale,
     # which gives its bits. refmean None: the column mean of a (x - center).
-    x -= center
+    x -= 0.0 if center is None else center
     x *= a[:, np.newaxis]
     if refmean is None:
         refmean = x.mean(axis=0)
@@ -148,13 +148,13 @@ def to_flux(
     x: NDArray[Any],
     a: NDArray[np.float64],
     refmean: NDArray[np.float64],
-    center: float,
+    center: float | None,
     out: NDArray[np.float64] | None = None,
 ) -> NDArray[np.float64]:
     # f = (x + refmean)/a + center, the inverse of to_working.
     f: NDArray[np.float64] = np.add(x, refmean, out=out)
     f /= a[:, np.newaxis]
-    f += center
+    f += 0.0 if center is None else center
     return f
 
 

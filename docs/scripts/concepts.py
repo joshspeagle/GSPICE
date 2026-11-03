@@ -12,9 +12,9 @@ from typing import Any
 import numpy as np
 from explainers import write
 from numpy.typing import ArrayLike, NDArray
-from scipy.ndimage import binary_dilation
 
 import gspice
+from gspice._spectra import dilate
 
 DECIMALS = 5
 # The defaults of fit, pixelwise and repair that the figures show.
@@ -40,10 +40,7 @@ def run(mask: Mask) -> tuple[int, int]:
 
 def dilated(flags: Mask, d: int) -> Mask:
     # The dilation of repair and fit along each spectrum, with nothing beyond the ends.
-    structure = np.ones((1, 2 * d + 1), dtype=bool)
-    return binary_dilation(np.atleast_2d(flags), structure=structure).reshape(
-        flags.shape
-    )
+    return dilate(np.atleast_2d(flags), d).reshape(flags.shape)
 
 
 def units() -> None:
