@@ -113,7 +113,7 @@ Each entry below defines a term used in the GSPICE documentation and maps it to 
 
 </dd>
 
-<dt id="term-constant-centre">constant center</dt>
+<dt id="term-constant-center">constant center</dt>
 <dd>
 
   A constant $c$, in flux units, that a model subtracts from the flux instead of the
