@@ -297,7 +297,6 @@ def pixelwise(
         used = np.isin(range(len(model.cov)), bins)[:, np.newaxis]
         inflation = _inflation(n_train, npix - window, used, ("bin", "pixel"))
     weigh(model, nguard, bins)
-    center = 0.0 if model.center is None else model.center
     predicted, variance, z = (np.empty((nspec, npix)) for _ in range(3))
     for rows in spans(model, nspec, npix):
         X, a = working(model, flux[rows], ivar[rows], bad[rows], bins[rows])
@@ -306,7 +305,7 @@ def pixelwise(
         predict(cover, nguard, X, bins[rows], inflation, f, v, zs)
         # Free C_s, P_s and the guard solutions before the next spectrum forms its own.
         del cover
-        to_flux(f, a, means(model, bins[rows]), center, out=f)
+        to_flux(f, a, means(model, bins[rows]), model.center, out=f)
         v /= np.square(a)[:, np.newaxis]
         zs[bad[rows]] = np.nan
         if progress is not None:
@@ -693,7 +692,6 @@ class Filling:
         T = M & good
         self.dof[rows] = np.count_nonzero(T, axis=1)
         index = np.arange(rows.start, rows.stop)
-        center = 0.0 if model.center is None else model.center
         for group, pixels, solution in conditionals(
             cover,
             X,
@@ -712,9 +710,11 @@ class Filling:
             if solution is not None:
                 at = np.ix_(spectra, pixels)
                 mean = model.mean[self.bins[spectra[0]], pixels]
-                self.result[at] = to_flux(solution.mean, a[group], mean, center)
+                self.result[at] = to_flux(solution.mean, a[group], mean, model.center)
                 if self.draws is not None and solution.draws is not None:
-                    self.draws[at] = to_flux(solution.draws, a[group], mean, center)
+                    self.draws[at] = to_flux(
+                        solution.draws, a[group], mean, model.center
+                    )
                 # The key of a pattern holds the bin and G, so its spectra share N_s,
                 # N_k and their factor.
                 factor = self.inflation[spectra[0]]
@@ -802,7 +802,7 @@ def working(
     # scale of the working units: a_s, or 1 for a noise model (see Model).
     X = interpolate(flux, bad)
     a = np.ones(len(flux)) if model.noise else root_mean_ivar(ivar, bad)
-    to_working(X, a, 0.0 if model.center is None else model.center, means(model, bins))
+    to_working(X, a, model.center, means(model, bins))
     return X, a
 
 

@@ -72,7 +72,7 @@ jobs:
       - run: ruff check src tests benchmarks tools docs/scripts
       - run: ruff format --check src tests benchmarks tools docs/scripts
       - run: mypy
-      - run: mypy --python-version 3.11
+      - run: mypy --python-version 3.12
 
   dist:
     # Builds the wheel and the sdist, checks their contents, and runs a smoke test of the

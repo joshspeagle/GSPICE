@@ -465,7 +465,6 @@ def noise_audit(
     nspec, npix = flux.shape
     bins = model._bins(flux, ivar, bad)
     weigh(model, nguard, bins)
-    center = 0.0 if model.center is None else model.center
     total, count = np.zeros(npix), np.zeros(npix, dtype=np.int64)
     for rows in spans(model, nspec, npix):
         good = ~bad[rows]
@@ -475,7 +474,7 @@ def noise_audit(
         predicted = np.empty(X.shape)
         cover = noisy(model, ivar[rows], bad[rows], rows.start)
         predict(cover, nguard, X, bins[rows], None, predicted, None, None)
-        to_flux(predicted, a, means(model, bins[rows]), center, out=predicted)
+        to_flux(predicted, a, means(model, bins[rows]), model.center, out=predicted)
         # 0 at the bad pixels, whose flux and ivar are never read.
         terms = np.zeros(good.shape)
         np.subtract(flux[rows], predicted, out=terms, where=good)

@@ -240,11 +240,10 @@ def _scan_vectors(
     X, a = working(model, flux[spectra], ivar[spectra], G, bins)
     X = filled(cover, X, bins, spectra, G, G)
     # Through flux units, as the docstring of fit_blocks defines x.
-    center = 0.0 if model.center is None else model.center
     x = np.array(flux[spectra], dtype=np.float64)
-    to_flux(X, a, model.mean[b], center, out=X)
+    to_flux(X, a, model.mean[b], model.center, out=X)
     x[G] = X[G]
-    to_working(x, a, center, model.mean[b])
+    to_working(x, a, model.center, model.mean[b])
     return x
 
 
