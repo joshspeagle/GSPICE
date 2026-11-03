@@ -18,12 +18,11 @@
 - `pyproject.toml`: `pip install .` installs the package. It requires Python 3.11 or later, numpy 1.26 or later and scipy 1.11 or later.
 - `gspice.__version__`, which is `2.0.0`.
 - `CITATION.cff`, the citation metadata for the software and the paper, which the sdist holds.
-- The licence is declared as GPL-3.0-or-later, the GPL v3 of the 2022 code in its "or later" form.
+- The license is declared as GPL-3.0-or-later, the GPL v3 of the 2022 code in its "or later" form.
 - Type checks with mypy in strict mode for the code outside `gspice.legacy`.
 - A test coverage floor of 90% for the code outside `gspice.legacy`.
 - pre-commit hooks that run ruff.
 - Log records on the `gspice` logger: DEBUG lines on the time and size of the work of the main functions, INFO lines on the clipping passes of `fit`, and a WARNING from `fit` for each clipping pass whose threshold exceeds the in-sample ceiling of |z|. The package adds a `logging.NullHandler` to the logger, so the application decides where the records go.
-- A documentation site in `docs/`, built with Sphinx and deployed to GitHub Pages, with a quickstart, tutorials on fitting, pixelwise prediction, infilling, repair, calibration, the low-rank and noise-aware models, saving and loading, and migrating from the 2022 interface, background pages on the method, prediction, repair, fitting and diagnostics, a glossary, an API reference of every public name, and the GSPICE logo. The tutorials work on simulated LAMOST-like spectra from `docs/scripts/spectra.py`, and `docs/scripts/figures.py` makes their figures.
 - `benchmarks/run.py`, which times `pixelwise`, `infill`, `fit_blocks`, `repair`, `fit`, the noise models, the 2022 `gp_interp` and the 2022 Schur route against `solve_pattern`, and prints the timings and the setup as JSON.
 - `gspice.scale`, `gspice.unscale` and `gspice.snr`. `scale` interpolates each spectrum over its bad pixels and scales it to unit mean noise, `unscale` returns scaled values and variances to flux units, and `snr` gives the median signal-to-noise ratio of each spectrum.
 - `gspice.Model`, which holds the mean, the covariance and the training count of each S/N bin, and `gspice.save` and `gspice.load`, which write and read a model as one .npz file.
@@ -32,7 +31,7 @@
 - `gspice.infill`, which replaces chosen pixels of each spectrum by their Gaussian conditional mean given the other pixels, and its result `gspice.Repaired`. It reports the replaced and ignored pixels and χ², with `covariance=True` the conditional covariance of the replaced pixels of each spectrum, and with a `numpy.random.Generator` as `rng` a draw from the conditional distribution in `Repaired.draws`. Without `rng`, spectra of one S/N bin with the same replaced pixels share one factorization of the precision matrix at the pixels that all of them exclude, also where each spectrum has a few bad pixels of its own; `repair` and `calibration` take the same route where their patterns allow it.
 - `gspice.fit`, which fits a model to training spectra with the iterative outlier clipping of paper Alg. 4, and returns the model and the final training mask.
 - `gspice.finite_sample_factor`, which gives f_s(N_s, N_k, N_*), the mean χ² per predicted pixel of a held-out Gaussian spectrum when a model fitted to N_s spectra predicts N_* pixels from N_k others.
-- The option `inflate` of `gspice.pixelwise` and `gspice.infill`, which multiplies the variances and covariances of a mean-centred, unweighted model by f_s(N_s, N_k, 1). The field `Repaired.fs` holds the factor of each spectrum by which `chi2 / dof` is divided, so that `chi2 / (dof * fs)` has the mean 1 for held-out Gaussian spectra of such a model, with or without `inflate`.
+- The option `inflate` of `gspice.pixelwise` and `gspice.infill`, which multiplies the variances and covariances of a mean-centered, unweighted model by f_s(N_s, N_k, 1). The field `Repaired.fs` holds the factor of each spectrum by which `chi2 / dof` is divided, so that `chi2 / (dof * fs)` has the mean 1 for held-out Gaussian spectra of such a model, with or without `inflate`.
 - `gspice/py.typed`, the PEP 561 marker, so that type checkers read the annotations of an installed `gspice`. The functions of `gspice.legacy` keep their 2022 signatures without annotations.
 - `gspice.fit_blocks`, which computes from spectra without artifacts a χ² threshold for each block of consecutive pixels and each S/N bin (paper section 3.2), and returns the model with them. `gspice.Blocks` holds the blocks and their thresholds in the new field `Model.blocks`, which `save` and `load` keep.
 - `gspice.noise_audit`, which compares the residuals of `gspice.pixelwise` with the reported noise at each pixel. It returns rho, the root mean of (f − f̂)² ivar over the spectra that are good at the pixel; on spectra not used in the fit and away from bad runs longer than nguard, rho² has a mean above 1 even where ivar is right.
@@ -55,7 +54,7 @@
 
 ### Deprecated
 
-- An access to one of the 11 functions of the 2022 package through `gspice`, as `gspice.<name>` or `from gspice import <name>`, emits a `DeprecationWarning`. It names the replacement and the removal of the name in 3.0.0. The access returns `gspice.legacy.<name>`, which keeps the 2022 results, except for the behaviour changes below, and does not warn. Type checkers report `gspice.<name>` as an unknown attribute.
+- An access to one of the 11 functions of the 2022 package through `gspice`, as `gspice.<name>` or `from gspice import <name>`, emits a `DeprecationWarning`. It names the replacement and the removal of the name in 3.0.0. The access returns `gspice.legacy.<name>`, which keeps the 2022 results, except for the behavior changes below, and does not warn. Type checkers report `gspice.<name>` as an unknown attribute.
 - `gspice.standard_scale`: use `gspice.scale`.
 - `gspice.covar` and `gspice.covar_iter_mask`: use `gspice.fit`.
 - `gspice.get_chimask` and `gspice.gp_interp`: use `gspice.pixelwise`.
@@ -72,7 +71,7 @@
 - The 10 prints of `gspice.legacy`, which reported progress, timings, shapes and notices such as "imask does not remove any rows or columns." `covar(checkmean=True)` still prints its check of the column means.
 - The LAPACK message that `cholesky_inv` printed for a 0 × 0 matrix.
 
-### Behaviour changes
+### Behavior changes
 
 - The second pixelwise pass of `repair` tests each pixel again against its prediction with the replaced pixels infilled. A pixel above `nsigma_replace` in the first pass stays flagged only while it exceeds `nsigma_ignore` there, and the exclusion of step 4 counts the new sets. The paper and r26 `gp_repair` keep every such pixel, which replaced artifact-free pixels whose first-pass prediction a strong artifact had disturbed; design decision A30 gives the measurements.
 - Step 5 of `repair` on a dense noise model agrees with `infill` to rounding, not bit for bit, where steps 1 to 4 form the precision matrix of the spectrum: `infill` then uses its Cholesky factor. In the test of the steps, flux differed by 1.4e-14σ.
@@ -99,5 +98,5 @@
 - `fit` masks the flags of every clipping pass, as paper Alg. 4 does. The 2022 `covar_iter_mask` masked only the flags of the last two passes; `fit(cumulative=False)` keeps that rule. On the golden data sets D1 to D4, the final mask of the default `fit` differs from the 2022 mask in 157, 152, 106 and 8 entries.
 - `fit` flags a pixel whose |z| exceeds the threshold. The 2022 `get_chimask` also flagged a pixel whose |z| equals it.
 - `fit` drops a spectrum that has no good pixel, or that a clipping mask covers completely. For such a spectrum, the 2022 `covar_iter_mask` returned a covariance of NaN or raised an error.
-- `fit` needs at least npix + 1 spectra for a mean-centred model, and a good pixel in one of them at every pixel, and raises ValueError otherwise. The 2022 `covar_iter_mask` accepted npix spectra, whose covariance is singular, and then raised LinAlgError or flagged most pixels. It filled a pixel that is bad in every spectrum by interpolation, which also makes the covariance singular; on D1 it then raised LinAlgError.
+- `fit` needs at least npix + 1 spectra for a mean-centered model, and a good pixel in one of them at every pixel, and raises ValueError otherwise. The 2022 `covar_iter_mask` accepted npix spectra, whose covariance is singular, and then raised LinAlgError or flagged most pixels. It filled a pixel that is bad in every spectrum by interpolation, which also makes the covariance singular; on D1 it then raised LinAlgError.
 - `fit` counts a pixel with ivar = 0 as bad, also against `maxbadpix`. The 2022 `covar_iter_mask` counted only the pixels in its mask.

@@ -109,7 +109,7 @@ class Repaired:
         ``n_train`` of the bin of the spectrum, and :math:`N_k = \mathrm{npix} - |G|`
         the number of its conditioning pixels. NaN where ``dof`` is 0 or
         :math:`N_s - N_k - \mathrm{dof} - 2 \le 0`. 1 for a model with a constant
-        centre, weights, a `LowRank` covariance or noise, for which no factor is
+        center, weights, a `LowRank` covariance or noise, for which no factor is
         derived. Take the other models, and replace and ignore masks that do not depend
         on the data. Then ``chi2 / (dof * fs)`` has the mean 1 for held-out Gaussian
         spectra, with or without ``inflate``.
@@ -229,7 +229,7 @@ def pixelwise(
         :math:`N_k = \mathrm{npix} - |g|` is the number of conditioning pixels of each
         pixel, which is larger near the ends, where :math:`g` is clipped.
         :math:`z^2` then has the mean 1 for held-out Gaussian spectra. It needs a dense,
-        mean-centred, unweighted scaled model.
+        mean-centered, unweighted scaled model.
     progress : callable, optional
         ``progress(stage, done, total)``, called after each chunk of spectra, with the
         stage ``"pixelwise"``, the number of spectra done and their total. For a
@@ -250,7 +250,7 @@ def pixelwise(
         If ``flux``, ``ivar`` or ``mask`` has a shape or a value that `scale` does not
         allow. If ``flux`` has another npix than ``model``, ``nguard`` is negative, or a
         spectrum has no good pixel. If ``inflate`` is True and ``model`` has a constant
-        centre, weights, a `LowRank` covariance or noise. If ``inflate`` is True and
+        center, weights, a `LowRank` covariance or noise. If ``inflate`` is True and
         :math:`N_s - N_k - 3 \le 0` at a pixel of a bin with spectra, where
         :math:`f_s(N_s, N_k, 1)` is not defined; the message names :math:`N_s` and
         :math:`N_k`.
@@ -385,7 +385,7 @@ def infill(
         multiply the deviation :math:`F z_M` of each draw from the mean by its square
         root. Then, for held-out Gaussian spectra, take any fixed linear combination of
         the replaced pixels. Its squared residual, divided by its variance from the
-        covariance, has the mean 1. It needs a dense, mean-centred, unweighted scaled
+        covariance, has the mean 1. It needs a dense, mean-centered, unweighted scaled
         model.
     covariance : bool, optional
         If True, keep the conditional covariance of each pattern for
@@ -418,7 +418,7 @@ def infill(
         If ``flux``, ``ivar`` or ``mask`` has a shape or a value that `scale` does not
         allow. If ``flux`` has another npix than ``model``, or a spectrum has no good
         pixel. If ``replace`` or ``ignore`` has another shape than (nspec, npix) or
-        (npix,). If ``inflate`` is True and ``model`` has a constant centre, weights, a
+        (npix,). If ``inflate`` is True and ``model`` has a constant center, weights, a
         `LowRank` covariance or noise. If ``inflate`` is True and
         :math:`N_s - N_k - 3 \le 0` for a spectrum with a pixel to replace, where
         :math:`f_s(N_s, N_k, 1)` is not defined; the message names :math:`N_s` and

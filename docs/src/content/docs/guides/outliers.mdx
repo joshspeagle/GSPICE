@@ -6,8 +6,7 @@ description: Predict each pixel from the rest of its spectrum, and flag the pixe
 import GuardWindow from '../../../components/explainers/GuardWindow.astro'
 import ZHistogram from '../../../components/ZHistogram.astro'
 
-Which pixels disagree with the rest of their spectrum? This guide finds them with
-[`gspice.pixelwise()`](/GSPICE/reference/api/#gspice.pixelwise), on simulated spectra.
+[`gspice.pixelwise()`](/GSPICE/reference/api/#gspice.pixelwise) predicts each pixel from the pixels outside its guard window and scores discrepancies by their standardized residual $z$.
 
 ## Set up
 
@@ -112,8 +111,8 @@ nguard  5: 100% of bad-column pixels and 48% of their neighbours flagged
 nguard 20: 100% of bad-column pixels and 2% of their neighbours flagged
 ```
 
-A bad column covers 5 to 20 pixels. Its neighbours are the good pixels within 5 pixels
-of it. With a small guard window, the bad column pulls the prediction of its neighbours,
+A bad column covers 5 to 20 pixels. Its neighbors are the good pixels within 5 pixels
+of it. With a small guard window, the bad column pulls the prediction of its neighbors,
 and many of them are flagged. The default, `nguard=20`, suits artifacts up to about 20
 pixels long. A wider window leaves fewer pixels to predict from.
 [Pixelwise prediction](/GSPICE/concepts/prediction/#pixelwise-prediction) gives the
@@ -144,7 +143,7 @@ inflate=True: standard deviation of z 1.005
 ```
 
 With `inflate=True`, the z-scores of the clean spectra have a standard deviation near 1.
-Use it when you set a threshold on held-out spectra. It needs a dense, mean-centred,
+Use it when you set a threshold on held-out spectra. It needs a dense, mean-centered,
 unweighted model without noise, as [The finite-sample factor](/GSPICE/concepts/held-out/#the-finite-sample-factor)
 explains.
 

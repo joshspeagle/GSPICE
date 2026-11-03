@@ -1,16 +1,15 @@
 ---
 title: Choose a model
-description: Choose between the default model, S/N bins, a low-rank model, a noise-aware model and a constant centre.
+description: Choose between the default model, S/N bins, a low-rank model, a noise-aware model and a constant center.
 ---
 
 import ModelChart from '../../../components/ModelChart.astro'
 
-Default, S/N bins, low rank, noise-aware or constant centre: which one? Answer the
-questions of the chart, then read the section of the model it gives.
+[`gspice.fit()`](/GSPICE/reference/api/#gspice.fit) supports five covariance model variants: the default scaled model, signal-to-noise bins (`snr_bins`), a noise-aware model (`noise=True`), a low-rank factor model (`rank=K`), and a fixed constant center (`center=c`). Follow the decision chart below to select the variant that matches your sample size and noise structure.
 
 <ModelChart />
 
-[Fitting](/GSPICE/concepts/fitting/) gives the maths of each model, and its table
+[Fitting](/GSPICE/concepts/fitting/) gives the equations of each model, and its table
 [What each model needs](/GSPICE/concepts/fitting/#what-each-model-needs) lists what each one
 needs.
 
@@ -38,7 +37,7 @@ def rms_error(model, flux, ivar, truth):
 ```
 
 Each comparison below is one run on one training set, without error bars. The constant
-centre, low-rank and noise-aware models do not support `inflate=True`
+center, low-rank and noise-aware models do not support `inflate=True`
 ([The finite-sample factor](/GSPICE/concepts/held-out/#the-finite-sample-factor)).
 
 ## Default
@@ -134,7 +133,7 @@ model when the noise differs a lot between spectra, in level or in shape, and:
   ([Noise-aware model](/GSPICE/concepts/fitting/#noise-aware-model)).
 - You can afford one factorization per spectrum, or pass `rank=K` too
   ([Cost](/GSPICE/concepts/numerics/#cost)).
-- You need no S/N bins and no constant centre
+- You need no S/N bins and no constant center
   ([Noise-aware model](/GSPICE/concepts/fitting/#noise-aware-model)).
 
 ## Low rank
@@ -173,7 +172,7 @@ rank 20: 17.6
 Too few components miss part of the variation between spectra. Too many fit the noise
 of the 60 training spectra. `rank` also works with `snr_bins` or `noise=True`.
 
-## Constant centre
+## Constant center {#constant-centre}
 
 A default model subtracts the mean of the training spectra. `center=c` subtracts a
 constant $c$ in flux units instead, such as the continuum level 1 of normalized spectra:

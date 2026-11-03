@@ -53,7 +53,7 @@ def simulate(
 
     Each spectrum has the continuum 1 and
     :math:`\mathrm{nline} = \lceil \mathrm{npix}/25 \rceil` absorption lines
-    :math:`j = 1, \dots, \mathrm{nline}` at evenly spaced centres. Line :math:`j` has a
+    :math:`j = 1, \dots, \mathrm{nline}` at evenly spaced centers. Line :math:`j` has a
     Gaussian profile :math:`p_j`, with a standard deviation from 1.5 to 4 pixels.
     The lines depend only on npix. Two latent parameters :math:`\theta` set the depths.
     A spectrum is in population 1, the giants, with the probability 0.3, and then has
@@ -174,9 +174,9 @@ def _lines(
     k = np.arange(1, nline + 1, dtype=np.float64)
     width = 1.5 + 2.5 * (k * math.sqrt(2) % 1)
     depth = 0.1 + 0.5 * (k * math.sqrt(3) % 1)
-    # The pixels span [-0.5, npix - 0.5], and the centres divide it evenly.
-    centre = (k - 0.5) * npix / nline - 0.5
-    offset = (np.arange(npix) - centre[:, np.newaxis]) / width[:, np.newaxis]
+    # The pixels span [-0.5, npix - 0.5], and the centers divide it evenly.
+    center = (k - 0.5) * npix / nline - 0.5
+    offset = (np.arange(npix) - center[:, np.newaxis]) / width[:, np.newaxis]
     # 0 beyond 30 widths, where a profile is below 1e-195. No sum changes, because every
     # pixel lies within 8.4 widths of a line, and nothing underflows: subnormal tails
     # would raise under a caller's errstate and slow the line sum twofold.

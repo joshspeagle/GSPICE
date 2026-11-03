@@ -5,7 +5,7 @@ tableOfContents:
 editUrl: https://github.com/joshspeagle/GSPICE/edit/main/docs/reference/api.md
 ---
 
-Every name in `gspice.__all__` except the submodule `gspice.legacy`, which has [its own page](/GSPICE/reference/legacy/).
+All public names in `gspice.__all__` are documented below except the submodule `gspice.legacy`, which has [its own page](/GSPICE/reference/legacy/).
 
 ## Models and fitting
 

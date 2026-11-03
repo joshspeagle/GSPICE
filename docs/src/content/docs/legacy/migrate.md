@@ -3,10 +3,9 @@ title: Migrate from the 2022 package
 description: The new function for each 2022 function, its outputs and their units, and when the old names go.
 ---
 
-I use the 2022 functions. What replaces each one? The 2022 package had 11 functions at
-the top level of `gspice`, such as `gspice.covar_iter_mask` and `gspice.gp_interp`.
-They now live in `gspice.legacy`, which keeps their signatures and their arithmetic.
-[Legacy interface](/GSPICE/reference/legacy/) documents them.
+The 11 functions that lived at the top level of the 2022 `gspice` package, such as `gspice.covar_iter_mask` and `gspice.gp_interp`,
+now live in `gspice.legacy`, which preserves their signatures and arithmetic.
+[Legacy interface](/GSPICE/reference/legacy/) documents them, and the table below maps each 2022 function to its 2.0 replacement.
 
 ## From scaled units to flux
 
@@ -73,7 +72,7 @@ Each row gives the outputs and their units as 2022 → new.
 | `standard_scale` | [`scale`](/GSPICE/reference/api/#gspice.scale) | `Dvec, refscale, refmean` → `X, refscale, refmean` | scaled, flux⁻¹, scaled, in both |
 | `covar` | [`fit`](/GSPICE/reference/api/#gspice.fit) with `nsigma=()` | `cov, refmean` → `Model`, mask | units of the input → scaled |
 | `covar_iter_mask` | [`fit`](/GSPICE/reference/api/#gspice.fit) | `cov`, float mask → `Model`, bool mask | scaled, in both |
-| `get_chimask` | [`fit`](/GSPICE/reference/api/#gspice.fit), then [`pixelwise`](/GSPICE/reference/api/#gspice.pixelwise) | bool mask → `z`; flag `abs(z) >= nsigma`, and each flag also covers its two neighbours | unit-free |
+| `get_chimask` | [`fit`](/GSPICE/reference/api/#gspice.fit), then [`pixelwise`](/GSPICE/reference/api/#gspice.pixelwise) | bool mask → `z`; flag `abs(z) >= nsigma`, and each flag also covers its two neighbors | unit-free |
 | `gp_interp` | [`pixelwise`](/GSPICE/reference/api/#gspice.pixelwise) | `pred, predvar` of `irange` → [`Prediction`](/GSPICE/reference/api/#gspice.Prediction): `flux, var, z` of every pixel | scaled → flux, flux² |
 | `gaussian_estimate` | [`infill`](/GSPICE/reference/api/#gspice.infill) | `predoverD, predcovar, predkstar, kstar` → [`Repaired`](/GSPICE/reference/api/#gspice.Repaired): `flux, var, chi2` and, with `covariance=True`, `covariance(s)` | scaled → flux, flux² |
 | `cholesky_inv`, `submatrix_inv`, `submatrix_inv_mult`, `maskinterp1`, `maskinterp` | none: keep `gspice.legacy.<name>` | unchanged | unchanged |
@@ -109,5 +108,5 @@ To keep the 2022 results without the warning, import from `gspice.legacy`, for e
 its path, as in `from gspice.legacy.specUtils import gp_interp`.
 
 `gspice.legacy` also fixes crashes and wrong results of the 2022 code on some inputs.
-The [changelog](/GSPICE/reference/changelog/#200---2026-10-29) lists these behaviour
+The [changelog](/GSPICE/reference/changelog/#200---2026-10-29) lists these behavior
 changes under 2.0.0.

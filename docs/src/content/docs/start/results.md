@@ -3,10 +3,8 @@ title: What you get back
 description: The fields of Model, Prediction, Repaired and Blocks, with their shapes and units.
 ---
 
-This page lists the fields of the objects that GSPICE returns, with their shapes and
-units. A value without a unit is a count, a mask or a ratio. In the shapes, nspec is the
-number of spectra and npix the number of pixels. Every array that these objects hold is
-read-only.
+GSPICE returns read-only container objects whose array fields have explicit shapes and physical units. A value without a unit is a count, a mask, or a dimensionless ratio. In the shapes below, `nspec` is the
+number of spectra and `npix` is the number of pixels.
 
 ## Model
 
@@ -34,7 +32,7 @@ scaling.
 | `cov` | tuple of nbin arrays (npix, npix), or of [`LowRank`](/GSPICE/reference/api/#gspice.LowRank) | The covariance of each bin, in scaled units squared |
 | `n_train` | tuple of nbin integers | The number of training spectra of each bin |
 | `edges` | tuple of nbin − 1 floats | The signal-to-noise ratios (S/N) between the bins |
-| `center` | float or None | The constant centre in flux units, or None for a mean-centred model |
+| `center` | float or None | The constant center in flux units, or None for a mean-centered model |
 | `noise` | bool | True for a noise-aware model |
 | `weighted` | bool | True if `fit` had unequal weights |
 | `blocks` | `Blocks` or None | The block thresholds of `fit_blocks`, or None without them |

@@ -5,8 +5,7 @@ description: Turn survey spectra into the arrays flux, ivar and mask, and split 
 
 import SpectrumSets from '../../../components/SpectrumSets.astro'
 
-This page turns the spectra of a survey into the three arrays that every GSPICE function
-takes. It also splits them into the sets that the functions need.
+Every GSPICE function that operates on spectra takes three arrays on a shared wavelength grid, partitioned into separate training, threshold, and held-out sets.
 
 ## The three arrays
 

@@ -3,8 +3,7 @@ title: Troubleshooting
 description: The common errors and warnings of GSPICE, what causes them, and how to fix them.
 ---
 
-Something failed. What does the error mean? Find the block that starts like your
-message. Words in angle brackets, such as `<npix>`, stand for the values in your message.
+Common exceptions, warnings, and performance bottlenecks in GSPICE are indexed below by message prefix. Words in angle brackets, such as `<npix>`, stand for the runtime values in your message.
 
 ### Not positive definite
 

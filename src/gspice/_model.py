@@ -240,7 +240,7 @@ class Model:
     flux of the spectrum with its bad pixels interpolated. Let :math:`a` be the square
     root of the mean inverse variance of its good pixels (see `scale`).
     Then :math:`x = a (\tilde f - \mathrm{center}) - \mathrm{mean}[b]` for a constant
-    centre, and :math:`x = a \tilde f - \mathrm{mean}[b]` otherwise.
+    center, and :math:`x = a \tilde f - \mathrm{mean}[b]` otherwise.
 
     A noise-aware model (``noise=True``) has one bin and works in flux units.
     Spectrum :math:`s` has
@@ -290,7 +290,7 @@ class Model:
         :math:`\mathrm{snr}_s` (see `snr`) is in the bin
         ``np.searchsorted(edges, snr_s, side="right")``.
     center : float or None
-        None for a mean-centred model, or the constant centre :math:`c` (flux). None for
+        None for a mean-centered model, or the constant center :math:`c` (flux). None for
         a noise-aware model.
     noise : bool
         True for a noise-aware model, which has one bin and ``center`` None.
@@ -421,7 +421,7 @@ class Model:
         # The model of C_s = cov[0] + diag(nu) for one spectrum of a noise model
         # (design section 4.1), which label names in messages. It goes only to the
         # functions that condition, never to working, validated or the factor f_s:
-        # with noise False it would pass for a mean-centred model in scaled units.
+        # with noise False it would pass for a mean-centered model in scaled units.
         # nu > 0 keeps the diagonal positive, as __init__ requires.
         C = self.cov[0]
         noisy: NDArray[np.float64] | LowRank
@@ -627,7 +627,7 @@ def fit(
 
     where :math:`x_s = a_s \tilde f_s`, :math:`V_1 = \sum_s w_s` and
     :math:`V_2 = \sum_s w_s^2`. With unit weights, :math:`m` is the column mean and the
-    divisor is :math:`N_s - 1`. With a constant centre :math:`c`, :math:`m = 0`,
+    divisor is :math:`N_s - 1`. With a constant center :math:`c`, :math:`m = 0`,
     :math:`x_s = a_s (\tilde f_s - c)` and
     :math:`S = \sum_s w_s x_s x_s^\mathsf{T} / V_1`. With ``rank=K``, the covariance is
     the `LowRank` :math:`C = V \mathrm{diag}(\lambda) V^\mathsf{T} + \mathrm{diag}(d)`.
@@ -638,7 +638,7 @@ def fit(
     Pass :math:`n` of the :math:`N` = ``len(nsigma)`` passes fits on its mask
     :math:`B_n` with unit weights and the rank, and flags :math:`F_n`: each pixel,
     interpolated ones included, whose in-sample :math:`|z|` of `pixelwise` with
-    ``nguard`` exceeds ``nsigma[n - 1]``, and its two neighbours. :math:`B_1` holds the
+    ``nguard`` exceeds ``nsigma[n - 1]``, and its two neighbors. :math:`B_1` holds the
     bad pixels.
 
     - With ``cumulative=True`` (paper Alg. 4), :math:`B_{n+1} = B_n \cup F_n`, and the
@@ -721,7 +721,7 @@ def fit(
         Whether each pass keeps the flags of every earlier pass (paper Alg. 4), or only
         those of the pass before it (2022).
     center : float, optional
-        The constant centre :math:`c` (flux); finite. None: a mean-centred model.
+        The constant center :math:`c` (flux); finite. None: a mean-centered model.
     weights : array_like, shape (nspec,), optional
         The weights :math:`w_s` of the final fit, of an integer or floating dtype;
         finite and 0 or more. None: equal weights.
@@ -747,7 +747,7 @@ def fit(
     -------
     model : Model
         The model, with the edges, the :math:`N_s` of each bin in ``n_train``, and the
-        centre. ``weighted`` is True if the weights of the spectra of a bin in the final
+        center. ``weighted`` is True if the weights of the spectra of a bin in the final
         fit are not all equal. The covariances are `LowRank` with ``rank=K``. The model
         holds its precision matrices (see `Model`), except a noise-aware model, whose
         prediction forms one per spectrum. For a noise-aware model, ``weighted`` is True
@@ -763,15 +763,15 @@ def fit(
         If an argument has a shape or a value that is not allowed above. If a fit, of a
         bin with ``snr_bins``, lacks the spectra that it needs:
 
-        - For a dense model, :math:`N_s - 1 \ge \mathrm{npix}` if it is mean-centred,
-          and :math:`N_s \ge \mathrm{npix}` for a constant centre. Also a good pixel in
+        - For a dense model, :math:`N_s - 1 \ge \mathrm{npix}` if it is mean-centered,
+          and :math:`N_s \ge \mathrm{npix}` for a constant center. Also a good pixel in
           one of them at every pixel.
-        - With ``rank=K``, :math:`N_s - 1 \ge K + 1` if it is mean-centred, and
-          :math:`N_s \ge K + 1` for a constant centre, for :math:`S` of rank
+        - With ``rank=K``, :math:`N_s - 1 \ge K + 1` if it is mean-centered, and
+          :math:`N_s \ge K + 1` for a constant center, for :math:`S` of rank
           :math:`K + 1` or more.
 
         With ``rank=K``, also if :math:`\lambda_K \le 0` or a :math:`d_i \le 0`.
-        If ``noise`` is True with a centre or ``snr_bins``. With ``noise=True``, the
+        If ``noise`` is True with a center or ``snr_bins``. With ``noise=True``, the
         passes need the spectra above. The final fit raises instead if fewer than two
         spectra are good at a pixel, or if a denominator of :math:`\Sigma` is 0 or
         negative. With ``rank=K``, it also raises if :math:`\lambda_K \le 0` for
@@ -1122,7 +1122,7 @@ def _check(
     removed: tuple[int, int, int],
 ) -> None:
     # The requirements of design section 4.1 for the fit whose mask is M, before its
-    # covariance. S has rank N_s - 1 or less (N_s for a constant centre). With rank K,
+    # covariance. S has rank N_s - 1 or less (N_s for a constant center). With rank K,
     # lambda_K > 0 and d > 0 need S of rank K + 1 or more, because S = V Lambda V^T and
     # d = 0 where its rank is K; _low_rank checks them.
     n_train, npix = M.shape
@@ -1401,7 +1401,7 @@ def _leading(
 
 
 def _weyl(npix: int, n: int) -> NDArray[np.float64]:
-    # The Weyl sequence of sqrt(n), centred.
+    # The Weyl sequence of sqrt(n), centered.
     sequence: NDArray[np.float64] = np.arange(1, npix + 1) * np.sqrt(n) % 1 - 0.5
     return sequence
 

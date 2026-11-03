@@ -3,8 +3,7 @@ title: Glossary
 description: The words and symbols of the GSPICE documentation.
 ---
 
-What does this word or symbol mean? Each entry gives the meaning in plain words first,
-then the symbol or the code name. [Symbols](#symbols) lists every symbol of the pages.
+Each entry below defines a term used in the GSPICE documentation and maps it to its mathematical symbol or code identifier. [Symbols](#symbols) lists every symbol of the pages.
 
 <dl>
 
@@ -114,7 +113,7 @@ then the symbol or the code name. [Symbols](#symbols) lists every symbol of the 
 
 </dd>
 
-<dt id="term-constant-centre">constant centre</dt>
+<dt id="term-constant-centre">constant center</dt>
 <dd>
 
   A constant $c$, in flux units, that a model subtracts from the flux instead of the
@@ -366,7 +365,7 @@ then the symbol or the code name. [Symbols](#symbols) lists every symbol of the 
 <dd>
 
   The vector $x_s$ that the model describes: the interpolated flux of spectrum $s$ in
-  working units. The mean of its S/N bin, or a constant centre, is subtracted from it.
+  working units. The mean of its S/N bin, or a constant center, is subtracted from it.
 
 </dd>
 
@@ -424,7 +423,7 @@ The symbols follow the paper [@finkbeiner2025gspice]. A subscript set, as in $C_
 | Symbol | Meaning |
 |---|---|
 | $a_s$ | The scale of spectrum $s$: the square root of its mean `ivar` over good pixels, in flux⁻¹ |
-| $c$ | A constant centre, in flux units |
+| $c$ | A constant center, in flux units |
 | $N_s$ | The number of training spectra of a model or bin |
 | $N_k$ | The number of conditioning pixels |
 | $N_*$ | The number of predicted pixels |

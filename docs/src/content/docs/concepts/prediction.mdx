@@ -5,11 +5,10 @@ description: How pixelwise and infill choose the pixels that predict, and how χ
 
 import PixelSets from '../../../components/PixelSets.astro'
 
-How do [`gspice.pixelwise()`](/GSPICE/reference/api/#gspice.pixelwise) and
-[`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) choose which pixels to use?
-Both use the [conditional distribution](/GSPICE/concepts/glossary/#term-conditional-distribution)
-of [The model](/GSPICE/concepts/model/), and both return flux units. They differ in the
-set $G$ of pixels that they do not condition on.
+[`gspice.pixelwise()`](/GSPICE/reference/api/#gspice.pixelwise) and
+[`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) evaluate the [conditional distribution](/GSPICE/concepts/glossary/#term-conditional-distribution)
+of [The model](/GSPICE/concepts/model/) and return predictions in flux units, differing in how they partition the
+set $G$ of pixels that are not conditioned on.
 
 ## Pixelwise prediction
 
@@ -34,11 +33,11 @@ The other pixels of $g$ are [marginalized](/GSPICE/concepts/glossary/#term-margi
 
 ### The guard window
 
-The guard window keeps the neighbours of pixel $i$ out of its prediction, for two
-reasons. First, neighbouring pixels are correlated through the line-spread function and
+The guard window keeps the neighbors of pixel $i$ out of its prediction, for two
+reasons. First, neighboring pixels are correlated through the line-spread function and
 the upstream processing. The prediction should come from the correlations of the
 spectra instead [@finkbeiner2025gspice]. Second, an artifact a few pixels wide also
-changes the neighbours of $i$, and a prediction from them would follow the artifact.
+changes the neighbors of $i$, and a prediction from them would follow the artifact.
 
 The default `nguard=20` is the paper's choice, set by the size of the smoothing kernel
 of its continuum normalization. `nguard >= npix - 1` gives the
@@ -109,7 +108,7 @@ covariance. A bad pixel has no input value to compare, so it is in $M$ but not i
 `Repaired.dof`, the number of degrees of freedom, is $|T|$.
 
 The [χ²](/GSPICE/concepts/glossary/#term-chi2) uses the full conditional covariance, so
-the correlated errors of neighbouring pixels do not count twice. Suppose that the mean and
+the correlated errors of neighboring pixels do not count twice. Suppose that the mean and
 the covariance were exact, and that the pixel sets did not depend on the data. Then
 $\chi^2$ would follow the χ² distribution with $|T|$ degrees of freedom, whose mean is
 $|T|$. A fitted model predicts a

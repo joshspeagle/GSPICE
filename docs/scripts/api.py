@@ -364,7 +364,7 @@ def main() -> None:
     reference = Reference(package, pages)
     # A page whose template is gone must not survive in the output.
     shutil.rmtree(OUT, ignore_errors=True)
-    OUT.mkdir(parents=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     for page, source in templates.items():
         lines = []
         for line in source.splitlines():
