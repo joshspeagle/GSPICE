@@ -1,6 +1,6 @@
 # The GSPICE identity
 
-This document states the design of the documentation site: its tokens, type, logo, motif and components. It is not part of the site. The lead chose this direction, "pixels and covariance", in #137.
+`docs/brand.md` specifies the visual design of the documentation site, including its tokens, typography, logo, motif and components. It is not part of the deployed site. The lead selected the "pixels and covariance" direction in #137.
 
 The site is drawn in the method's own units. A pixel is a square cell, a covariance is a heat map, and orange marks only what GSPICE fills in.
 
@@ -63,7 +63,7 @@ The heat map shows correlation from −1 to +1 in five steps.
 | Dark | #22355E | #3E5276 | #5D6679 | #D2653A | #FFB892 |
 | Light | #D5DFEE | #A6B4C9 | #8A909C | #C0501C | #7E2A0C |
 
-Its lightness runs in one direction only: L* from 23 to 81 in dark mode and from 88 to 30 in light mode. The ramp therefore reads in greyscale. Strong positive correlation always has the most contrast with the ground.
+Its lightness runs in one direction only: L* from 23 to 81 in dark mode and from 88 to 30 in light mode. The ramp therefore reads in grayscale. Strong positive correlation always has the most contrast with the ground.
 
 ## Type
 
@@ -92,7 +92,7 @@ The logo is a G on a 5 × 5 grid of cells. A masked block covers its left stroke
 - The files are outlined SVG, with no live text. `docs/scripts/logo.py` writes them:
   - the full logo, for the dark and the light ground;
   - the header lockup, for the navy band;
-  - the favicon, a 32 px design that follows the colour scheme of the browser. One SVG favicon serves every size, so there is no separate 16 or 64 px file.
+  - the favicon, a 32 px design that follows the color scheme of the browser. One SVG favicon serves every size, so there is no separate 16 or 64 px file.
 
 ## Motif
 
@@ -130,7 +130,7 @@ The theme of #142 builds the header, the sidebar, "On this page", the page title
 | Figure | A rule above, a hairline below, and the caption in secondary text. The legend uses cell swatches. |
 | Decision chart | Questions on surfaces with a 3 px top rule, model tiles with a 3 px ink left edge, and "no" connectors from each question down to the next (ModelChart). |
 | Step list | Numbered rows, each with a strip of cells (CalibrationSteps). |
-| Explainer | A surface with a solid top edge: a hint, the plots, the controls, a live readout and a caption (`src/components/explainers/`). Sliders are the browser's range inputs, coloured ink. The current step of a stepper has a 3 px ink left edge, as a pressed button. |
+| Explainer | A surface with a solid top edge: a hint, the plots, the controls, a live readout and a caption (`src/components/explainers/`). Sliders are the browser's range inputs, colored ink. The current step of a stepper has a 3 px ink left edge, as a pressed button. |
 | Covariance square | The heat map of the correlation of a model, one cell per pixel pair. A masked block marks its rows and columns as flat tints with a solid edge; a selected pair is a 2 px ink outline. |
 | Joint plot | Two pixels against each other on a square plot: training spectra as ink-3 square points, the 1σ and 2σ ellipses of the model in ink-2, a fixed value as an ink line, and the conditional mean and its ±1σ and ±2σ as orange cells. |
 | Mask strip | One row of cells per pixel set under a spectrum, in the cell states below: replaced pixels in `--gs-accent`, ignored pixels in the mask fill with its edge, and flagged blocks in `--gs-rule-2`. |

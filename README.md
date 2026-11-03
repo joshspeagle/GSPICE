@@ -50,7 +50,7 @@ The documentation is at [joshspeagle.github.io/GSPICE](https://joshspeagle.githu
 
 ## The 2022 package
 
-`gspice.legacy` keeps the 2022 functions, with their signatures and results: see [Legacy interface](https://joshspeagle.github.io/GSPICE/reference/legacy/). The 2022 names at the top level of `gspice`, such as `gspice.gp_interp`, are deprecated. [Migrate from the 2022 package](https://joshspeagle.github.io/GSPICE/legacy/migrate/) gives their replacements and the units of their outputs, and `CHANGELOG.md` lists the behaviour changes of `gspice.legacy`.
+`gspice.legacy` keeps the 2022 functions, with their signatures and results (see [Legacy interface](https://joshspeagle.github.io/GSPICE/reference/legacy/)). The 2022 names at the top level of `gspice`, such as `gspice.gp_interp`, are deprecated. [Migrate from the 2022 package](https://joshspeagle.github.io/GSPICE/legacy/migrate/) gives their replacements and the units of their outputs, and `CHANGELOG.md` lists the behavior changes of `gspice.legacy`.
 
 ## Citation
 

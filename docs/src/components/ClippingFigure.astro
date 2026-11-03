@@ -106,7 +106,7 @@ function zpanel(z: (number | null)[], threshold: number, before: number[], flagg
       ])}
     />
     <p>
-      fit with its default passes on {data.ntrain} simulated spectra of {npix} pixels, {100 * data.artifacts}% of them with an artifact. Each pass fits a covariance without the masked pixels and computes |z| of every pixel, with nguard {data.nguard}. The bad column widens the covariance of pass 1, so only its strongest pixels pass 20. Each refit is narrower, so the next pass finds more of the column. A flag also covers the pixel on each side.
+      The panels show <code>fit</code> with its default passes on {data.ntrain} simulated spectra of {npix} pixels, {100 * data.artifacts}% of them with an artifact. Each pass fits a covariance without the masked pixels and computes |z| of every pixel, with nguard {data.nguard}. The bad column widens the covariance of pass 1, so only its strongest pixels pass 20. Each refit is narrower, so the next pass finds more of the column. A flag also covers the pixel on each side.
     </p>
   </figcaption>
 </figure>

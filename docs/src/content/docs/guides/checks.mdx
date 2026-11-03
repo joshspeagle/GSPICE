@@ -5,7 +5,7 @@ description: Check the predicted uncertainties with calibration, and the reporte
 
 import CalibrationSteps from '../../../components/CalibrationSteps.astro'
 
-Are the uncertainties right, and is my `ivar` right? Two functions answer on
+[`gspice.calibration()`](/GSPICE/reference/api/#gspice.calibration) and [`gspice.noise_audit()`](/GSPICE/reference/api/#gspice.noise_audit) test whether the predicted uncertainties and reported inverse variances (`ivar`) are calibrated on
 [held-out spectra](/GSPICE/concepts/glossary/#term-held-out-spectrum), which the model
 was not fitted to. [Diagnostics](/GSPICE/concepts/diagnostics/) gives their equations.
 

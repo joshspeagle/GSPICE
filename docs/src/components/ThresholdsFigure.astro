@@ -1,7 +1,7 @@
 ---
 // V-19: the two z thresholds of repair and the dilation, on the pixels near one cosmic
 // ray: step 1 replaces the pixels above nsigma_replace and ignores those above
-// nsigma_ignore, each with its neighbours. docs/scripts/concepts.py writes the data.
+// nsigma_ignore, each with its neighbors. docs/scripts/concepts.py writes the data.
 import data from '../data/concepts-thresholds.json'
 import { gridPath, legend, line, plotSvg, steps, tickLabels, yScale } from '../lib/spectrum-plot.ts'
 import '../styles/plot.css'
@@ -57,7 +57,7 @@ const ray = data.artifact.map((k) => pixels[k])
       ])}
     />
     <p>
-      Pixels {pixels[0]} to {pixels[n - 1]} of a simulated spectrum of {data.npix} pixels, with a cosmic ray at pixels {ray[0]} to {ray.at(-1)}. The model is fitted to {data.ntrain} spectra. A pixel above 10 is replaced, and a pixel above 5 that is not replaced is ignored. Dilation adds the pixel on each side of each flagged pixel, so pixel {pixels[data.ignore[0]]}, above 5 only, becomes a replaced pixel next to pixel {pixels[data.replace[0]]}.
+      The panels show pixels {pixels[0]} to {pixels[n - 1]} of a simulated spectrum of {data.npix} pixels, with a cosmic ray at pixels {ray[0]} to {ray.at(-1)}. The model is fitted to {data.ntrain} spectra. A pixel above 10 is replaced, and a pixel above 5 that is not replaced is ignored. Dilation adds the pixel on each side of each flagged pixel, so pixel {pixels[data.ignore[0]]}, above 5 only, becomes a replaced pixel next to pixel {pixels[data.replace[0]]}.
     </p>
   </figcaption>
 </figure>

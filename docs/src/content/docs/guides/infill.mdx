@@ -5,8 +5,7 @@ description: Replace the pixels that you know are bad, predict a range of pixels
 
 import DrawsFigure from '../../../components/DrawsFigure.astro'
 
-I know which pixels are bad. How do I replace them? This guide answers with
-[`gspice.infill()`](/GSPICE/reference/api/#gspice.infill), on simulated spectra.
+[`gspice.infill()`](/GSPICE/reference/api/#gspice.infill) replaces known bad pixels or user-selected wavelength intervals with their conditional Gaussian prediction from the remaining good pixels of each spectrum.
 
 ## Set up
 
@@ -113,7 +112,7 @@ explains the factor, and which models support `inflate`.
 
 ### The covariance of the pixels
 
-The errors of neighbouring predicted pixels are correlated. A measurement that combines
+The errors of neighboring predicted pixels are correlated. A measurement that combines
 several pixels, such as the total flux in a band, needs these correlations. With
 `covariance=True`, `result.covariance(s)` returns the replaced pixels of spectrum `s`
 and their covariance $C$:

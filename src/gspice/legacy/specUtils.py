@@ -121,7 +121,7 @@ def get_chimask(flux, ivar, mask, nsigma):
 
     Z = (Dvec - pred) / sqrt(predvar), where Dvec comes from standard_scale, and
     pred and predvar from gp_interp at nguard 20 with the covariance of Dvec. A pixel
-    with |Z| >= nsigma is flagged, together with its neighbours in its spectrum.
+    with |Z| >= nsigma is flagged, together with its neighbors in its spectrum.
 
     Parameters
     ----------

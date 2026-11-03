@@ -5,9 +5,7 @@ description: Why the z-scores of spectra that a model was not fitted to are wide
 
 import HeldOutFigure from '../../../components/HeldOutFigure.astro'
 
-Why are z-scores wider on held-out spectra, and what does `inflate` do? In one sentence:
-a model fitted to $N_s$ spectra has errors in its mean and covariance, and a new
-spectrum sees all of them.
+A model fitted to $N_s$ training spectra carries estimation error in its sample mean and covariance, which widens the standardized residuals of held-out spectra by a closed-form finite-sample factor $f_s$.
 
 ## Held-out and in-sample spectra
 
@@ -50,7 +48,7 @@ computes $f_s$.
 
 $f_s$ is exact under five conditions:
 
-1. The model is dense and mean-centred: no low rank and no constant centre.
+1. The model is dense and mean-centered: no low rank and no constant center.
 2. The model is unweighted and not noise-aware.
 3. The working vectors are independent draws from one Gaussian distribution.
 4. The pixel sets do not depend on the data.

@@ -5,8 +5,7 @@ description: Set block thresholds from clean spectra, then find the artifacts of
 
 import RepairSteps from '../../../components/explainers/RepairSteps.astro'
 
-I don't know where the artifacts are. How do I find and replace them? This guide uses
-[`gspice.repair()`](/GSPICE/reference/api/#gspice.repair), on simulated spectra.
+[`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) detects unmasked spectral artifacts through pixelwise z-scores and a multi-pixel block scan, then replaces the corrupted pixels with conditional predictions.
 
 ## Set up
 

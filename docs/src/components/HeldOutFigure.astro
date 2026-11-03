@@ -46,7 +46,7 @@ const at = (ratio: number) => points.find((p) => p.ntrain === ratio * npix)!
       ])}
     />
     <p>
-      The RMS of the pixelwise z, with nguard {data.nguard}, for models of {npix} pixels fitted to N<sub>s</sub> exactly Gaussian simulated spectra. Each point averages {data.repeats} training sets, and the held-out points use the same {data.nheld} other spectra. At N<sub>s</sub> = 2 npix the held-out RMS is {at(2).held_out}, and at 20 npix it is {at(20).held_out}. The training spectra stay near 1.
+      The points show the RMS of the pixelwise z, with nguard {data.nguard}, for models of {npix} pixels fitted to N<sub>s</sub> exactly Gaussian simulated spectra. Each point averages {data.repeats} training sets, and the held-out points use the same {data.nheld} other spectra. At N<sub>s</sub> = 2 npix the held-out RMS is {at(2).held_out}, and at 20 npix it is {at(20).held_out}. The training spectra stay near 1.
     </p>
   </figcaption>
 </figure>

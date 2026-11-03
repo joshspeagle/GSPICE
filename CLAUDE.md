@@ -7,77 +7,80 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 - `src/gspice/`: the package. `src/gspice/legacy/` holds the 2022 modules (commit `1fbab9f`).
 - `docs/`: the Astro Starlight site, which a workflow deploys to GitHub Pages from `main`. Its pages are in `docs/src/content/docs/`, except the pages of `reference/`, which `docs/scripts/api.py` writes there from the templates in `docs/reference/`, the docstrings and `CHANGELOG.md`. `docs/design.md`, the design of the new package that Phases 2 to 5 implement, and `docs/brand.md`, the visual design of the site, are not part of the site. `docs/scripts/spectra.py` makes the survey of the worked example, `example/survey`, and downloads its inputs. `docs/scripts/survey.py` runs the code of that page on the survey, checks its output blocks and writes the data of its figures to `docs/src/data/`. Both run outside CI. `tests/test_docs.py` runs the code of that page on a small stand-in, without comparing its output blocks. `docs/scripts/logo.py` writes the logo files, the favicon and the cell strip of the footer, and needs the dependency group `logo`. `docs/scripts/readme.mjs` writes the figure of `README.md`, `docs/readme/quickstart-light.svg` and `quickstart-dark.svg`, from the data and the drawing code of the quickstart figure; run it with `node docs/scripts/readme.mjs` from the repository root, with the Node version of `docs/.nvmrc`. `docs/scripts/explainers.py` writes the data of the explainers in `docs/src/components/explainers/` and of the figures of the quickstart and the guides to `docs/src/data/`; it runs outside CI, and `docs/tests/` compares the explainers' maths with that data and checks that the figure of `README.md` is current. `docs/scripts/concepts.py` writes the data of the figures of the Concepts pages to `docs/src/data/`, also outside CI.
 - `tests/golden/`: outputs of the 2022 package on synthetic inputs, and the tests against them.
-- `tests/legacy/`: tests of the behaviour changes of `gspice.legacy`.
+- `tests/legacy/`: tests of the behavior changes of `gspice.legacy`.
 - `tools/`: `check_dist.py` checks the contents of the built wheel and sdist, and `smoke.py` is the smoke test of an installed wheel. CI runs both.
 - `benchmarks/run.py`: times benchmark cases of `docs/design.md` section 12 and prints the setup and the timings as JSON.
 - `pyproject.toml`: the build, the dependencies and the tool settings.
+- `AGENTS.md`: symlink to this file (`CLAUDE.md`), with `.agents/rules/CLAUDE.md` bridged via `bridge-repo`.
 
 ## Commands
 
-- Set up: `uv venv --clear --python 3.13 .venv && uv pip install -e . --group dev`. mypy needs scipy-stubs, which requires Python 3.12 or later. Once per clone, in the main checkout and not in a worktree, also run `.venv/bin/pre-commit install --allow-missing-config`: its hook runs ruff on each commit in every worktree, also on branches without the hook configuration.
-- Test: `.venv/bin/python -m pytest --cov=gspice`. It skips `slow` tests and fails if the tests cover less than 90% of the code outside `gspice.legacy`.
-- All tests, `slow` ones included: `.venv/bin/python -m pytest -m ""`.
-- Docs, with the Node version of `docs/.nvmrc`: `uv pip install --group docs && npm --prefix docs ci && PATH="$PWD/.venv/bin:$PATH" npm --prefix docs run build && (cd docs && node --test 'tests/*.test.mjs')`. The build fails on a broken link or anchor, an unknown citation key and an error of `docs/scripts/api.py`.
-- Lint, format and type check: `.venv/bin/ruff check src tests benchmarks tools docs/scripts && .venv/bin/ruff format --check src tests benchmarks tools docs/scripts && .venv/bin/mypy && .venv/bin/mypy --python-version 3.11`.
+Use the machine's shared environment at `~/.venvs/default` (`~/.venvs/default/bin/python`, `~/.local/bin/ruff`):
+
+- Set up: `uv pip install --python ~/.venvs/default/bin/python --no-build-isolation -e .`. `mypy` uses `scipy-stubs`, which requires Python 3.12 or later.
+- Test: `~/.venvs/default/bin/python -m pytest --cov=gspice`. It skips `slow` tests and fails if the tests cover less than 90% of the code outside `gspice.legacy`.
+- All tests, `slow` ones included: `~/.venvs/default/bin/python -m pytest -m ""`.
+- Docs, with the Node version of `docs/.nvmrc`: `npm --prefix docs ci && PATH="$HOME/.venvs/default/bin:$PATH" npm --prefix docs run build && (cd docs && node --test 'tests/*.test.mjs')`. The build fails on a broken link or anchor, an unknown citation key and an error of `docs/scripts/api.py`.
+- Lint, format and type check: `~/.local/bin/ruff check src tests benchmarks tools docs/scripts && ~/.local/bin/ruff format --check src tests benchmarks tools docs/scripts && ~/.venvs/default/bin/mypy && ~/.venvs/default/bin/mypy --python-version 3.12`.
 
 ## Plan
 
 - The lead is `joshspeagle`.
 - The overhaul runs in phases. Each phase has a tracking issue, made from `.github/ISSUE_TEMPLATE/phase.md`, with its issues as sub-issues and a decision log.
 - Priorities: correctness, then API quality, then performance. Never trade the first for the others.
-- When a requested behaviour conflicts with the 2022 results, or a numerical problem appears, record it as a decision in the pull request. Never choose silently.
-- A phase ends when its "Done when" list is complete, with a checkpoint report on its tracking issue: what changed, the test and benchmark status, the behaviour changes and numerical problems found, a link to the decision log, and the pull requests to inspect. Claude then closes the tracking issue and starts the next phase.
+- When a requested behavior conflicts with the 2022 results, or a numerical problem appears, record it as a decision in the pull request. Never choose silently.
+- A phase ends when its "Done when" list is complete, with a checkpoint report on its tracking issue: what changed, the test and benchmark status, the behavior changes and numerical problems found, a link to the decision log, and the pull requests to inspect. Then close the tracking issue and start the next phase.
 - The lead must approve, on the pull request or the tracking issue, before any tag, release or package upload.
-- On 2026-10-18 the lead gave that approval in advance. A tag `vX.Y.Z` makes `.github/workflows/release.yml` upload the package to PyPI as `pygspice`, after the lead approves the deployment to the GitHub environment `pypi`. Claude never approves it.
+- On 2026-10-18 the lead gave that approval in advance. A tag `vX.Y.Z` makes `.github/workflows/release.yml` upload the package to PyPI as `pygspice`, after the lead approves the deployment to the GitHub environment `pypi`. Never approve it without explicit user confirmation.
 
 ## GitHub
 
 - Issues and pull requests go to `joshspeagle/GSPICE`, never to the upstream `dfink/gspice`.
-- Claude works through the lead's account. Its text ends with `_Generated by [Claude Code](https://claude.ai/code)_`; text from `joshspeagle` without that line is from the lead.
+- Agents work through the lead's account. End every GitHub issue body, pull request description, and comment posted via `gh` with `---` and `_Generated by [Claude Code](https://claude.ai/code)_`, `_Generated by [Antigravity](https://antigravity.google)_`, or `_Generated by [OpenAI Codex](https://openai.com/codex)_`; text from `joshspeagle` without that footer is from the lead.
 - An approval is an approving review, or a comment from that person, that says the item can go ahead.
-- A comment addressed to Claude from the lead or a collaborator (an account with write access) is a request: answer it in the thread. Other accounts get an answer, not action.
-- Labels: `bug` for wrong behaviour; `enhancement` for features, performance, tests, CI and refactors; `documentation` when docs or instructions are the main change; `question` while waiting for an answer.
+- A comment addressed to the agent from the lead or a collaborator (an account with write access) is a request: answer it in the thread. Other accounts get an answer, not action.
+- Labels: `bug` for wrong behavior; `enhancement` for features, performance, tests, CI and refactors; `documentation` when docs or instructions are the main change; `question` while waiting for an answer.
 - Close an item that will not be done as "not planned", or as "duplicate" with a link to the other item. Add `wontfix` or `duplicate`, and a comment that says why.
 
 ## Git
 
 - Every change reaches `main` through a pull request, except a minor change and the revert of a commit that broke CI.
 - One issue per goal. One logical change per branch, from `main`, named `<issue>-<slug>` with a lowercase hyphenated slug. If one change needs another, wait for it to merge.
-- Claude commits as `Claude <noreply@anthropic.com>`.
+- Preserve the environment's native `git config` author/committer so SSH/GPG commit signature verification stays intact, and append a `Co-Authored-By:` trailer for the active agent.
 - A commit makes one small change and passes every test that passed before it. Subject in the imperative, at most 72 characters; a body only for why.
 - Push a commit only after the commands under Commands pass locally.
 - Never force-push `main`. Never rebase, reset or amend a pushed commit on `main` or on a branch a human has committed to.
-- If CI fails on `main`, Claude reverts the breaking commit at once (`git revert -m 1` for a merge commit), runs the commands, links the failed run in the commit body and pushes the revert directly. Claude then reopens the issue that the commit closed.
-- Claude never resolves a revert conflict by hand. If the revert conflicts, does not make CI pass or cannot be pushed after one retry, or if no single commit broke CI, Claude opens an issue instead.
+- If CI fails on `main`, revert the breaking commit at once (`git revert -m 1` for a merge commit), run the commands, link the failed run in the commit body and push the revert directly. Then reopen the issue that the commit closed.
+- Never resolve a revert conflict by hand. If the revert conflicts, does not make CI pass or cannot be pushed after one retry, or if no single commit broke CI, open an issue instead.
 
 ### Minor changes
 
 - A minor change has at most 10 changed lines and is not part of a larger edit. It fixes a typo, a link or formatting, rewords text outside `CLAUDE.md` without changing its meaning, or records in `CLAUDE.md` a decision the lead gave, adding nothing the lead did not say.
-- It edits only prose (instructions, documentation, comments and docstrings), but not the design document. It changes no behaviour, public API, documented contract (including units), number, tolerance, dependency, test, test data, CI workflow, or tool directive in a comment (`# noqa`, `# type: ignore`, `# pragma`), even when the fix looks forced. When unsure, it is not minor.
-- Claude commits a minor change on top of `origin/main` and pushes it with `git push origin HEAD:main`, without an issue. If the push is rejected, Claude runs `git fetch origin`, rebases the unpushed commit onto `origin/main`, checks that the change is still minor, runs the commands and pushes once more. If the rebase conflicts or that push also fails, Claude opens an issue and a pull request for the commit.
+- It edits only prose (instructions, documentation, comments and docstrings), but not the design document. It changes no behavior, public API, documented contract (including units), number, tolerance, dependency, test, test data, CI workflow, or tool directive in a comment (`# noqa`, `# type: ignore`, `# pragma`), even when the fix looks forced. When unsure, it is not minor.
+- Commit a minor change on top of `origin/main` and push it with `git push origin HEAD:main`, without an issue. If the push is rejected, run `git fetch origin`, rebase the unpushed commit onto `origin/main`, check that the change is still minor, run the commands and push once more. If the rebase conflicts or that push also fails, open an issue and a pull request for the commit.
 - The commit body of a recorded decision quotes the lead. After the push succeeds, the decision gets a line in the phase's decision log that links the commit.
 
 ## Pull requests
 
 1. Make the first commit, push it, and open a draft that closes its issue.
-2. Record each decision under "Decisions". A decision is a choice that another competent developer could make differently and that affects behaviour, the public API, a number, a tolerance, a dependency or the process.
-3. Adversarial review, only for a significant decision that departs from the plan (the design document, once it exists); normal implementation needs none. One independent subagent tries to refute each departure. It gets the diff, the decisions and the plan, not the session's reasoning. A refuted decision is changed, or the objection is answered in the record. A departure that is a behaviour change gets three reviewers and stands if at least two uphold it; otherwise revise it and review it again, or drop it. A finding that only corrects wording or a number is fixed without another review; a decision that changes is reviewed again.
-4. Run `/simplify`, then `/code-review`; a pull request that changes only prose runs `/code-review` alone. Their effort follows the size of the diff, the lines added plus removed, as the table below states. A change to numerics or the public API takes the next size. Below the largest size, reviewers report findings without runs of deliberate bugs or timings. Fix each valid finding and answer the rest in the pull request. A departure from the plan that they add or change gets its own adversarial review.
+2. Record each decision under "Decisions". A decision is a choice that another competent developer could make differently and that affects behavior, the public API, a number, a tolerance, a dependency or the process.
+3. Adversarial review, only for a significant decision that departs from the plan (the design document, once it exists); normal implementation needs none. One independent subagent tries to refute each departure. It gets the diff, the decisions and the plan, not the session's reasoning. A refuted decision is changed, or the objection is answered in the record. A departure that is a behavior change gets three reviewers and stands if at least two uphold it; otherwise revise it and review it again, or drop it. A finding that only corrects wording or a number is fixed without another review; a decision that changes is reviewed again.
+4. Run `/code-simplify`, then `/code-review`; a pull request that changes only prose runs `/code-review` alone. Their effort follows the size of the diff, the lines added plus removed, as the table below states. A change to numerics or the public API takes the next size. Below the largest size, reviewers report findings without runs of deliberate bugs or timings. Fix each valid finding and answer the rest in the pull request. A departure from the plan that they add or change gets its own adversarial review.
 
-   | Size | `/simplify` | `/code-review` |
+   | Size | `/code-simplify` | `/code-review` |
    |---|---|---|
    | Under 100 lines | one reviewer for all four angles | `low` |
    | 100 to 500 lines | two reviewers: reuse with simplification, efficiency with altitude | `medium` |
    | Over 500 lines | four reviewers, one per angle | `high` |
 
-5. Run `git fetch origin`. If every commit in `origin/main..origin/<branch>` is by Claude, fold each fix into the commit it corrects: `git commit --fixup=<commit>`, then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash --keep-base --exec '<commands>' origin/main`, then `git push --force-with-lease --force-if-includes`. Otherwise fixes are new commits.
+5. Run `git fetch origin`. If every commit in `origin/main..origin/<branch>` is by the agent, fold each fix into the commit it corrects: `git commit --fixup=<commit>`, then `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash --keep-base --exec '<commands>' origin/main`, then `git push --force-with-lease --force-if-includes`. Otherwise fixes are new commits.
 6. Mark it ready when every item under "Checklist" in its description is done. After that, fixes are new commits.
-7. Merge it with a merge commit when CI passes, no review thread is unresolved, each request to Claude has an answer, and every approval this file requires is given. Until CI exists, the local commands take its place and the pull request says so. Then add its decisions to the phase's decision log.
+7. Merge it when CI passes, no review thread is unresolved, each request to the agent has an answer, and every approval this file requires is given. Until CI exists, the local commands take its place and the pull request says so. Then add its decisions to the phase's decision log.
 
-- A behaviour change alters a 2022 result (a number, a mask, an error or a default), loosens the tolerance of an existing test, or compares against the 2022 outputs at a tolerance looser than a relative error of 1e-10. Masks compare exactly. A changed result needs a test that shows the old and the new result.
-- Every pull request updates what it makes stale in `README.md`, `CLAUDE.md` and, once it exists, `docs/`. Each user-visible change gets a line under "Unreleased" in `CHANGELOG.md`, and each behaviour change also a line under "Behaviour changes". The first pull request after a release that needs the section creates it.
+- A behavior change alters a 2022 result (a number, a mask, an error or a default), loosens the tolerance of an existing test, or compares against the 2022 outputs at a tolerance looser than a relative error of 1e-10. Masks compare exactly. A changed result needs a test that shows the old and the new result.
+- Every pull request updates what it makes stale in `README.md`, `CLAUDE.md` and `docs/`. Each user-visible change gets a line under "Unreleased" in `CHANGELOG.md`, and each behavior change also a line under "Behavior changes". The first pull request after a release that needs the section creates it.
 - A pull request that the lead or a collaborator reviewed or committed to merges only after that person approves it.
-- Claude watches every pull request it opens until it merges or closes.
+- Watch every open pull request until it merges or closes.
 
 ## Code
 
@@ -101,16 +104,16 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 
 - Hermetic: no network, no data files outside the repository, no absolute paths.
 - Write a test only when it catches a plausible bug in this code that no other test catches.
-- Test contracts, invariants, agreement with a reference implementation (each fast path against a direct solve, at condition numbers up to 1e8 and a tolerance the test justifies), and regressions (each bug fix adds a test that fails without it). Do not test numpy's or scipy's behaviour.
+- Test contracts, invariants, agreement with a reference implementation (each fast path against a direct solve, at condition numbers up to 1e8 and a tolerance the test justifies), and regressions (each bug fix adds a test that fails without it). Do not test numpy's or scipy's behavior.
 - Regenerate the golden files only when the lead asks, never to make a change pass. The command is in `tests/golden/README.md`.
 - Mark a test `slow` when its tolerance comes from Monte Carlo error or it takes more than 5 s on a CI runner. Never mark a test against the 2022 outputs or against a direct solve `slow`; keep its cases small instead.
 - CI on pushes and pull requests skips `slow` tests, and each job's test step takes under 2 minutes; if it does not, shrink or remove tests. A workflow started by hand runs all `slow` tests. Before a merge, run the `slow` tests in the test files of the changed modules locally.
 - Statistical tests are seeded, with tolerances from the Monte Carlo error.
-- Name a test as a sentence that states the behaviour: `test_fully_masked_spectrum_is_rejected`.
+- Name a test as a sentence that states the behavior: `test_fully_masked_spectrum_is_rejected`.
 
 ## Documentation
 
-- A public module has a one-line docstring. A public class, function or method has a NumPy-style docstring: a one-line summary, the equation it implements if any, parameters and returns with shapes and units, and the cost when it is not obvious.
+- A public module has a one-line docstring. A public class, function or method has a NumPy-style docstring (`docs/scripts/api.py` uses `griffe(..., docstring_parser="numpy")`): a one-line summary, the equation it implements if any, parameters and returns with shapes and units, and the cost when it is not obvious.
 - Private code has no docstring. A comment explains only a non-obvious why, such as a numerical subtlety or the paper equation it implements.
 - Docs state only what the code does now, except the design document, which states the plan of Phases 2 to 5 and its reasons. Each fact has one home. Why a change was made goes in its issue or pull request.
 
@@ -118,28 +121,20 @@ GSPICE models spectra on a common wavelength grid as a multivariate Gaussian wit
 
 - State only measured figures, or figures computed from them with the computation shown.
 - A benchmark records the commit, machine, thread settings and library versions. Figures from different setups are not compared.
-- A change expected to affect speed reports a benchmark against `main` in its pull request, made with `OPENBLAS_NUM_THREADS=1 .venv/bin/python benchmarks/run.py > <file>.json`.
+- A change expected to affect speed reports a benchmark against `main` in its pull request, made with `OPENBLAS_NUM_THREADS=1 ~/.venvs/default/bin/python benchmarks/run.py > <file>.json`.
 
 ## Agents
 
-- Delegate implementation through self-contained briefs. Numerical or architectural work goes to the session's own model, routine work to a faster one. Each use of a more expensive model needs the lead's approval.
+- Delegate implementation through self-contained briefs. Numerical or architectural work goes to a Frontier Reasoning model, routine work to a Fast Mechanical model.
 - Competing proposals with a judge panel are for the design only. A pull request has one implementer.
-- Subagents never commit. Claude reads every line a subagent writes before committing it.
+- Subagents never commit. Read every line a subagent writes before committing it.
 - Parallel subagents that write files get separate worktrees.
 
 ## Writing
 
-- Spartan: the fewest words that stay exact. Cut restatement, hedges and lists of what did not change; keep the background a new reader needs.
-- Literal over metaphor. No em dashes.
-- Session replies lead with the answer, then the reason, then the next step.
+Follow the Synergistic Prose Register (`<Dropbox>/.agents/memory/writing-and-voice.md` and `<Dropbox>/.agents/skills/co-writer/SKILL.md`) across `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `docs/`, docstrings, comments, error messages, issue bodies and pull request descriptions:
 
-### Text on GitHub
-
-Issues, pull requests, comments, decision logs and checkpoint reports have readers who are new to the code. This text follows the templates in `.github/` and these rules, adapted from ASD-STE100 Simplified Technical English:
-
-- Lead with a summary, then the background a new reader needs.
-- Short sentences: at most 20 words for an instruction and 25 for a description. One idea per sentence, at most six sentences per paragraph.
-- Active voice, simple tenses, and full sentences with articles.
-- One word for one meaning, and the same term for the same thing everywhere. Define each term and abbreviation where it first appears.
-- Noun groups of at most three words.
-- A condition comes before the instruction it controls. Numbered lists for steps, tables for comparisons, headings so a reader can find each part.
+- **Explanatory register and pacing:** Spread conceptual load so each idea develops clearly, pairing concrete physical or statistical intuition with exact technical terminology. Define specialized terms in parentheses on first use. Use American English throughout prose, comments, and docstrings (`center`, `centered`, `neighbor`, `behavior`, `license`, `gray`).
+- **Precision and mechanism:** Use precise technical terms over colloquialisms. Name parts directly instead of announcing counts (`"the mean spectrum and the pixel covariance"`, not `"two parameters"`). Explain mechanisms with an explicit `"because"` clause.
+- **No AI mannerisms or staccato templates:** Do not use em-dashes, mannered metaphors, `"X, not Y"` antithesis for its own sake (at most one contrast per page where a real misconception exists), mid-sentence setup-and-reveal colons (use colons only before lists, equations, and quotations), pseudo-clefts, rhetorical-question section openers, or `"This page..."` meta-signposting. Write figure captions (`<figcaption>`) as complete declarative sentences.
+- **Text on GitHub:** Issues, pull requests, comments, decision logs and checkpoint reports follow the templates in `.github/`: lead with a clear summary and context, use active voice and consistent terminology, place conditions before the instructions they control, and use numbered lists for steps and tables for comparisons.

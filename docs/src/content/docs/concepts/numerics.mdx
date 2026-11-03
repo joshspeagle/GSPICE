@@ -5,9 +5,9 @@ description: How GSPICE computes its predictions, what they cost, how it checks 
 
 import PixelSets from '../../../components/PixelSets.astro'
 
-How is a prediction computed, how fast, and how accurately? This page states the linear
+GSPICE computes Gaussian conditional predictions from the precision matrix $P = C^{-1}$, avoiding full-spectrum covariance factorizations on each pixel mask. The sections below state the linear
 algebra behind [Prediction](/GSPICE/concepts/prediction/) and
-[Detection](/GSPICE/concepts/detection/), its cost, its checks and measured times.
+[Detection](/GSPICE/concepts/detection/), the operation counts, the numerical condition checks, and measured runtimes.
 
 ## The precision form
 

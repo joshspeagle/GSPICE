@@ -56,7 +56,7 @@ const error = Math.max(...replaced.map((i, k) => Math.abs(mu[k] - clean[i])))
       ])}
     />
     <p>
-      {npix} pixels of the test spectrum <code>flux[test][{data.spectrum}]</code>, at S/N {data.snr}. A cosmic ray reaches {cosmic.length} pixels, and <code>repair</code> replaced {width}. The prediction differs from the flux without artifacts by at most {error.toFixed(3)}, against a mean standard deviation of {(sd.reduce((a, b) => a + b) / width).toFixed(3)}.
+      The plot shows {npix} pixels of the test spectrum <code>flux[test][{data.spectrum}]</code>, at S/N {data.snr}. A cosmic ray reaches {cosmic.length} pixels, and <code>repair</code> replaced {width}. The prediction differs from the flux without artifacts by at most {error.toFixed(3)}, against a mean standard deviation of {(sd.reduce((a, b) => a + b) / width).toFixed(3)}.
     </p>
   </figcaption>
 </figure>

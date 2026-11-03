@@ -3,7 +3,7 @@ title: Legacy interface
 editUrl: https://github.com/joshspeagle/GSPICE/edit/main/docs/reference/legacy.md
 ---
 
-The 2022 functions of `gspice.legacy`, with the arithmetic of commit `1fbab9f`, kept for migration. [Migrate from the 2022 package](/GSPICE/legacy/migrate/) gives their replacements in the new API. The 2022 modules stay too, as `gspice.legacy.specUtils`, `gspice.legacy.matrixUtils` and `gspice.legacy.djs_maskinterp`, so each function below can also be imported from its 2022 module.
+`gspice.legacy` preserves the 2022 functions with the arithmetic of commit `1fbab9f` so existing code continues to run during migration. [Migrate from the 2022 package](/GSPICE/legacy/migrate/) gives their replacements in the new API. The 2022 modules also remain available as `gspice.legacy.specUtils`, `gspice.legacy.matrixUtils` and `gspice.legacy.djs_maskinterp`, so each function below can be imported from its 2022 module path.
 
 ## Scaling and covariance
 

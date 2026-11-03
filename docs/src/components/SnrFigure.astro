@@ -54,7 +54,7 @@ const top = bins.at(-1)!
       ])}
     />
     <p>
-      The variance between spectra at pixel {data.pixel}, the core of a line, in scaled units squared, for {data.nspec} simulated spectra of {data.npix} pixels. Each step holds a tenth of the spectra by S/N. The noise variance stays near {first.noise}, while the variance of the noise-free flux grows from {first.signal} to {top.signal}. One covariance of all spectra mixes these. The vertical lines are the edges at S/N {edges[0]} and {edges[1]} that <code>fit(..., snr_bins=3)</code> puts between three bins of equal count.
+      The steps show the variance between spectra at pixel {data.pixel}, the core of a line, in scaled units squared, for {data.nspec} simulated spectra of {data.npix} pixels. Each step holds a tenth of the spectra by S/N. The noise variance stays near {first.noise}, while the variance of the noise-free flux grows from {first.signal} to {top.signal}. One covariance of all spectra mixes these. The vertical lines are the edges at S/N {edges[0]} and {edges[1]} that <code>fit(..., snr_bins=3)</code> puts between three bins of equal count.
     </p>
   </figcaption>
 </figure>

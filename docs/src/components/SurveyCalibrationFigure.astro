@@ -54,7 +54,7 @@ const describe = (name: string, model: { mean: number[] }) => `${name}: ${model.
       ])}
     />
     <p>
-      The mean of z²/(n f<sub>s</sub>) for runs of n = {n} pixels, in each S/N quartile of {count} test spectra without their artifacts. One covariance gives {models['one bin'].mean[0].toFixed(2)} in the faintest quartile and {models['one bin'].mean[3].toFixed(2)} in the brightest. Three S/N bins give {models['snr_bins=3'].mean[0].toFixed(2)} and {models['snr_bins=3'].mean[3].toFixed(2)}.
+      The points show the mean of z²/(n f<sub>s</sub>) for runs of n = {n} pixels, in each S/N quartile of {count} test spectra without their artifacts. One covariance gives {models['one bin'].mean[0].toFixed(2)} in the faintest quartile and {models['one bin'].mean[3].toFixed(2)} in the brightest. Three S/N bins give {models['snr_bins=3'].mean[0].toFixed(2)} and {models['snr_bins=3'].mean[3].toFixed(2)}.
     </p>
   </figcaption>
 </figure>

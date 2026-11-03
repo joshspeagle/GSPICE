@@ -3,9 +3,9 @@ title: Save and load
 description: Write a model to one .npz file, and read it back.
 ---
 
-How do I keep a model? [`gspice.save()`](/GSPICE/reference/api/#gspice.save) writes a
-[`gspice.Model`](/GSPICE/reference/api/#gspice.Model) to one `.npz` file, and
-[`gspice.load()`](/GSPICE/reference/api/#gspice.load) reads it back.
+[`gspice.save()`](/GSPICE/reference/api/#gspice.save) writes a
+[`gspice.Model`](/GSPICE/reference/api/#gspice.Model) to a single `.npz` archive, and
+[`gspice.load()`](/GSPICE/reference/api/#gspice.load) reconstructs it on disk.
 
 ## Save a model
 

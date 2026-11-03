@@ -11,11 +11,11 @@ import shifted from '../../../data/concepts-shifted.json'
 
 export const percent = (v) => `${Math.round(100 * v)}%`
 
-How does [`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) decide which pixels are
-[artifacts](/GSPICE/concepts/glossary/#term-artifact)? It uses two detectors: the
+[`gspice.repair()`](/GSPICE/reference/api/#gspice.repair) identifies
+[artifacts](/GSPICE/concepts/glossary/#term-artifact) using two complementary detectors: the
 pixelwise [z-score](/GSPICE/concepts/glossary/#term-z-score) of
 [Prediction](/GSPICE/concepts/prediction/) for narrow artifacts, and a
-[block scan](/GSPICE/concepts/glossary/#term-block-scan) for broad ones. It extends the
+[block scan](/GSPICE/concepts/glossary/#term-block-scan) for broad ones, extending the
 pixelwise repair of the paper's Secs. 2.6 and 3.3 [@finkbeiner2025gspice].
 
 ## Why a block scan
@@ -77,7 +77,7 @@ value of a clean pixel. `repair` therefore uses two thresholds of $|z|$
   [ignored pixel](/GSPICE/concepts/glossary/#term-ignored-pixel). It keeps its value, and
   no prediction uses it.
 
-An artifact also changes its neighbours by less than the threshold, so `repair` widens
+An artifact also changes its neighbors by less than the threshold, so `repair` widens
 each set by [dilation](/GSPICE/concepts/glossary/#term-dilation):
 $\mathrm{dil}(F)$ is the set $F$ plus every pixel within `dilate` pixels (1 by default)
 of a pixel of $F$ along the spectrum.

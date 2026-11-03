@@ -13,7 +13,7 @@ const { spectrum, axes } = quickstartPlot(data)
   <figcaption class="gs-caption">
     <Fragment set:html={legend(quickstartLegend)} />
     <p>
-      The spectrum <code>test.flux[{data.spectrum}]</code> after <code>infill</code>, at a
+      The plot shows the spectrum <code>test.flux[{data.spectrum}]</code> after <code>infill</code>, at a
       signal-to-noise ratio of {data.snr}. {readout(spectrum)} The error is the prediction minus
       the flux without noise.
     </p>

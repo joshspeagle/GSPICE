@@ -3,7 +3,7 @@ title: Install
 description: Install GSPICE from PyPI, and check that Python can import it.
 ---
 
-This page installs GSPICE and checks that Python can import it.
+GSPICE installs from the Python Package Index (`pygspice`) or from a local Git clone and imports as `gspice`.
 
 ## Requirements
 

@@ -6,12 +6,11 @@ description: How fit estimates the mean and the covariance, clips outliers in pa
 import ClippingFigure from '../../../components/ClippingFigure.astro'
 import SnrFigure from '../../../components/SnrFigure.astro'
 
-How does [`gspice.fit()`](/GSPICE/reference/api/#gspice.fit) estimate the mean and the
-covariance? It removes outliers from the
-[training spectra](/GSPICE/concepts/glossary/#term-training-spectra) in passes, then
-estimates both in the [working units](/GSPICE/concepts/glossary/#term-working-units) of
+[`gspice.fit()`](/GSPICE/reference/api/#gspice.fit) clips outliers from the
+[training spectra](/GSPICE/concepts/glossary/#term-training-spectra) in iterative passes, then
+estimates the mean and covariance in the [working units](/GSPICE/concepts/glossary/#term-working-units) of
 [The model](/GSPICE/concepts/model/#working-units). Five kinds of model share this
-function: the default, constant centre, S/N bins, low rank and noise-aware.
+function: the default, constant center, S/N bins, low rank, and noise-aware.
 
 ## Training spectra
 
@@ -57,7 +56,7 @@ mask $B_n$, with $B_1$ the bad pixels. It runs four steps:
 2. Fit the covariance, with unit weights.
 3. Compute the pixelwise z-score of every pixel of these spectra, interpolated pixels
    included, with `nguard`.
-4. Flag $F_n$: each pixel with $|z|$ above the threshold, and its two neighbours.
+4. Flag $F_n$: each pixel with $|z|$ above the threshold, and its two neighbors.
 
 With `cumulative=True`, the default, $B_{n+1} = B_n \cup F_n$. The final covariance is
 fitted on the last of these masks, with the weights. The returned mask is that final
@@ -79,7 +78,7 @@ $$
 \qquad N_k = \max(\mathrm{npix} - 2\,\mathrm{nguard} - 1, 0) ,
 $$
 
-in a spectrum of typical leverage. With a constant centre, the ceiling is
+in a spectrum of typical leverage. With a constant center, the ceiling is
 $\sqrt{N_s - N_k}$. No ceiling is derived for a low-rank model.
 
 At $N_s = 2500$, npix 2400 and `nguard=20`, $N_k = 2359$, and the ceiling is
@@ -88,7 +87,7 @@ warning on the `gspice` logger for each pass whose threshold exceeds the ceiling
 [A pass above the clipping ceiling](/GSPICE/guides/troubleshooting/#a-pass-above-the-clipping-ceiling)
 gives the remedies.
 
-## Constant centre
+## Constant center
 
 A default model subtracts the mean of its training spectra. `center=c` subtracts a
 constant $c$ in flux units instead, such as a continuum level:
@@ -171,7 +170,7 @@ $\Sigma$ is unbiased element by element under four conditions:
 The outlier flags of the final mask break condition 4, and so does an `ivar` computed
 from the flux.
 
-A noise-aware model has one bin and no centre. It needs two spectra good at every
+A noise-aware model has one bin and no center. It needs two spectra good at every
 pixel, and its clipping passes need the spectra of a scaled model. Each spectrum has its
 own covariance, so each needs its own factorization
 ([Cost](/GSPICE/concepts/numerics/#cost)).
@@ -181,7 +180,7 @@ own covariance, so each needs its own factorization
 | Model | Arguments | Spectra needed | Prediction | Finite-sample factor |
 |---|---|---|---|---|
 | Default | none | $N_s - 1 \ge \mathrm{npix}$ | one $P$ per bin | derived |
-| Constant centre | `center=c` | $N_s \ge \mathrm{npix}$ | one $P$ per bin | 1 |
+| Constant center | `center=c` | $N_s \ge \mathrm{npix}$ | one $P$ per bin | 1 |
 | S/N bins | `snr_bins=n` | per bin, as for its kind | one $P$ per bin | derived for default bins |
 | Low rank | `rank=K` | $N_s - 1 \ge K + 1$ | one $P$ per bin | 1 |
 | Noise-aware | `noise=True` | two good spectra at each pixel, and those of a scaled model for clipping | one factorization per spectrum | 1 |

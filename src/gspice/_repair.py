@@ -141,7 +141,7 @@ def repair(
     count_on : {"all", "flagged"}, optional
         The counting set :math:`R` of step 4.
     inflate, covariance : bool, optional
-        As in `infill`, for step 5. ``inflate`` needs a dense, mean-centred, unweighted
+        As in `infill`, for step 5. ``inflate`` needs a dense, mean-centered, unweighted
         scaled model.
     rng : numpy.random.Generator, optional
         As in `infill`, for step 5: the source of ``Repaired.draws``. None: no draws.
@@ -173,7 +173,7 @@ def repair(
         allow. If ``flux`` has another npix than ``model``, or a spectrum has no good
         pixel. If an argument is outside its range above, ``count_on`` is neither
         ``"all"`` nor ``"flagged"``, or ``blockwise`` is True and ``model`` has no
-        blocks. If ``inflate`` is True and ``model`` has a constant centre, weights, a
+        blocks. If ``inflate`` is True and ``model`` has a constant center, weights, a
         `LowRank` covariance or noise. If ``inflate`` is True and, before step 5,
         :math:`N_s - N_k - 3 \le 0` for a spectrum with a replaced pixel, with
         :math:`N_k = \mathrm{npix} - |M \cup I|`; the message names :math:`N_s` and
@@ -366,7 +366,7 @@ def _detect(
         X1 = np.where(M1 | Mb, X_b, X)
     # z of x against the prediction from x1, so that a pixel of M1 that only an
     # artifact elsewhere flagged in step 1 leaves M. A pixel that step 1 replaced
-    # stays while |z2| > nsigma_ignore: the ignored neighbours of a smooth extended
+    # stays while |z2| > nsigma_ignore: the ignored neighbors of a smooth extended
     # artifact keep their values in x1 and pull its prediction toward it.
     z2 = np.abs(zscores(model, nguard, X1, bins, X))
     ignore = z2 > nsigma_ignore

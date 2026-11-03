@@ -27,8 +27,7 @@ const last = data.start + data.width - 1
   <figcaption class="gs-caption">
     <Fragment set:html={legend(['obs', 'blk', 'pred', 'draw', 'truth'])} />
     <p>
-      Pixels {data.start} to {last} of <code>test.flux[0]</code>, at a signal-to-noise ratio of {data.snr}.
-      The conditional mean and {data.draws.length} draws of the multiple imputation replace them.
+      The conditional mean and {data.draws.length} draws of the multiple imputation replace pixels {data.start} to {last} of <code>test.flux[0]</code>, at a signal-to-noise ratio of {data.snr}.
       The mean is smooth. Each draw scatters from pixel to pixel like the observed flux outside the
       gap.
     </p>

@@ -3,11 +3,9 @@ title: Diagnostics
 description: What calibration and noise_audit measure, and when their results hold.
 ---
 
-What do [`gspice.calibration()`](/GSPICE/reference/api/#gspice.calibration) and
-[`gspice.noise_audit()`](/GSPICE/reference/api/#gspice.noise_audit) measure? `calibration`
-checks the predicted uncertainties, and `noise_audit` checks the reported noise, `ivar`.
-Both work on [held-out spectra](/GSPICE/concepts/glossary/#term-held-out-spectrum), which
-the model was not fitted to. A training spectrum has smaller residuals than a held-out
+[`gspice.calibration()`](/GSPICE/reference/api/#gspice.calibration) and
+[`gspice.noise_audit()`](/GSPICE/reference/api/#gspice.noise_audit) evaluate two complementary diagnostics on [held-out spectra](/GSPICE/concepts/glossary/#term-held-out-spectrum): `calibration`
+checks the predicted conditional uncertainties, and `noise_audit` checks the reported inverse variances (`ivar`). A training spectrum has smaller residuals than a held-out
 one ([Held-out uncertainty](/GSPICE/concepts/held-out/)), so neither check holds on the
 training spectra. [Check your model](/GSPICE/guides/checks/) runs both and reads their
 numbers.
