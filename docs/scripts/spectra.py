@@ -245,7 +245,7 @@ def needed_nodes(
 def model_grid(
     nodes: list[tuple[float, float, float]], paths: list[Path]
 ) -> RegularGridInterpolator:
-    cube = np.full((len(TEFF), len(LOGG), len(FEH), len(MODEL_LOG)), np.nan, np.float32)
+    cube = np.full((len(TEFF), len(LOGG), len(FEH), len(MODEL_LOG)), np.nan, np.float64)
     for (teff, logg, feh), path in zip(nodes, paths):
         index = np.searchsorted(TEFF, teff), np.searchsorted(LOGG, logg)
         cube[index + (np.searchsorted(FEH, feh),)] = degrade(path)
@@ -501,12 +501,7 @@ def main() -> None:
     for start in range(0, args.nspec, CHUNK):
         chunk = {key: value[start : start + CHUNK] for key, value in stars.items()}
         out = observe(models, sky, columns, chunk, target[start : start + CHUNK], rng)
-        chunks.append(
-            {
-                k: v.astype(np.float32) if v.dtype == np.float64 else v
-                for k, v in out.items()
-            }
-        )
+        chunks.append(out)
     result = {key: np.concatenate([c[key] for c in chunks]) for key in chunks[0]}
     output = args.output or args.cache / "spectra.npz"
     np.savez(output, wave=10**REST_LOG, **result, **stars)
