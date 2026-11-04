@@ -42,14 +42,14 @@ def survey(tmp_path_factory):
     np.savez(
         path,
         wave=np.geomspace(3802.0, 8995.0, npix),
-        flux=sim.flux.astype(np.float32),
-        ivar=sim.ivar.astype(np.float32),
-        clean=clean.astype(np.float32),
-        clean_ivar=sim.ivar.astype(np.float32),
+        flux=sim.flux,
+        ivar=sim.ivar,
+        clean=clean,
+        clean_ivar=sim.ivar,
         cosmic=sim.artifacts & (size <= 3),
         column=sim.artifacts & (size > 3) & (size <= 20),
         shift=sim.artifacts & (size > 20),
-        snr=sim.snr.astype(np.float32),
+        snr=sim.snr,
     )
     return path
 
